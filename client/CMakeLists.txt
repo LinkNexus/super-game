@@ -1,12 +1,18 @@
 add_executable(supergame-client
     src/main.cpp
+    src/game.cpp
+    src/player.cpp
+    src/bullet.cpp
+    src/enemy.cpp
+    src/boss.cpp
 )
 
 target_link_libraries(supergame-client PRIVATE raylib)
 
 target_include_directories(supergame-client PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
-    ${CMAKE_SOURCE_DIR}/shared          
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_SOURCE_DIR}/shared
 )
 
 # Windows: link required system libs (Raylib needs these)
