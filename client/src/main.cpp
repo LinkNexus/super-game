@@ -1,4 +1,5 @@
 #include "raylib.h"
+#include "src/entities/Star.h"
 
 static constexpr int SCREEN_WIDTH = 1200;
 static constexpr int SCREEN_HEIGHT = 800;
@@ -48,6 +49,9 @@ int main(int argc, char *argv[]) {
   player.position = {SCREEN_HEIGHT / 2.0f, SCREEN_WIDTH / 2.0f};
   float accumulator = 0.0f;
 
+  Star stars[STAR_COUNT];
+  InitStarfield(stars, STAR_COUNT, SCREEN_WIDTH, SCREEN_HEIGHT);
+
   while (!WindowShouldClose()) {
     float frame_time = GetFrameTime();
     if (frame_time > 0.1f)
@@ -56,11 +60,14 @@ int main(int argc, char *argv[]) {
 
     while (accumulator >= FIXED_DT) {
       player.update(FIXED_DT);
+      UpdateStarfield(stars, STAR_COUNT, FIXED_DT, SCREEN_HEIGHT, SCREEN_WIDTH);
       accumulator -= FIXED_DT;
     }
 
     BeginDrawing();
     ClearBackground(BLACK);
+
+    DrawStarfield(stars, STAR_COUNT);
     player.draw();
     DrawFPS(10, 10);
     EndDrawing();
