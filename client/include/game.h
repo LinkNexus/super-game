@@ -1,9 +1,11 @@
 #pragma once
+
 #include "constants.h"
-#include "objects/player.h"
+#include "objects/boss.h"
 #include "objects/bullet.h"
 #include "objects/enemy.h"
-#include "objects/boss.h"
+#include "objects/player.h"
+#include <array>
 
 class Game {
 public:
@@ -13,8 +15,13 @@ private:
   void update(float dt);
   void draw();
 
+  void initEnemies();
+  void updateEnemies(float dt);
+
   Player player;
-  Bullet bullets[MAX_BULLETS];
-  Enemy  enemies[ENEMY_ROWS * ENEMY_COLS];
-  Boss   boss;
+  std::array<Bullet, MAX_BULLETS> bullets;
+  std::array<Enemy, ENEMIES_ROWS * ENEMIES_COLS> enemies;
+  Boss boss;
+
+  int enemies_direction_ = 1;
 };
