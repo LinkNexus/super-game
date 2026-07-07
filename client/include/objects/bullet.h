@@ -1,12 +1,12 @@
 #pragma once
 #include "raylib.h"
 
-typedef enum { PLAYER_BULLET, ENEMY_BULLET } BulletType;
+enum class BulletType { PLAYER, ENEMY };
 
 struct Bullet {
   Vector2 position = {0, 0};
   Vector2 velocity = {0, 0};
-  BulletType type = PLAYER_BULLET;
+  BulletType type = BulletType::PLAYER;
   bool active = false;
 
   void update(float dt);

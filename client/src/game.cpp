@@ -3,7 +3,10 @@
 #include "objects/enemy.h"
 #include "raylib.h"
 #include "rnd_generator.h"
+#include <algorithm>
 #include <cfloat>
+#include <cstddef>
+#include <ranges>
 
 void Game::run() {
   InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "SUPER GAME");
@@ -34,31 +37,12 @@ void Game::run() {
 }
 
 void Game::update(float dt) {
-  player.update(dt);
+  player.update(dt, bullets);
 
   updateEnemies(dt);
 
-  if (fire_cooldown_ > 0.0f)
-    fire_cooldown_ -= dt;
-
-  if (IsKeyDown(KEY_SPACE) && fire_cooldown_ <= 0.0f) {
-    spawnBullet();
-    fire_cooldown_ = FIRE_COOLDOWN;
-  }
-
   for (auto &b : bullets)
     b.update(dt);
-}
-
-void Game::spawnBullet() {
-  for (auto &b : bullets) {
-    if (!b.active) {
-      b.position = {player.position.x, player.position.y - player.size};
-      b.velocity = {0.0f, -BULLET_SPEED};
-      b.active = true;
-      return;
-    }
-  }
 }
 
 void Game::draw() {
@@ -77,68 +61,75 @@ void Game::draw() {
 
 void Game::initEnemies() {
   int enemy_pool_size =
-      (ENEMY_COLS * Enemy::WIDTH) + (ENEMIES_SPACING_X * (ENEMY_COLS - 1));
+      (ENEMIES_COLS * Enemy::WIDTH) + (ENEMIES_SPACING_X * (ENEMIES_COLS - 1));
   int offset_x = (SCREEN_WIDTH - enemy_pool_size) / 2;
-  int current_idx = 0;
 
-  for (auto &enemy : enemies) {
+  for (std::size_t idx = 0; idx < enemies.size(); ++idx) {
+    Enemy &enemy = enemies[idx];
+
     enemy.alive = true;
-    enemy.position.x = offset_x + (current_idx % ENEMY_COLS) *
-                                      (Enemy::WIDTH + ENEMIES_SPACING_X);
-    enemy.position.y = 50.0f + (current_idx / ENEMY_COLS) *
-                                   (Enemy::HEIGHT + ENEMIES_SPACING_Y);
+    enemy.position.x =
+        offset_x + (idx % ENEMIES_COLS) * (Enemy::WIDTH + ENEMIES_SPACING_X);
+    enemy.position.y =
+        50.0f + (idx / ENEMIES_COLS) * (Enemy::HEIGHT + ENEMIES_SPACING_Y);
 
-    enemy.type = (current_idx % 2 == 0) ? ENEMY_TYPE_1 : ENEMY_TYPE_2;
-
-    current_idx++;
+    enemy.type = (idx % 2 == 0) ? EnemyType::TYPE_1 : EnemyType::TYPE_2;
+    enemy.shooting_cooldown = RndGenerator::getRandomFloat(
+        ENEMIES_SHOOTING_INTERVAL_MIN, ENEMIES_SHOOTING_INTERVAL_MAX);
   }
 }
 
 void Game::updateEnemies(float dt) {
-  int rnd_idx = RndGenerator::getRandomInt(0, ENEMY_ROWS * ENEMY_COLS - 1);
+  auto alive_enemies_x =
+      enemies | std::views::filter([](const Enemy &e) { return e.alive; }) |
+      std::views::transform([](const Enemy &e) { return e.position.x; });
 
-  float farthest_left = FLT_MAX;
-  float farthest_right = -FLT_MAX;
+  auto farthest_left = *std::ranges::min_element(alive_enemies_x);
+  auto farthest_right = *std::ranges::max_element(alive_enemies_x);
 
-  for (const auto &e : enemies) {
-    if (!e.alive)
-      continue;
+  std::optional<float> overflow = std::nullopt;
 
-    if (e.position.x < farthest_left) {
-      farthest_left = e.position.x;
-    }
-
-    if (e.position.x > farthest_right) {
-      farthest_right = e.position.x;
-    }
-  }
-
-  if (farthest_left - Enemy::WIDTH / 2 <= 0.0f ||
-      farthest_right >= SCREEN_WIDTH - Enemy::WIDTH / 2) {
+  if (farthest_left - Enemy::WIDTH / 2 <= 0.0f) {
     enemies_direction_ *= -1;
-    float overflow;
-
-    if (farthest_left - Enemy::WIDTH / 2 <= 0.0f) {
-      overflow = -(farthest_left - Enemy::WIDTH / 2);
-    } else {
-      overflow = farthest_right - (SCREEN_WIDTH - Enemy::WIDTH / 2);
-    }
-
-    for (auto &e : enemies) {
-      if (!e.alive)
-        continue;
-
-      e.position.y += ENEMIES_DESCENT_SPEED;
-      e.position.x += enemies_direction_ * (overflow + 1);
-    }
-
-    return;
+    overflow = -(farthest_left - Enemy::WIDTH / 2);
+  } else if (farthest_right >= SCREEN_WIDTH - Enemy::WIDTH / 2) {
+    enemies_direction_ *= -1;
+    overflow = farthest_right - (SCREEN_WIDTH - Enemy::WIDTH / 2);
   }
 
-  for (auto &e : enemies) {
-    if (!e.alive)
+  for (std::size_t idx = 0; idx < enemies.size(); ++idx) {
+    Enemy &enemy = enemies[idx];
+    if (!enemy.alive)
       continue;
 
-    e.position.x += enemies_direction_ * ENEMIES_CYCLE_SPEED * dt;
+    enemy.shooting_cooldown -= dt;
+
+    if (enemy.shooting_cooldown <= 0.0f &&
+        (idx + ENEMIES_COLS >= enemies.size() ||
+         !enemies[idx + ENEMIES_COLS].alive)) {
+
+      bool ally_ahead = false;
+      auto current_idx = idx + ENEMIES_COLS;
+
+      while (!ally_ahead && current_idx < enemies.size()) {
+        ally_ahead = enemies[current_idx].alive;
+        current_idx += ENEMIES_COLS;
+      }
+
+      if (!ally_ahead) {
+        enemy.spawnBullet(bullets);
+
+        enemy.shooting_cooldown = RndGenerator::getRandomFloat(
+            ENEMIES_SHOOTING_INTERVAL_MIN, ENEMIES_SHOOTING_INTERVAL_MAX);
+      }
+    }
+
+    enemy.position.x += overflow
+                            ? enemies_direction_ * (overflow.value() + 1)
+                            : enemies_direction_ * ENEMIES_CYCLE_SPEED * dt;
+
+    if (overflow) {
+      enemy.position.y += ENEMIES_DESCENT_SPEED;
+    }
   }
 }
