@@ -10,16 +10,16 @@ void Player::update(float dt, std::array<Bullet, MAX_BULLETS> &bullets) {
   if (IsKeyDown(KEY_D) || IsKeyDown(KEY_RIGHT))
     vx = 1.0f;
 
-  position.x += vx * speed * dt;
+  position.x += vx * SPEED * dt;
 
-  if (position.x < size)
-    position.x = size;
-  if (position.x > SCREEN_WIDTH - size)
-    position.x = SCREEN_WIDTH - size;
-  if (position.y < size)
-    position.y = size;
-  if (position.y > SCREEN_HEIGHT - size)
-    position.y = SCREEN_HEIGHT - size;
+  if (position.x < SIZE)
+    position.x = SIZE;
+  if (position.x > SCREEN_WIDTH - SIZE)
+    position.x = SCREEN_WIDTH - SIZE;
+  if (position.y < SIZE)
+    position.y = SIZE;
+  if (position.y > SCREEN_HEIGHT - SIZE)
+    position.y = SCREEN_HEIGHT - SIZE;
 
   if (fire_cooldown > 0.0f)
     fire_cooldown -= dt;
@@ -31,9 +31,9 @@ void Player::update(float dt, std::array<Bullet, MAX_BULLETS> &bullets) {
 }
 
 void Player::draw() const {
-  Vector2 tip = {position.x, position.y - size};
-  Vector2 left = {position.x - size * 0.7f, position.y + size * 0.7f};
-  Vector2 right = {position.x + size * 0.7f, position.y + size * 0.7f};
+  Vector2 tip = {position.x, position.y - SIZE};
+  Vector2 left = {position.x - SIZE * 0.7f, position.y + SIZE * 0.7f};
+  Vector2 right = {position.x + SIZE * 0.7f, position.y + SIZE * 0.7f};
 
   DrawTriangle(tip, left, right, SKYBLUE);
   DrawTriangleLines(tip, left, right, WHITE);
@@ -42,8 +42,8 @@ void Player::draw() const {
 void Player::spawnBullet(std::array<Bullet, MAX_BULLETS> &bullets) const {
   for (auto &b : bullets) {
     if (!b.active) {
-      b.position = {position.x, position.y - size};
-      b.velocity = {0.0f, -BULLET_SPEED};
+      b.position = {position.x, position.y - SIZE};
+      b.velocity = {0.0f, -Bullet::SPEED};
       b.active = true;
       b.type = BulletType::PLAYER;
       return;

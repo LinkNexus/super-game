@@ -13,7 +13,7 @@ void Enemy::spawnBullet(std::array<Bullet, MAX_BULLETS> &bullets) const {
   for (auto &b : bullets) {
     if (!b.active) {
       b.position = {position.x, position.y + Enemy::HEIGHT / 2};
-      b.velocity = {0.0f, BULLET_SPEED};
+      b.velocity = {0.0f, Bullet::SPEED};
       b.active = true;
       b.type = BulletType::ENEMY;
       return;

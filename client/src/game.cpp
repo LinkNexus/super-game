@@ -1,14 +1,27 @@
 #include "game.h"
 #include "constants.h"
+#include "objects/bullet.h"
 #include "objects/enemy.h"
+#include "objects/player.h"
 #include "raylib.h"
 #include "rnd_generator.h"
 #include <algorithm>
 #include <cfloat>
 #include <cstddef>
+#include <cstdlib>
+#include <format>
+#include <iostream>
 #include <ranges>
+#include <string>
+
+bool aabb(Vector2 pos_a, float hw_a, float hh_a, Vector2 pos_b, float hw_b,
+          float hh_b) {
+  return std::abs(pos_a.x - pos_b.x) <= (hw_a + hw_b) &&
+         std::abs(pos_a.y - pos_b.y) <= (hh_a + hh_b);
+}
 
 void Game::run() {
+  RndGenerator::seed();
   InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "SUPER GAME");
   SetTargetFPS(TARGET_FPS);
 
@@ -43,6 +56,8 @@ void Game::update(float dt) {
 
   for (auto &b : bullets)
     b.update(dt);
+
+  checkCollisions();
 }
 
 void Game::draw() {
@@ -52,7 +67,8 @@ void Game::draw() {
     b.draw();
 
   for (const auto &e : enemies)
-    e.draw();
+    if (e.alive)
+      e.draw();
 
   boss.draw();
 
@@ -130,6 +146,41 @@ void Game::updateEnemies(float dt) {
 
     if (overflow) {
       enemy.position.y += ENEMIES_DESCENT_SPEED;
+    }
+  }
+}
+
+void Game::checkCollisions() {
+  for (auto &bullet : bullets) {
+    if (bullet.active) {
+      if (bullet.type == BulletType::PLAYER) {
+        for (auto &enemy : enemies) {
+          if (enemy.alive &&
+              aabb(bullet.position, Bullet::WIDTH / 2, Bullet::HEIGHT / 2,
+                   enemy.position, Enemy::WIDTH / 2, Enemy::HEIGHT / 2)) {
+            enemy.alive = false;
+            bullet.active = false;
+            break;
+          }
+        }
+      } else if (bullet.type == BulletType::ENEMY &&
+                 aabb(bullet.position, Bullet::WIDTH / 2, Bullet::HEIGHT / 2,
+                      player.position, Player::SIZE * Player::HITBOX_SCALE / 2,
+                      Player::SIZE * Player::HITBOX_SCALE / 2)) {
+        std::cout << "Player loses a live, an enemy bullet touched him"
+                  << std::endl;
+        bullet.active = false;
+      }
+    }
+  }
+
+  for (const auto &enemy : enemies) {
+    if (enemy.alive &&
+        aabb(enemy.position, Enemy::WIDTH / 2, Enemy::HEIGHT / 2,
+             player.position, Player::SIZE * Player::HITBOX_SCALE / 2,
+             Player::SIZE * Player::HITBOX_SCALE / 2)) {
+      std::cout << "Player is dead, an enemy touched him" << std::endl;
+      break;
     }
   }
 }

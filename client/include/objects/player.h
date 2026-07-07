@@ -6,12 +6,14 @@
 
 struct Player {
   Vector2 position = {0, 0};
-  float speed = 300.0f;
-  float size = 20.0f;
   float fire_cooldown = 0.0f;
 
   void update(float dt, std::array<Bullet, MAX_BULLETS> &bullets);
   void draw() const;
+
+  static constexpr float SIZE = 20.0f;
+  static constexpr float SPEED = 300.0f;
+  static constexpr float HITBOX_SCALE = 0.80f;
 
 private:
   void spawnBullet(std::array<Bullet, MAX_BULLETS> &bullets) const;

@@ -2,7 +2,8 @@
 #include "constants.h"
 
 void Bullet::update(float dt) {
-  if (!active) return;
+  if (!active)
+    return;
   position.x += velocity.x * dt;
   position.y += velocity.y * dt;
 
@@ -11,6 +12,8 @@ void Bullet::update(float dt) {
 }
 
 void Bullet::draw() const {
-  if (!active) return;
-  DrawRectangle((int)position.x - 2, (int)position.y - 6, 4, 12, YELLOW);
+  if (!active)
+    return;
+  DrawRectangle((int)position.x - WIDTH / 2, (int)position.y - HEIGHT / 2,
+                WIDTH, HEIGHT, YELLOW);
 }

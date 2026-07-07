@@ -17,6 +17,7 @@ private:
 
   void initEnemies();
   void updateEnemies(float dt);
+  void checkCollisions();
 
   Player player;
   std::array<Bullet, MAX_BULLETS> bullets;
