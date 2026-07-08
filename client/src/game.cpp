@@ -9,10 +9,9 @@
 #include <cfloat>
 #include <cstddef>
 #include <cstdlib>
-#include <format>
 #include <iostream>
+#include <iterator>
 #include <ranges>
-#include <string>
 
 bool aabb(Vector2 pos_a, float hw_a, float hh_a, Vector2 pos_b, float hw_b,
           float hh_b) {
@@ -25,7 +24,7 @@ void Game::run() {
   InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "SUPER GAME");
   SetTargetFPS(TARGET_FPS);
 
-  player.position = {SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT - 60.0f};
+  player_.position = {SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT - 60.0f};
   initEnemies();
   float accumulator = 0.0f;
 
@@ -50,27 +49,33 @@ void Game::run() {
 }
 
 void Game::update(float dt) {
-  player.update(dt, bullets);
+  player_.update(dt, bullets_, !boss_entrance_running_);
 
-  updateEnemies(dt);
+  if (boss_phase_) {
+    if (boss_entrance_running_)
+      animateBossEntrance(dt);
+    else
+      updateBoss(dt);
+  } else
+    updateEnemies(dt);
 
-  for (auto &b : bullets)
+  for (auto &b : bullets_)
     b.update(dt);
 
   checkCollisions();
 }
 
 void Game::draw() {
-  player.draw();
+  player_.draw();
 
-  for (const auto &b : bullets)
+  for (const auto &b : bullets_)
     b.draw();
 
-  for (const auto &e : enemies)
+  for (const auto &e : enemies_)
     if (e.alive)
       e.draw();
 
-  boss.draw();
+  boss_.draw();
 
   DrawFPS(10, 10);
 }
@@ -80,10 +85,10 @@ void Game::initEnemies() {
       (ENEMIES_COLS * Enemy::WIDTH) + (ENEMIES_SPACING_X * (ENEMIES_COLS - 1));
   int offset_x = (SCREEN_WIDTH - enemy_pool_size) / 2;
 
-  for (std::size_t idx = 0; idx < enemies.size(); ++idx) {
-    Enemy &enemy = enemies[idx];
+  for (std::size_t idx = 0; idx < enemies_.size(); ++idx) {
+    Enemy &enemy = enemies_[idx];
 
-    enemy.alive = true;
+    enemy.alive = false;
     enemy.position.x =
         offset_x + (idx % ENEMIES_COLS) * (Enemy::WIDTH + ENEMIES_SPACING_X);
     enemy.position.y =
@@ -96,12 +101,29 @@ void Game::initEnemies() {
 }
 
 void Game::updateEnemies(float dt) {
-  auto alive_enemies_x =
-      enemies | std::views::filter([](const Enemy &e) { return e.alive; }) |
-      std::views::transform([](const Enemy &e) { return e.position.x; });
+  auto farthest_left = FLT_MAX;
+  auto farthest_right = -FLT_MAX;
 
-  auto farthest_left = *std::ranges::min_element(alive_enemies_x);
-  auto farthest_right = *std::ranges::max_element(alive_enemies_x);
+  auto alive_enemies_count = 0;
+
+  for (const auto enemy : enemies_) {
+    if (!enemy.alive)
+      continue;
+
+    alive_enemies_count++;
+
+    if (enemy.position.x < farthest_left)
+      farthest_left = enemy.position.x;
+
+    if (enemy.position.x > farthest_right)
+      farthest_right = enemy.position.x;
+  }
+
+  if (alive_enemies_count == 0) {
+    boss_phase_ = true;
+    initBoss();
+    return;
+  }
 
   std::optional<float> overflow = std::nullopt;
 
@@ -113,27 +135,27 @@ void Game::updateEnemies(float dt) {
     overflow = farthest_right - (SCREEN_WIDTH - Enemy::WIDTH / 2);
   }
 
-  for (std::size_t idx = 0; idx < enemies.size(); ++idx) {
-    Enemy &enemy = enemies[idx];
+  for (std::size_t idx = 0; idx < enemies_.size(); ++idx) {
+    Enemy &enemy = enemies_[idx];
     if (!enemy.alive)
       continue;
 
     enemy.shooting_cooldown -= dt;
 
     if (enemy.shooting_cooldown <= 0.0f &&
-        (idx + ENEMIES_COLS >= enemies.size() ||
-         !enemies[idx + ENEMIES_COLS].alive)) {
+        (idx + ENEMIES_COLS >= enemies_.size() ||
+         !enemies_[idx + ENEMIES_COLS].alive)) {
 
       bool ally_ahead = false;
       auto current_idx = idx + ENEMIES_COLS;
 
-      while (!ally_ahead && current_idx < enemies.size()) {
-        ally_ahead = enemies[current_idx].alive;
+      while (!ally_ahead && current_idx < enemies_.size()) {
+        ally_ahead = enemies_[current_idx].alive;
         current_idx += ENEMIES_COLS;
       }
 
       if (!ally_ahead) {
-        enemy.spawnBullet(bullets);
+        enemy.spawnBullet(bullets_);
 
         enemy.shooting_cooldown = RndGenerator::getRandomFloat(
             ENEMIES_SHOOTING_INTERVAL_MIN, ENEMIES_SHOOTING_INTERVAL_MAX);
@@ -151,10 +173,10 @@ void Game::updateEnemies(float dt) {
 }
 
 void Game::checkCollisions() {
-  for (auto &bullet : bullets) {
+  for (auto &bullet : bullets_) {
     if (bullet.active) {
       if (bullet.type == BulletType::PLAYER) {
-        for (auto &enemy : enemies) {
+        for (auto &enemy : enemies_) {
           if (enemy.alive &&
               aabb(bullet.position, Bullet::WIDTH / 2, Bullet::HEIGHT / 2,
                    enemy.position, Enemy::WIDTH / 2, Enemy::HEIGHT / 2)) {
@@ -165,7 +187,7 @@ void Game::checkCollisions() {
         }
       } else if (bullet.type == BulletType::ENEMY &&
                  aabb(bullet.position, Bullet::WIDTH / 2, Bullet::HEIGHT / 2,
-                      player.position, Player::SIZE * Player::HITBOX_SCALE / 2,
+                      player_.position, Player::SIZE * Player::HITBOX_SCALE / 2,
                       Player::SIZE * Player::HITBOX_SCALE / 2)) {
         std::cout << "Player loses a live, an enemy bullet touched him"
                   << std::endl;
@@ -174,13 +196,50 @@ void Game::checkCollisions() {
     }
   }
 
-  for (const auto &enemy : enemies) {
+  for (const auto &enemy : enemies_) {
     if (enemy.alive &&
         aabb(enemy.position, Enemy::WIDTH / 2, Enemy::HEIGHT / 2,
-             player.position, Player::SIZE * Player::HITBOX_SCALE / 2,
+             player_.position, Player::SIZE * Player::HITBOX_SCALE / 2,
              Player::SIZE * Player::HITBOX_SCALE / 2)) {
       std::cout << "Player is dead, an enemy touched him" << std::endl;
       break;
     }
+  }
+}
+
+void Game::initBoss() {
+  boss_.active = true;
+  boss_.position.y = -10.0f;
+  boss_.position.x = (SCREEN_WIDTH - Boss::WIDTH) / 2;
+  boss_entrance_running_ = true;
+}
+
+void Game::animateBossEntrance(float dt) {
+  if (boss_.position.y < BOSS_POSITION_Y) {
+    boss_.position.y = std::min(
+        boss_.position.y + BOSS_INITIAL_DESCENT_SPEED * dt, BOSS_POSITION_Y);
+    return;
+  }
+  boss_entrance_running_ = false;
+}
+
+void Game::updateBoss(float dt) {
+  std::optional<float> overflow = std::nullopt;
+
+  if (boss_.position.x - Enemy::WIDTH / 2 <= 0.0f) {
+    enemies_direction_ *= -1;
+    overflow = -(boss_.position.x - Enemy::WIDTH / 2);
+  } else if (boss_.position.x >= SCREEN_WIDTH - Enemy::WIDTH / 2) {
+    enemies_direction_ *= -1;
+    overflow = boss_.position.x - (SCREEN_WIDTH - Enemy::WIDTH / 2);
+  }
+
+  boss_.position.x += overflow ? enemies_direction_ * (overflow.value() + 1)
+                               : enemies_direction_ * BOSS_CYCLE_SPEED * dt;
+
+  if (boss_.pattern_switching_cooldown <= 0) {
+    boss_.spawnBullets(dt, bullets_, player_.position);
+  } else {
+    boss_.pattern_switching_cooldown -= dt;
   }
 }

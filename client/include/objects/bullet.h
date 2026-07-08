@@ -12,8 +12,8 @@ struct Bullet {
   void update(float dt);
   void draw() const;
 
-  static constexpr float WIDTH = 6;
-  static constexpr float HEIGHT = 16;
+  static constexpr float WIDTH = 4;
+  static constexpr float HEIGHT = 12;
 
   static constexpr float SPEED = 600.0f;
 };

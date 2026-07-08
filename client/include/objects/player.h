@@ -8,7 +8,8 @@ struct Player {
   Vector2 position = {0, 0};
   float fire_cooldown = 0.0f;
 
-  void update(float dt, std::array<Bullet, MAX_BULLETS> &bullets);
+  void update(float dt, std::array<Bullet, MAX_BULLETS> &bullets,
+              bool can_fire_bullets);
   void draw() const;
 
   static constexpr float SIZE = 20.0f;

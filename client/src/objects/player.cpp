@@ -3,7 +3,8 @@
 #include "objects/bullet.h"
 #include <array>
 
-void Player::update(float dt, std::array<Bullet, MAX_BULLETS> &bullets) {
+void Player::update(float dt, std::array<Bullet, MAX_BULLETS> &bullets,
+                    bool can_fire_bullets) {
   float vx = 0;
   if (IsKeyDown(KEY_A) || IsKeyDown(KEY_LEFT))
     vx = -1.0f;
@@ -24,7 +25,7 @@ void Player::update(float dt, std::array<Bullet, MAX_BULLETS> &bullets) {
   if (fire_cooldown > 0.0f)
     fire_cooldown -= dt;
 
-  if (IsKeyDown(KEY_SPACE) && fire_cooldown <= 0.0f) {
+  if (can_fire_bullets && IsKeyDown(KEY_SPACE) && fire_cooldown <= 0.0f) {
     spawnBullet(bullets);
     fire_cooldown = FIRE_COOLDOWN;
   }

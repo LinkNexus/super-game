@@ -15,7 +15,11 @@ static constexpr float ENEMIES_SPACING_X = 40.0f;
 static constexpr float ENEMIES_SPACING_Y = 40.0f;
 static constexpr float ENEMIES_CYCLE_SPEED = 200.0f;
 static constexpr float ENEMIES_DESCENT_SPEED = 20.0f;
-static constexpr float ENEMIES_SHOOTING_INTERVAL_MIN = 1.0f;
-static constexpr float ENEMIES_SHOOTING_INTERVAL_MAX = 3.0f;
+static constexpr float ENEMIES_SHOOTING_INTERVAL_MIN = 1.5f;
+static constexpr float ENEMIES_SHOOTING_INTERVAL_MAX = 3.5f;
+
+static constexpr float BOSS_POSITION_Y = 150.0f;
+static constexpr float BOSS_INITIAL_DESCENT_SPEED = 70.0f;
+static constexpr float BOSS_CYCLE_SPEED = 400.0f;
 
 static constexpr float FIRE_COOLDOWN = 0.15f;
