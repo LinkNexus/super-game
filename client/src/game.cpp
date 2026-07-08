@@ -3,6 +3,7 @@
 #include "objects/bullet.h"
 #include "objects/enemy.h"
 #include "objects/player.h"
+#include "objects/star.h"
 #include "raylib.h"
 #include "rnd_generator.h"
 #include <algorithm>
@@ -11,7 +12,6 @@
 #include <cstdlib>
 #include <format>
 #include <iostream>
-#include <ranges>
 #include <string>
 
 bool aabb(Vector2 pos_a, float hw_a, float hh_a, Vector2 pos_b, float hw_b,
@@ -26,7 +26,12 @@ void Game::run() {
   SetTargetFPS(TARGET_FPS);
 
   player.position = {SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT - 60.0f};
+  player.load_texture();
   initEnemies();
+
+  for (auto &s : stars)
+    s.init_random(SCREEN_WIDTH, SCREEN_HEIGHT);
+
   float accumulator = 0.0f;
 
   while (!WindowShouldClose()) {
@@ -46,6 +51,7 @@ void Game::run() {
     EndDrawing();
   }
 
+  player.unload();
   CloseWindow();
 }
 
@@ -57,10 +63,16 @@ void Game::update(float dt) {
   for (auto &b : bullets)
     b.update(dt);
 
+  for (auto &s : stars)
+    s.update(dt, SCREEN_HEIGHT, SCREEN_WIDTH);
+
   checkCollisions();
 }
 
 void Game::draw() {
+  for (const auto &s : stars)
+    s.draw();
+
   player.draw();
 
   for (const auto &b : bullets)
@@ -96,12 +108,13 @@ void Game::initEnemies() {
 }
 
 void Game::updateEnemies(float dt) {
-  auto alive_enemies_x =
-      enemies | std::views::filter([](const Enemy &e) { return e.alive; }) |
-      std::views::transform([](const Enemy &e) { return e.position.x; });
-
-  auto farthest_left = *std::ranges::min_element(alive_enemies_x);
-  auto farthest_right = *std::ranges::max_element(alive_enemies_x);
+  float farthest_left  = FLT_MAX;
+  float farthest_right = -FLT_MAX;
+  for (const auto &e : enemies) {
+    if (!e.alive) continue;
+    if (e.position.x < farthest_left)  farthest_left  = e.position.x;
+    if (e.position.x > farthest_right) farthest_right = e.position.x;
+  }
 
   std::optional<float> overflow = std::nullopt;
 

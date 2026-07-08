@@ -30,13 +30,29 @@ void Player::update(float dt, std::array<Bullet, MAX_BULLETS> &bullets) {
   }
 }
 
-void Player::draw() const {
-  Vector2 tip = {position.x, position.y - SIZE};
-  Vector2 left = {position.x - SIZE * 0.7f, position.y + SIZE * 0.7f};
-  Vector2 right = {position.x + SIZE * 0.7f, position.y + SIZE * 0.7f};
+void Player::load_texture() {
+  texture = LoadTexture("assets/playerShip.png");
+}
 
-  DrawTriangle(tip, left, right, SKYBLUE);
-  DrawTriangleLines(tip, left, right, WHITE);
+void Player::unload() {
+  UnloadTexture(texture);
+}
+
+void Player::draw() const {
+  if (texture.id != 0) {
+    float scale = (SIZE * 2.0f) / texture.width;
+    Vector2 draw_pos = {
+      position.x - (texture.width  * scale) / 2.0f,
+      position.y - (texture.height * scale) / 2.0f
+    };
+    DrawTextureEx(texture, draw_pos, 0.0f, scale, WHITE);
+  } else {
+    Vector2 tip   = {position.x, position.y - SIZE};
+    Vector2 left  = {position.x - SIZE * 0.7f, position.y + SIZE * 0.7f};
+    Vector2 right = {position.x + SIZE * 0.7f, position.y + SIZE * 0.7f};
+    DrawTriangle(tip, left, right, SKYBLUE);
+    DrawTriangleLines(tip, left, right, WHITE);
+  }
 }
 
 void Player::spawnBullet(std::array<Bullet, MAX_BULLETS> &bullets) const {

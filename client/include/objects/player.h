@@ -5,14 +5,17 @@
 #include <array>
 
 struct Player {
-  Vector2 position = {0, 0};
-  float fire_cooldown = 0.0f;
+  Vector2   position      = {0, 0};
+  float     fire_cooldown = 0.0f;
+  Texture2D texture       = {};
 
+  void load_texture();
+  void unload();
   void update(float dt, std::array<Bullet, MAX_BULLETS> &bullets);
   void draw() const;
 
-  static constexpr float SIZE = 20.0f;
-  static constexpr float SPEED = 300.0f;
+  static constexpr float SIZE         = 20.0f;
+  static constexpr float SPEED        = 300.0f;
   static constexpr float HITBOX_SCALE = 0.80f;
 
 private:
