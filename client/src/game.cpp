@@ -3,15 +3,13 @@
 #include "objects/bullet.h"
 #include "objects/enemy.h"
 #include "objects/player.h"
+#include "objects/star.h"
 #include "raylib.h"
 #include "rnd_generator.h"
-#include <algorithm>
 #include <cfloat>
 #include <cstddef>
 #include <cstdlib>
 #include <iostream>
-#include <iterator>
-#include <ranges>
 
 bool aabb(Vector2 pos_a, float hw_a, float hh_a, Vector2 pos_b, float hw_b,
           float hh_b) {
@@ -24,8 +22,13 @@ void Game::run() {
   InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "SUPER GAME");
   SetTargetFPS(TARGET_FPS);
 
-  player_.position = {SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT - 60.0f};
+  player.position = {SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT - 60.0f};
+  player.load_texture();
   initEnemies();
+
+  for (auto &s : stars)
+    s.init_random(SCREEN_WIDTH, SCREEN_HEIGHT);
+
   float accumulator = 0.0f;
 
   while (!WindowShouldClose()) {
@@ -45,6 +48,7 @@ void Game::run() {
     EndDrawing();
   }
 
+  player.unload();
   CloseWindow();
 }
 
@@ -62,11 +66,17 @@ void Game::update(float dt) {
   for (auto &b : bullets_)
     b.update(dt);
 
+  for (auto &s : stars)
+    s.update(dt, SCREEN_HEIGHT, SCREEN_WIDTH);
+
   checkCollisions();
 }
 
 void Game::draw() {
-  player_.draw();
+  for (const auto &s : stars)
+    s.draw();
+
+  player.draw();
 
   for (const auto &b : bullets_)
     b.draw();
