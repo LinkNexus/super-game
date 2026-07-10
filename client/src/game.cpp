@@ -27,6 +27,8 @@ void Game::run() {
 
   player.position = {SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT - 60.0f};
   player.load_texture();
+  Enemy::loadTextures();
+  boss.load_texture();
   initEnemies();
 
   for (auto &s : stars)
@@ -52,6 +54,8 @@ void Game::run() {
   }
 
   player.unload();
+  Enemy::unloadTextures();
+  boss.unload();
   CloseWindow();
 }
 
