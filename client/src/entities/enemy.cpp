@@ -1,5 +1,5 @@
-#include "objects/enemy.h"
-#include "objects/bullet.h"
+#include "entities/enemy.h"
+#include "entities/bullet.h"
 
 void Enemy::draw() const {
   if (!alive)

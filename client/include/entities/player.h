@@ -1,6 +1,7 @@
 #pragma once
+
 #include "constants.h"
-#include "objects/bullet.h"
+#include "entities/bullet.h"
 #include "raylib.h"
 #include <array>
 
@@ -11,9 +12,8 @@ struct Player {
 
   void update(float dt, std::array<Bullet, MAX_BULLETS> &bullets,
               bool can_fire_bullets);
-  void load_texture();
+  void loadTexture();
   void unload();
-  void update(float dt, std::array<Bullet, MAX_BULLETS> &bullets);
   void draw() const;
 
   static constexpr float SIZE = 20.0f;

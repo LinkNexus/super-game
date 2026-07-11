@@ -22,6 +22,7 @@ The overall approach: local game first, then server, then multiplayer.
 | L6 | **Game state machine** | States: `MENU → PLAYING → GAME_OVER / WIN`. Clean transitions, pause support. |
 | L7 | **Score & player health system** | Points per kill, player has 3 lives. Reset on new game. |
 | L8 | **`shared/` message structs skeleton** | Define `PlayerInput` and `GameState` structs in `shared/` (needed in Phase 2). No networking yet — just the data layout. |
+| L8.5 | **GitLab CI/CD pipeline** | `.gitlab-ci.yml` that builds the client (debug + release) via the CMake presets on every push/MR. Needs `GIT_SUBMODULE_STRATEGY: recursive` (raylib is a submodule) and build-dir caching. Extend in Phase 2 with the server build + Docker image, and unit tests once the server-side logic exists. |
 
 ### Lynce
 
@@ -91,7 +92,7 @@ The overall approach: local game first, then server, then multiplayer.
 
 ```
 Week 1-2  (Jun 18 – Jul 1)   L1-L4  + Ly1-Ly3   — Core entities + visuals
-Week 3-4  (Jul 1  – Jul 15)  L5-L8  + Ly4-Ly6   — Boss, states, HUD, effects
+Week 3-4  (Jul 1  – Jul 15)  L5-L8.5 + Ly4-Ly6  — Boss, states, HUD, effects, CI
 Week 5-6  (Jul 15 – Aug 1)   L9-L15 + Ly7-Ly9   — Full networking
 Week 7    (Aug 1  – Aug 5)   L16    + Ly10        — Docker + polish screens
 Week 8    (Aug 5  – Aug 12)  L17-L19 + Ly11-Ly14 — Deploy, final polish, demo

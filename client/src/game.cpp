@@ -1,13 +1,12 @@
 #include "game.h"
 #include "constants.h"
-#include "objects/bullet.h"
-#include "objects/enemy.h"
-#include "objects/player.h"
-#include "objects/star.h"
+#include "entities/bullet.h"
+#include "entities/enemy.h"
+#include "entities/player.h"
+#include "entities/star.h"
 #include "raylib.h"
 #include "rnd_generator.h"
 #include <cfloat>
-#include <cstddef>
 #include <cstdlib>
 #include <iostream>
 
@@ -22,12 +21,12 @@ void Game::run() {
   InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "SUPER GAME");
   SetTargetFPS(TARGET_FPS);
 
-  player.position = {SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT - 60.0f};
-  player.load_texture();
+  player_.position = {SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT - 60.0f};
+  player_.loadTexture();
   initEnemies();
 
-  for (auto &s : stars)
-    s.init_random(SCREEN_WIDTH, SCREEN_HEIGHT);
+  for (auto &s : stars_)
+    s.initRandom(SCREEN_WIDTH, SCREEN_HEIGHT);
 
   float accumulator = 0.0f;
 
@@ -48,7 +47,7 @@ void Game::run() {
     EndDrawing();
   }
 
-  player.unload();
+  player_.unload();
   CloseWindow();
 }
 
@@ -66,17 +65,17 @@ void Game::update(float dt) {
   for (auto &b : bullets_)
     b.update(dt);
 
-  for (auto &s : stars)
+  for (auto &s : stars_)
     s.update(dt, SCREEN_HEIGHT, SCREEN_WIDTH);
 
   checkCollisions();
 }
 
 void Game::draw() {
-  for (const auto &s : stars)
+  for (const auto &s : stars_)
     s.draw();
 
-  player.draw();
+  player_.draw();
 
   for (const auto &b : bullets_)
     b.draw();
@@ -106,7 +105,7 @@ void Game::initEnemies() {
 
     enemy.type = (idx % 2 == 0) ? EnemyType::TYPE_1 : EnemyType::TYPE_2;
     enemy.shooting_cooldown = RndGenerator::getRandomFloat(
-        ENEMIES_SHOOTING_INTERVAL_MIN, ENEMIES_SHOOTING_INTERVAL_MAX);
+        Enemy::SHOOTING_INTERVAL_MIN, Enemy::SHOOTING_INTERVAL_MAX);
   }
 }
 
@@ -116,7 +115,7 @@ void Game::updateEnemies(float dt) {
 
   auto alive_enemies_count = 0;
 
-  for (const auto enemy : enemies_) {
+  for (const auto &enemy : enemies_) {
     if (!enemy.alive)
       continue;
 
@@ -168,16 +167,15 @@ void Game::updateEnemies(float dt) {
         enemy.spawnBullet(bullets_);
 
         enemy.shooting_cooldown = RndGenerator::getRandomFloat(
-            ENEMIES_SHOOTING_INTERVAL_MIN, ENEMIES_SHOOTING_INTERVAL_MAX);
+            Enemy::SHOOTING_INTERVAL_MIN, Enemy::SHOOTING_INTERVAL_MAX);
       }
     }
 
-    enemy.position.x += overflow
-                            ? enemies_direction_ * (overflow.value() + 1)
-                            : enemies_direction_ * ENEMIES_CYCLE_SPEED * dt;
+    enemy.position.x += overflow ? enemies_direction_ * (overflow.value() + 1)
+                                 : enemies_direction_ * Enemy::CYCLE_SPEED * dt;
 
     if (overflow) {
-      enemy.position.y += ENEMIES_DESCENT_SPEED;
+      enemy.position.y += Enemy::DESCENT_SPEED;
     }
   }
 }
@@ -186,13 +184,24 @@ void Game::checkCollisions() {
   for (auto &bullet : bullets_) {
     if (bullet.active) {
       if (bullet.type == BulletType::PLAYER) {
-        for (auto &enemy : enemies_) {
-          if (enemy.alive &&
+
+        if (boss_phase_) {
+          if (boss_.active &&
               aabb(bullet.position, Bullet::WIDTH / 2, Bullet::HEIGHT / 2,
-                   enemy.position, Enemy::WIDTH / 2, Enemy::HEIGHT / 2)) {
-            enemy.alive = false;
+                   boss_.position, Boss::WIDTH / 2, Boss::HEIGHT / 2)) {
+            boss_.health--;
             bullet.active = false;
-            break;
+            std::cout << "Boss lp: " << boss_.health << "\n";
+          }
+        } else {
+          for (auto &enemy : enemies_) {
+            if (enemy.alive &&
+                aabb(bullet.position, Bullet::WIDTH / 2, Bullet::HEIGHT / 2,
+                     enemy.position, Enemy::WIDTH / 2, Enemy::HEIGHT / 2)) {
+              enemy.alive = false;
+              bullet.active = false;
+              break;
+            }
           }
         }
       } else if (bullet.type == BulletType::ENEMY &&
@@ -200,7 +209,7 @@ void Game::checkCollisions() {
                       player_.position, Player::SIZE * Player::HITBOX_SCALE / 2,
                       Player::SIZE * Player::HITBOX_SCALE / 2)) {
         std::cout << "Player loses a live, an enemy bullet touched him"
-                  << std::endl;
+                  << "\n";
         bullet.active = false;
       }
     }
@@ -236,16 +245,23 @@ void Game::animateBossEntrance(float dt) {
 void Game::updateBoss(float dt) {
   std::optional<float> overflow = std::nullopt;
 
-  if (boss_.position.x - Enemy::WIDTH / 2 <= 0.0f) {
+  if (boss_.position.x - Boss::WIDTH / 2 <= 0.0f) {
     enemies_direction_ *= -1;
-    overflow = -(boss_.position.x - Enemy::WIDTH / 2);
-  } else if (boss_.position.x >= SCREEN_WIDTH - Enemy::WIDTH / 2) {
+    overflow = -(boss_.position.x - Boss::WIDTH / 2);
+  } else if (boss_.position.x >= SCREEN_WIDTH - Boss::WIDTH / 2) {
     enemies_direction_ *= -1;
-    overflow = boss_.position.x - (SCREEN_WIDTH - Enemy::WIDTH / 2);
+    overflow = boss_.position.x - (SCREEN_WIDTH - Boss::WIDTH / 2);
   }
 
   boss_.position.x += overflow ? enemies_direction_ * (overflow.value() + 1)
                                : enemies_direction_ * BOSS_CYCLE_SPEED * dt;
+
+  if (boss_.current_phase < Boss::PHASES_COUNT &&
+      boss_.health <= Boss::MIN_LP_PER_SWITCH[boss_.current_phase - 1]) {
+    boss_.current_phase++;
+    boss_.pattern_switching_cooldown =
+        Boss::PATTERN_SWITCHING_COOLDOWNS_PER_PHASE[boss_.current_phase - 1];
+  }
 
   if (boss_.pattern_switching_cooldown <= 0) {
     boss_.spawnBullets(dt, bullets_, player_.position);
