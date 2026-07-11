@@ -57,7 +57,7 @@ void Game::update(float dt) {
   if (boss_phase_) {
     if (boss_entrance_running_)
       animateBossEntrance(dt);
-    else
+    else if (boss_.active)
       updateBoss(dt);
   } else
     updateEnemies(dt);
@@ -191,7 +191,11 @@ void Game::checkCollisions() {
                    boss_.position, Boss::WIDTH / 2, Boss::HEIGHT / 2)) {
             boss_.health--;
             bullet.active = false;
-            std::cout << "Boss lp: " << boss_.health << "\n";
+
+            if (boss_.health <= 0) {
+              boss_.active = false;
+              std::cout << "Boss defeated!" << std::endl;
+            }
           }
         } else {
           for (auto &enemy : enemies_) {
