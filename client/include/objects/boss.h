@@ -7,4 +7,9 @@ struct Boss {
   bool    active   = false;
 
   void draw() const;
+  void load_texture();
+  void unload();
+
+private:
+  Texture2D texture_ = {};
 };
