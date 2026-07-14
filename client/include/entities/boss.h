@@ -41,4 +41,9 @@ struct Boss {
   void draw() const;
   void spawnBullets(float dt, std::array<Bullet, MAX_BULLETS> &bullets,
                     Vector2 player_position);
+  void loadTexture();
+  void unload();
+
+private:
+  Texture2D texture_ = {};
 };

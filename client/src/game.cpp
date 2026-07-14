@@ -21,10 +21,10 @@ void Game::run() {
   InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "SUPER GAME");
   SetTargetFPS(TARGET_FPS);
 
-  player.position = {SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT - 60.0f};
-  player.load_texture();
+  player_.position = {SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT - 60.0f};
+  player_.loadTexture();
   Enemy::loadTextures();
-  boss.load_texture();
+  boss_.loadTexture();
   initEnemies();
 
   for (auto &s : stars_)
@@ -49,9 +49,9 @@ void Game::run() {
     EndDrawing();
   }
 
-  player.unload();
+  player_.unload();
   Enemy::unloadTextures();
-  boss.unload();
+  boss_.unload();
   CloseWindow();
 }
 
