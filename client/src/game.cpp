@@ -101,7 +101,7 @@ void Game::initEnemies() {
   for (std::size_t idx = 0; idx < enemies_.size(); ++idx) {
     Enemy &enemy = enemies_[idx];
 
-    enemy.alive = false;
+    enemy.alive = true;
     enemy.position.x =
         offset_x + (idx % ENEMIES_COLS) * (Enemy::WIDTH + ENEMIES_SPACING_X);
     enemy.position.y =
