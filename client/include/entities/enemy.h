@@ -19,10 +19,15 @@ struct Enemy {
   static constexpr float WIDTH = 32.0f;
   static constexpr float HEIGHT = 20.0f;
 
+  static constexpr float CYCLE_SPEED = 200.0f;
+  static constexpr float DESCENT_SPEED = 20.0f;
+  static constexpr float SHOOTING_INTERVAL_MIN = 1.5f;
+  static constexpr float SHOOTING_INTERVAL_MAX = 3.5f;
+
   static void loadTextures();
   static void unloadTextures();
 
-  private:
+private:
   static Texture2D texture_type1_;
   static Texture2D texture_type2_;
 };

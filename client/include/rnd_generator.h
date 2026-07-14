@@ -6,5 +6,5 @@ class RndGenerator {
 public:
   static void seed();
   static int getRandomInt(int min, int max);
-  static float getRandomFloat(float min, float max, int precision = 4);
+  static float getRandomFloat(float min, float max);
 };

@@ -2,11 +2,11 @@ add_executable(supergame-client
     src/main.cpp
     src/game.cpp
     src/rnd_generator.cpp
-    src/objects/player.cpp
-    src/objects/bullet.cpp
-    src/objects/enemy.cpp
-    src/objects/boss.cpp
-    src/objects/star.cpp
+    src/entities/player.cpp
+    src/entities/bullet.cpp
+    src/entities/enemy.cpp
+    src/entities/boss.cpp
+    src/entities/star.cpp
 )
 
 target_link_libraries(supergame-client PRIVATE raylib)

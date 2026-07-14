@@ -1,4 +1,4 @@
-#include "objects/bullet.h"
+#include "entities/bullet.h"
 #include "constants.h"
 
 void Bullet::update(float dt) {
