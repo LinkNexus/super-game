@@ -16,29 +16,47 @@ bool aabb(Vector2 pos_a, float hw_a, float hh_a, Vector2 pos_b, float hw_b,
          std::abs(pos_a.y - pos_b.y) <= (hh_a + hh_b);
 }
 
-void Game::run() {
-  RndGenerator::seed();
-  InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "SUPER GAME");
-  SetTargetFPS(TARGET_FPS);
-
+void Game::init() {
+  screen_ = Screen::MENU;
   player_.position = {SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT - 60.0f};
-  player_.loadTexture();
-  Enemy::loadTextures();
-  boss_.loadTexture();
+  boss_phase_ = false;
+  boss_entrance_running_ = false;
+  enemies_direction_ = 1;
+
+  boss_ = Boss();
+  bullets_.fill(Bullet());
+
   initEnemies();
 
   for (auto &s : stars_)
     s.initRandom(SCREEN_WIDTH, SCREEN_HEIGHT);
+}
+
+void Game::run() {
+  RndGenerator::seed();
+  InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "SUPER GAME");
+  SetExitKey(KEY_NULL);
+  SetTargetFPS(TARGET_FPS);
+
+  init();
+
+  player_.loadTexture();
+  Enemy::loadTextures();
+  boss_.loadTexture();
 
   float accumulator = 0.0f;
 
   while (!WindowShouldClose()) {
+    handleInput();
+
     float frame_time = GetFrameTime();
     if (frame_time > 0.1f)
       frame_time = 0.1f;
     accumulator += frame_time;
 
     while (accumulator >= FIXED_DT) {
+      for (auto &s : stars_)
+        s.update(FIXED_DT, SCREEN_HEIGHT, SCREEN_WIDTH);
       update(FIXED_DT);
       accumulator -= FIXED_DT;
     }
@@ -55,7 +73,47 @@ void Game::run() {
   CloseWindow();
 }
 
+void Game::handleInput() {
+  switch (screen_) {
+  case Screen::MENU:
+    if (IsKeyPressed(KEY_ENTER)) {
+      screen_ = Screen::PLAYING;
+    }
+    break;
+
+  case Screen::PLAYING:
+    if (IsKeyPressed(KEY_ESCAPE)) {
+      screen_ = Screen::PAUSED;
+    }
+    break;
+
+  case Screen::PAUSED:
+    if (IsKeyPressed(KEY_ESCAPE)) {
+      screen_ = Screen::PLAYING;
+    }
+    break;
+
+  case Screen::GAME_OVER:
+    if (IsKeyPressed(KEY_ENTER)) {
+      init();
+    }
+    break;
+
+  case Screen::WIN:
+    if (IsKeyPressed(KEY_ENTER)) {
+      init();
+    }
+    break;
+  }
+}
+
 void Game::update(float dt) {
+  if (screen_ == Screen::PLAYING) {
+    updatePlaying(dt);
+  }
+}
+
+void Game::updatePlaying(float dt) {
   player_.update(dt, bullets_, !boss_entrance_running_);
 
   if (boss_phase_) {
@@ -69,9 +127,6 @@ void Game::update(float dt) {
   for (auto &b : bullets_)
     b.update(dt);
 
-  for (auto &s : stars_)
-    s.update(dt, SCREEN_HEIGHT, SCREEN_WIDTH);
-
   checkCollisions();
 }
 
@@ -79,16 +134,43 @@ void Game::draw() {
   for (const auto &s : stars_)
     s.draw();
 
-  player_.draw();
+  switch (screen_) {
+  case Screen::MENU:
+    DrawText("Press ENTER to start the game", SCREEN_WIDTH / 2 - 150,
+             SCREEN_HEIGHT / 2, 20, WHITE);
+    break;
 
-  for (const auto &b : bullets_)
-    b.draw();
+  case Screen::PLAYING:
+  case Screen::PAUSED:
+    player_.draw();
 
-  for (const auto &e : enemies_)
-    if (e.alive)
-      e.draw();
+    for (const auto &b : bullets_)
+      b.draw();
 
-  boss_.draw();
+    for (const auto &e : enemies_)
+      if (e.alive)
+        e.draw();
+
+    boss_.draw();
+
+    if (screen_ == Screen::PAUSED) {
+      DrawRectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, Fade(BLACK, 0.6f));
+      DrawText("Game Paused", SCREEN_WIDTH / 2 - 100, SCREEN_HEIGHT / 2, 20,
+               WHITE);
+      DrawText("Press ESC to resume", SCREEN_WIDTH / 2 - 100,
+               SCREEN_HEIGHT / 2 + 30, 20, WHITE);
+    }
+    break;
+
+  case Screen::GAME_OVER:
+  case Screen::WIN:
+    DrawText(screen_ == Screen::GAME_OVER ? "Game Over" : "You Win!",
+             SCREEN_WIDTH / 2 - 100, SCREEN_HEIGHT / 2, 20, WHITE);
+    DrawText("Press ENTER to return to menu", SCREEN_WIDTH / 2 - 150,
+             SCREEN_HEIGHT / 2 + 30, 20, WHITE);
+
+    break;
+  }
 
   DrawFPS(10, 10);
 }
@@ -198,7 +280,7 @@ void Game::checkCollisions() {
 
             if (boss_.health <= 0) {
               boss_.active = false;
-              std::cout << "Boss defeated!" << std::endl;
+              screen_ = Screen::WIN;
             }
           }
         } else {
@@ -228,7 +310,7 @@ void Game::checkCollisions() {
         aabb(enemy.position, Enemy::WIDTH / 2, Enemy::HEIGHT / 2,
              player_.position, Player::SIZE * Player::HITBOX_SCALE / 2,
              Player::SIZE * Player::HITBOX_SCALE / 2)) {
-      std::cout << "Player is dead, an enemy touched him" << std::endl;
+      screen_ = Screen::GAME_OVER;
       break;
     }
   }

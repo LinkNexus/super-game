@@ -8,13 +8,19 @@
 #include "entities/star.h"
 #include <array>
 
+enum class Screen { MENU, PLAYING, PAUSED, GAME_OVER, WIN };
+
 class Game {
 public:
   void run();
 
 private:
+  void init();
   void update(float dt);
   void draw();
+
+  void handleInput();
+  void updatePlaying(float dt);
 
   void initEnemies();
   void updateEnemies(float dt);
@@ -28,9 +34,10 @@ private:
   std::array<Enemy, ENEMIES_ROWS * ENEMIES_COLS> enemies_;
   std::array<Star, STAR_COUNT> stars_;
   Boss boss_;
+  Screen screen_;
 
-  int enemies_direction_ = 1;
+  int enemies_direction_;
 
-  bool boss_phase_ = false;
-  bool boss_entrance_running_ = false;
+  bool boss_phase_;
+  bool boss_entrance_running_;
 };
