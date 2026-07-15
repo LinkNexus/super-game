@@ -11,7 +11,7 @@ enum class BossPattern {
 
 struct Boss {
   Vector2 position = {0, 0};
-  int health = 100;
+  int health = INITIAL_LP;
   bool active = false;
 
   int current_phase = 1;
@@ -24,6 +24,8 @@ struct Boss {
 
   static constexpr float WIDTH = 100.0f;
   static constexpr float HEIGHT = 60.0f;
+
+  static constexpr int INITIAL_LP = 100;
 
   static constexpr float BULLETS_SPEED = Bullet::SPEED * 1.5f;
 
