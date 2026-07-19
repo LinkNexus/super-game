@@ -19,4 +19,6 @@ static constexpr float BOSS_POSITION_Y = 150.0f;
 static constexpr float BOSS_INITIAL_DESCENT_SPEED = 70.0f;
 static constexpr float BOSS_CYCLE_SPEED = 400.0f;
 
-static constexpr float FIRE_COOLDOWN = 0.15f;
+static constexpr int STATUS_FONT_SIZE = 20;
+
+static constexpr int POINTS_PER_HIT = 10;

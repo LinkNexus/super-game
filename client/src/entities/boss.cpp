@@ -1,8 +1,10 @@
 #include "entities/boss.h"
 #include "constants.h"
 #include "entities/bullet.h"
+#include "entities/player.h"
 #include "raymath.h"
 #include <array>
+#include <cstddef>
 
 void Boss::loadTexture() { texture_ = LoadTexture("assets/boss.png"); }
 
@@ -20,6 +22,10 @@ void Boss::draw() const {
   } else {
     DrawRectangle((int)position.x - 40, (int)position.y - 20, 80, 40, RED);
   }
+
+  const char *text = TextFormat("Boss Health: %d", health);
+  DrawText(text, SCREEN_WIDTH - 10 - MeasureText(text, STATUS_FONT_SIZE),
+           10 + STATUS_FONT_SIZE * 2, STATUS_FONT_SIZE, WHITE);
 }
 
 void Boss::spawnBullets(float dt, std::array<Bullet, MAX_BULLETS> &bullets,
@@ -46,7 +52,9 @@ void Boss::spawnBullets(float dt, std::array<Bullet, MAX_BULLETS> &bullets,
       b->position = {position.x, position.y + HEIGHT / 2};
     }
 
-    reserved_bullets[0]->velocity = {0, BULLETS_SPEED};
+    if (reserved_bullets[0] != nullptr) {
+      reserved_bullets[0]->velocity = {0, BULLETS_SPEED};
+    }
 
     if (reserved_bullets[1] != nullptr) {
       reserved_bullets[1]->velocity =

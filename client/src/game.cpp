@@ -8,7 +8,6 @@
 #include "rnd_generator.h"
 #include <cfloat>
 #include <cstdlib>
-#include <iostream>
 
 bool aabb(Vector2 pos_a, float hw_a, float hh_a, Vector2 pos_b, float hw_b,
           float hh_b) {
@@ -18,7 +17,11 @@ bool aabb(Vector2 pos_a, float hw_a, float hh_a, Vector2 pos_b, float hw_b,
 
 void Game::init() {
   screen_ = Screen::MENU;
+
   player_.position = {SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT - 60.0f};
+  player_.lives = Player::INITIAL_LIVES;
+  player_.points = 0;
+
   boss_phase_ = false;
   boss_entrance_running_ = false;
   enemies_direction_ = 1;
@@ -35,6 +38,7 @@ void Game::init() {
 void Game::run() {
   RndGenerator::seed();
   InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "SUPER GAME");
+  ChangeDirectory(GetApplicationDirectory());
   SetExitKey(KEY_NULL);
   SetTargetFPS(TARGET_FPS);
 
@@ -115,6 +119,10 @@ void Game::update(float dt) {
 
 void Game::updatePlaying(float dt) {
   player_.update(dt, bullets_, !boss_entrance_running_);
+
+  if (player_.lives <= 0) {
+    screen_ = Screen::GAME_OVER;
+  }
 
   if (boss_phase_) {
     if (boss_entrance_running_)
@@ -262,6 +270,11 @@ void Game::updateEnemies(float dt) {
 
     if (overflow) {
       enemy.position.y += Enemy::DESCENT_SPEED;
+
+      if (enemy.position.y + Enemy::HEIGHT / 2 >=
+          player_.position.y - Player::SIZE) {
+        screen_ = Screen::GAME_OVER;
+      }
     }
   }
 }
@@ -271,11 +284,12 @@ void Game::checkCollisions() {
     if (bullet.active) {
       if (bullet.type == BulletType::PLAYER) {
 
-        if (boss_phase_) {
+        if (boss_phase_ && !boss_entrance_running_) {
           if (boss_.active &&
               aabb(bullet.position, Bullet::WIDTH / 2, Bullet::HEIGHT / 2,
                    boss_.position, Boss::WIDTH / 2, Boss::HEIGHT / 2)) {
             boss_.health--;
+            player_.points += POINTS_PER_HIT;
             bullet.active = false;
 
             if (boss_.health <= 0) {
@@ -290,6 +304,7 @@ void Game::checkCollisions() {
                      enemy.position, Enemy::WIDTH / 2, Enemy::HEIGHT / 2)) {
               enemy.alive = false;
               bullet.active = false;
+              player_.points += POINTS_PER_HIT;
               break;
             }
           }
@@ -298,8 +313,7 @@ void Game::checkCollisions() {
                  aabb(bullet.position, Bullet::WIDTH / 2, Bullet::HEIGHT / 2,
                       player_.position, Player::SIZE * Player::HITBOX_SCALE / 2,
                       Player::SIZE * Player::HITBOX_SCALE / 2)) {
-        std::cout << "Player loses a live, an enemy bullet touched him"
-                  << "\n";
+        player_.lives--;
         bullet.active = false;
       }
     }
