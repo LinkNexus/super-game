@@ -23,7 +23,7 @@ struct Boss {
   int phase2_bullets_shot = 0;
 
   static constexpr float WIDTH = 100.0f;
-  static constexpr float HEIGHT = 60.0f;
+  static constexpr float HEIGHT = 87.0f;
 
   static constexpr int INITIAL_LP = 100;
 

@@ -1,6 +1,7 @@
 #include "entities/player.h"
 #include "constants.h"
 #include "entities/bullet.h"
+#include "raylib.h"
 
 void Player::update(float dt, std::array<Bullet, MAX_BULLETS> &bullets,
                     bool can_fire_bullets) {
@@ -47,6 +48,16 @@ void Player::draw() const {
     DrawTriangle(tip, left, right, SKYBLUE);
     DrawTriangleLines(tip, left, right, WHITE);
   }
+
+  const char *lives_text = TextFormat("Lives: %d", lives);
+  DrawText(lives_text,
+           SCREEN_WIDTH - 10 - MeasureText(lives_text, STATUS_FONT_SIZE), 10,
+           STATUS_FONT_SIZE, WHITE);
+
+  const char *points_text = TextFormat("Points: %d", points);
+  DrawText(points_text,
+           SCREEN_WIDTH - 10 - MeasureText(points_text, STATUS_FONT_SIZE),
+           10 + STATUS_FONT_SIZE, STATUS_FONT_SIZE, WHITE);
 }
 
 void Player::spawnBullet(std::array<Bullet, MAX_BULLETS> &bullets) const {
