@@ -39,7 +39,7 @@ The overall approach: local game first, then server, then multiplayer.
 
 ## Phase 2 — Networking (July 15 → ~August 5)
 
-**Goal:** Two players on separate machines, server runs authoritative simulation.
+**Goal:** Two players on separate machines, server runs authoritative simulation. The client keeps a **local mode** (offline single-player) alongside the new online mode — one binary, mode chosen in the menu, both modes running the same shared simulation.
 
 ### Levy
 
@@ -47,9 +47,11 @@ The overall approach: local game first, then server, then multiplayer.
 |---|------|-------|
 | L9 | **Add `server/` CMake target** | New `add_subdirectory(server)` in root `CMakeLists.txt`, headless binary (no Raylib). |
 | L10 | **Integrate µWebSockets into server** | Add as git submodule under `vendor/`, wire into server's `CMakeLists.txt`. |
-| L11 | **Server authoritative game loop** | Port the game logic (enemies, bullets, collision) to run on the server at fixed 60 Hz. Server owns all game state. |
+| L10.5 | **Split sim state from render state** | Entities currently mix both (e.g. `Player` holds `position`/`lives` *and* `Texture2D`/`draw()`). Move sim data into plain structs, keep textures + draw functions client-side. Sim code must stop calling raylib directly (`IsKeyDown` → consume a `PlayerInput` instead). Prerequisite for L11. |
+| L11 | **Shared authoritative game loop (`GameSim`)** | Extract the game logic (enemies, bullets, boss, collision) into a headless `GameSim` in `shared/`: world state + `step(inputs, dt)`, no raylib. The server runs it at fixed 60 Hz and owns all game state; the client's local mode runs the *same* `GameSim` in-process — no duplicated logic. Headless sim = unit-testable → wire tests into the L8.5 CI pipeline. |
 | L12 | **Network protocol** | Define the wire format: Client sends `PlayerInput` (keys bitmask + timestamp). Server broadcasts `GameState` (all positions, health, score) to all clients. Start with JSON, optimise to binary if needed. |
 | L13 | **Client WebSocket integration** | Add a lightweight WS client to the client. Send input each tick, receive and apply state snapshot. |
+| L13.5 | **Local/Online mode selection** | Menu entry to pick Local or Online play. Introduce a session layer: `LocalSession` (input → `GameSim::step()` in-process → draw) vs `OnlineSession` (input → send to server → apply received `GameState` → draw). The draw code renders whatever state it's handed, regardless of source. |
 | L14 | **Lobby / join system** | Server accepts up to 2 connections. First client = Player 1 (blue), second = Player 2 (triangle). Reject further connections. |
 | L15 | **Client-side interpolation** | Smooth rendering between received state snapshots to hide network jitter (lerp positions). |
 | L16 | **Docker setup** | `Dockerfile` for the server binary. Test locally with `docker run`. |
@@ -93,7 +95,7 @@ The overall approach: local game first, then server, then multiplayer.
 ```
 Week 1-2  (Jun 18 – Jul 1)   L1-L4  + Ly1-Ly3   — Core entities + visuals
 Week 3-4  (Jul 1  – Jul 15)  L5-L8.5 + Ly4-Ly6  — Boss, states, HUD, effects, CI
-Week 5-6  (Jul 15 – Aug 1)   L9-L15 + Ly7-Ly9   — Full networking
+Week 5-6  (Jul 15 – Aug 1)   L9-L15 + Ly7-Ly9   — Sim extraction + full networking
 Week 7    (Aug 1  – Aug 5)   L16    + Ly10        — Docker + polish screens
 Week 8    (Aug 5  – Aug 12)  L17-L19 + Ly11-Ly14 — Deploy, final polish, demo
 ```
