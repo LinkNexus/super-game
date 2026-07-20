@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(supergame VERSION 0.1.0 LANGUAGES CXX)
+project(supergame VERSION 0.1.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -13,6 +13,10 @@ set(BUILD_GAMES OFF CACHE BOOL "" FORCE)
 
 add_subdirectory(vendor/raylib)
 
+# uSockets / uWebSockets (server networking layer)
+include(vendor/uWebSockets.cmake)
+
 #Targets
 add_subdirectory(shared)
 add_subdirectory(client)
+add_subdirectory(server)
