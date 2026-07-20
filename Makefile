@@ -23,8 +23,16 @@ run-client: run-client-debug
 run-client-debug: debug
 	./build/debug/bin/supergame-client
 
+run-server: run-server-debug
+
+run-server-debug: debug
+	./build/debug/bin/supergame-server
+
 run-client-release: release
 	./build/release/bin/supergame-client
+
+run-server-release: release
+	./build/release/bin/supergame-server
 
 clean:
 	cmake --build --preset debug --target clean
