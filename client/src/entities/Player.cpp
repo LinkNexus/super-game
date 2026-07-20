@@ -80,10 +80,10 @@ void Player::draw() const {
     }
   }
 
-  const char *points_text = TextFormat("Points: %d", points);
-  DrawText(points_text,
-           SCREEN_WIDTH - 10 - MeasureText(points_text, STATUS_FONT_SIZE),
-           10 + STATUS_FONT_SIZE, STATUS_FONT_SIZE, WHITE);
+    const char *points_text = TextFormat("Points: %d", points);
+        DrawText(points_text,
+         SCREEN_WIDTH - 10 - MeasureText(points_text, STATUS_FONT_SIZE),
+         10 + HEART_SIZE + HEART_SPACING, STATUS_FONT_SIZE, WHITE);
 }
 
 void Player::spawnBullet(std::array<Bullet, MAX_BULLETS> &bullets) const {
