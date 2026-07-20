@@ -1,8 +1,8 @@
 #pragma once
 
 #include "bullet.h"
-#include "constants.h"
 #include "raylib.h"
+#include "shared/constants.h"
 #include <array>
 
 enum class EnemyType { TYPE_1, TYPE_2 };

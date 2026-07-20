@@ -9,12 +9,11 @@ add_executable(supergame-client
     src/entities/star.cpp
 )
 
-target_link_libraries(supergame-client PRIVATE raylib)
+target_link_libraries(supergame-client PRIVATE raylib supergame-shared)
 
 target_include_directories(supergame-client PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${CMAKE_CURRENT_SOURCE_DIR}/include
-    ${CMAKE_SOURCE_DIR}/shared
 )
 
 # Windows: link required system libs (Raylib needs these)

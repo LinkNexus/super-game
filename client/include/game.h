@@ -6,6 +6,7 @@
 #include "entities/enemy.h"
 #include "entities/player.h"
 #include "entities/star.h"
+#include "shared/messages.h"
 #include <array>
 
 enum class Screen { MENU, PLAYING, PAUSED, GAME_OVER, WIN };

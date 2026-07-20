@@ -1,8 +1,8 @@
 #pragma once
 
-#include "constants.h"
 #include "entities/bullet.h"
 #include "raylib.h"
+#include "shared/constants.h"
 #include <array>
 
 struct Player {
