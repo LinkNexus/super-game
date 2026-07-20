@@ -3,6 +3,8 @@
 #include "entities/bullet.h"
 #include "raylib.h"
 
+Texture2D Player::heart_texture_ = {};
+
 void Player::update(float dt, std::array<Bullet, MAX_BULLETS> &bullets,
                     bool can_fire_bullets) {
   float vx = 0;
@@ -31,9 +33,18 @@ void Player::update(float dt, std::array<Bullet, MAX_BULLETS> &bullets,
   }
 }
 
-void Player::loadTexture() { texture = LoadTexture("assets/playerShip.png"); }
+void Player::loadTexture() {
+   texture = LoadTexture("assets/playerShip.png");
 
-void Player::unload() { UnloadTexture(texture); }
+  heart_texture_ = LoadTexture("assets/heart.png");
+   }
+
+void Player::unload() {
+  UnloadTexture(texture);
+  if (heart_texture_.id != 0) {
+    UnloadTexture(heart_texture_);
+  }
+}
 
 void Player::draw() const {
   if (texture.id != 0) {
@@ -49,10 +60,25 @@ void Player::draw() const {
     DrawTriangleLines(tip, left, right, WHITE);
   }
 
-  const char *lives_text = TextFormat("Lives: %d", lives);
-  DrawText(lives_text,
-           SCREEN_WIDTH - 10 - MeasureText(lives_text, STATUS_FONT_SIZE), 10,
-           STATUS_FONT_SIZE, WHITE);
+   for (int i = 0; i < lives; i++) {
+    float x = SCREEN_WIDTH - 10 - HEART_SIZE - i * (HEART_SIZE + HEART_SPACING);
+    float y = 10.0f;
+
+    if (heart_texture_.id != 0) {
+      float scale = HEART_SIZE / heart_texture_.width;
+      DrawTextureEx(heart_texture_, {x, y}, 0.0f, scale, WHITE);
+    } else {
+      float cx = x + HEART_SIZE / 2.0f;
+      float lobe_r = HEART_SIZE * 0.28f;
+      float lobe_y = y + lobe_r;
+      DrawCircle(cx - lobe_r, lobe_y, lobe_r, RED);
+      DrawCircle(cx + lobe_r, lobe_y, lobe_r, RED);
+      Vector2 bottom = {cx, y + HEART_SIZE};
+      Vector2 leftPt = {x, lobe_y};
+      Vector2 rightPt = {x + HEART_SIZE, lobe_y};
+      DrawTriangle(leftPt, bottom, rightPt, RED);
+    }
+  }
 
   const char *points_text = TextFormat("Points: %d", points);
   DrawText(points_text,
