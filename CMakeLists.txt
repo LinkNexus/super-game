@@ -14,4 +14,5 @@ set(BUILD_GAMES OFF CACHE BOOL "" FORCE)
 add_subdirectory(vendor/raylib)
 
 #Targets
+add_subdirectory(shared)
 add_subdirectory(client)
