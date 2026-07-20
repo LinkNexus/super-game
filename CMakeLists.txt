@@ -16,3 +16,4 @@ add_subdirectory(vendor/raylib)
 #Targets
 add_subdirectory(shared)
 add_subdirectory(client)
+add_subdirectory(server)
