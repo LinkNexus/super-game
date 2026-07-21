@@ -39,7 +39,9 @@ struct Boss {
                                                                           50};
   static constexpr std::array<float, PHASES_COUNT>
       PATTERN_SWITCHING_COOLDOWNS_PER_PHASE = {1.5f, 0.8f, 0.5f};
-
+  static constexpr float HEALTH_BAR_WIDTH = 300.0f;
+  static constexpr float HEALTH_BAR_HEIGHT = 20.0f;
+  static constexpr float HEALTH_BAR_Y = 10.0f;
   void draw() const;
   void spawnBullets(float dt, std::array<Bullet, MAX_BULLETS> &bullets,
                     Vector2 player_position);
