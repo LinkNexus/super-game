@@ -38,7 +38,7 @@ void Boss::draw() const {
 
   const char *text = TextFormat("Boss Health: %d", health);
   DrawText(text, SCREEN_WIDTH - 10 - MeasureText(text, STATUS_FONT_SIZE),
-           10 + STATUS_FONT_SIZE * 2, STATUS_FONT_SIZE, WHITE);
+           10 + STATUS_FONT_SIZE + Player::HEART_SIZE, STATUS_FONT_SIZE, WHITE);
 }
 
 void Boss::spawnBullets(float dt, std::array<Bullet, MAX_BULLETS> &bullets,

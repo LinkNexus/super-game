@@ -23,6 +23,10 @@ struct Player {
   static constexpr float HITBOX_SCALE = 0.80f;
   static constexpr float FIRE_COOLDOWN = 0.15f;
   static constexpr int INITIAL_LIVES = 3;
+  static constexpr float HEART_SIZE = 32.0f;
+  static constexpr float HEART_SPACING = 4.0f;
+
+  static Texture2D heart_texture_;
 
 private:
   void spawnBullet(std::array<Bullet, MAX_BULLETS> &bullets) const;

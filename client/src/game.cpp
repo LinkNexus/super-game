@@ -10,7 +10,6 @@
 #include <cstdlib>
 #include <optional>
 
-
 bool aabb(Vector2 pos_a, float hw_a, float hh_a, Vector2 pos_b, float hw_b,
           float hh_b) {
   return std::abs(pos_a.x - pos_b.x) <= (hw_a + hw_b) &&
