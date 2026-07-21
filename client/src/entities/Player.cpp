@@ -34,10 +34,10 @@ void Player::update(float dt, std::array<Bullet, MAX_BULLETS> &bullets,
 }
 
 void Player::loadTexture() {
-   texture = LoadTexture("assets/playerShip.png");
+  texture = LoadTexture("assets/playerShip.png");
 
   heart_texture_ = LoadTexture("assets/heart.png");
-   }
+}
 
 void Player::unload() {
   UnloadTexture(texture);
@@ -60,7 +60,7 @@ void Player::draw() const {
     DrawTriangleLines(tip, left, right, WHITE);
   }
 
-   for (int i = 0; i < lives; i++) {
+  for (int i = 0; i < lives; i++) {
     float x = SCREEN_WIDTH - 10 - HEART_SIZE - i * (HEART_SIZE + HEART_SPACING);
     float y = 10.0f;
 
@@ -80,10 +80,10 @@ void Player::draw() const {
     }
   }
 
-    const char *points_text = TextFormat("Points: %d", points);
-        DrawText(points_text,
-         SCREEN_WIDTH - 10 - MeasureText(points_text, STATUS_FONT_SIZE),
-         10 + HEART_SIZE + HEART_SPACING, STATUS_FONT_SIZE, WHITE);
+  const char *points_text = TextFormat("Points: %d", points);
+  DrawText(points_text,
+           SCREEN_WIDTH - 10 - MeasureText(points_text, STATUS_FONT_SIZE),
+           10 + HEART_SIZE, STATUS_FONT_SIZE, WHITE);
 }
 
 void Player::spawnBullet(std::array<Bullet, MAX_BULLETS> &bullets) const {
