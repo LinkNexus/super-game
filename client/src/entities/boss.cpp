@@ -10,6 +10,19 @@ void Boss::unload() { UnloadTexture(texture_); }
 void Boss::draw(const shared::BossState &state) const {
   if (!state.active)
     return;
+    
+  float bar_x = (SCREEN_WIDTH - HEALTH_BAR_WIDTH) / 2.0f;
+  float health_ratio = (float)health / INITIAL_LP;
+  if (health_ratio < 0.0f)
+    health_ratio = 0.0f;
+
+  DrawRectangle((int)bar_x, (int)HEALTH_BAR_Y, (int)HEALTH_BAR_WIDTH,
+                (int)HEALTH_BAR_HEIGHT, GRAY);
+  DrawRectangle((int)bar_x, (int)HEALTH_BAR_Y,
+                (int)(HEALTH_BAR_WIDTH * health_ratio), (int)HEALTH_BAR_HEIGHT,
+                RED);
+  DrawRectangleLines((int)bar_x, (int)HEALTH_BAR_Y, (int)HEALTH_BAR_WIDTH,
+                      (int)HEALTH_BAR_HEIGHT, WHITE);
 
   if (texture_.id != 0) {
     float scale = 80.0f / texture_.width;
@@ -23,5 +36,5 @@ void Boss::draw(const shared::BossState &state) const {
 
   const char *text = TextFormat("Boss Health: %d", state.health);
   DrawText(text, SCREEN_WIDTH - 10 - MeasureText(text, STATUS_FONT_SIZE),
-           10 + STATUS_FONT_SIZE * 2, STATUS_FONT_SIZE, WHITE);
+           10 + STATUS_FONT_SIZE + Player::HEART_SIZE, STATUS_FONT_SIZE, WHITE);
 }
