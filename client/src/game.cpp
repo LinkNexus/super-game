@@ -8,6 +8,8 @@
 #include "rnd_generator.h"
 #include <cfloat>
 #include <cstdlib>
+#include <optional>
+
 
 bool aabb(Vector2 pos_a, float hw_a, float hh_a, Vector2 pos_b, float hw_b,
           float hh_b) {
