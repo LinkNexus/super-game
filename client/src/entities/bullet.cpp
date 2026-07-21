@@ -1,19 +1,13 @@
 #include "entities/bullet.h"
-#include "constants.h"
+#include "raylib.h"
+#include "shared/bullet_sim.h"
+#include "shared/messages.h"
 
-void Bullet::update(float dt) {
-  if (!active)
+void Bullet::draw(const shared::BulletState &state) const {
+  if (!state.active)
     return;
-  position.x += velocity.x * dt;
-  position.y += velocity.y * dt;
-
-  if (position.y < 0 || position.y > SCREEN_HEIGHT)
-    active = false;
-}
-
-void Bullet::draw() const {
-  if (!active)
-    return;
-  DrawRectangle((int)position.x - WIDTH / 2, (int)position.y - HEIGHT / 2,
-                WIDTH, HEIGHT, YELLOW);
+  DrawRectangle((int)state.position.x - shared::BulletSimState::WIDTH / 2,
+                (int)state.position.y - shared::BulletSimState::HEIGHT / 2,
+                shared::BulletSimState::WIDTH, shared::BulletSimState::HEIGHT,
+                YELLOW);
 }

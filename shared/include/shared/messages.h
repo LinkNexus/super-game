@@ -1,14 +1,15 @@
 #pragma once
 
 #include "shared/constants.h"
+#include "shared/math_utils.h"
 #include <cstdint>
 
 namespace shared {
 
-enum class Button : uint8_t {
-  LEFT = 1 << 0,
-  RIGHT = 1 << 1,
-  FIRE = 1 << 2,
+enum Button : uint8_t {
+  BUTTON_LEFT = 1 << 0,
+  BUTTON_RIGHT = 1 << 1,
+  BUTTON_FIRE = 1 << 2,
 };
 
 struct PlayerInput {
@@ -18,19 +19,19 @@ struct PlayerInput {
 };
 
 struct PlayerState {
-  float x, y;
+  Vec2D position;
   uint8_t lives;
   uint32_t points;
 };
 
 struct BulletState {
-  float x, y;
+  Vec2D position;
   uint8_t active;
   uint8_t type;
 };
 
 struct BossState {
-  float x, y;
+  Vec2D position;
   uint8_t active;
   uint32_t health;
 };
