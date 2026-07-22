@@ -1,5 +1,7 @@
 #include "entities/boss.h"
 #include "constants.h"
+#include "entities/player.h"
+#include "shared/boss_sim.h"
 #include "shared/messages.h"
 #include <cstddef>
 
@@ -10,9 +12,9 @@ void Boss::unload() { UnloadTexture(texture_); }
 void Boss::draw(const shared::BossState &state) const {
   if (!state.active)
     return;
-    
+
   float bar_x = (SCREEN_WIDTH - HEALTH_BAR_WIDTH) / 2.0f;
-  float health_ratio = (float)health / INITIAL_LP;
+  float health_ratio = (float)state.health / shared::BossSimState::INITIAL_LP;
   if (health_ratio < 0.0f)
     health_ratio = 0.0f;
 
@@ -22,7 +24,7 @@ void Boss::draw(const shared::BossState &state) const {
                 (int)(HEALTH_BAR_WIDTH * health_ratio), (int)HEALTH_BAR_HEIGHT,
                 RED);
   DrawRectangleLines((int)bar_x, (int)HEALTH_BAR_Y, (int)HEALTH_BAR_WIDTH,
-                      (int)HEALTH_BAR_HEIGHT, WHITE);
+                     (int)HEALTH_BAR_HEIGHT, WHITE);
 
   if (texture_.id != 0) {
     float scale = 80.0f / texture_.width;

@@ -36,7 +36,7 @@ void Player::draw(const shared::PlayerSimState &state) const {
     DrawTriangleLines(tip, left, right, WHITE);
   }
 
-  for (int i = 0; i < lives; i++) {
+  for (int i = 0; i < state.lives; i++) {
     float x = SCREEN_WIDTH - 10 - HEART_SIZE - i * (HEART_SIZE + HEART_SPACING);
     float y = 10.0f;
 

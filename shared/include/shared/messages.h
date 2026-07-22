@@ -10,6 +10,7 @@ enum Button : uint8_t {
   BUTTON_LEFT = 1 << 0,
   BUTTON_RIGHT = 1 << 1,
   BUTTON_FIRE = 1 << 2,
+  BUTTON_PAUSE = 1 << 3,
 };
 
 struct PlayerInput {
