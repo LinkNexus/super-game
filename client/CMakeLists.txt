@@ -1,9 +1,7 @@
 add_executable(supergame-client
     src/main.cpp
     src/game.cpp
-    src/rnd_generator.cpp
     src/entities/player.cpp
-    src/entities/bullet.cpp
     src/entities/enemy.cpp
     src/entities/boss.cpp
     src/entities/star.cpp

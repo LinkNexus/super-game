@@ -1,5 +1,4 @@
 #include "entities/enemy.h"
-#include "shared/enemy_sim.h"
 
 Texture2D Enemy::texture_type1_ = {};
 Texture2D Enemy::texture_type2_ = {};
@@ -14,11 +13,7 @@ void Enemy::unloadTextures() {
   UnloadTexture(texture_type2_);
 }
 
-void Enemy::draw(float pos_x, float pos_y, bool alive,
-                 shared::EnemyType type) const {
-  if (!alive)
-    return;
-
+void Enemy::draw(float pos_x, float pos_y, shared::EnemyType type) {
   const Texture2D &tex =
       (type == shared::EnemyType::TYPE_1) ? texture_type1_ : texture_type2_;
 

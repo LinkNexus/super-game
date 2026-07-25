@@ -1,7 +1,8 @@
 #include "entities/player.h"
 #include "constants.h"
 #include "raylib.h"
-#include "shared/player_sim.h"
+#include "shared/messages.h"
+#include "shared/sim/player_sim.h"
 
 Texture2D Player::heart_texture_ = {};
 
@@ -18,7 +19,7 @@ void Player::unload() {
   }
 }
 
-void Player::draw(const shared::PlayerSimState &state) const {
+void Player::draw(const shared::PlayerState &state) const {
   auto size = shared::PlayerSimState::SIZE;
 
   if (texture.id != 0) {

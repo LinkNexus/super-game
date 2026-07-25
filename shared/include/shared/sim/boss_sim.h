@@ -1,8 +1,8 @@
 #pragma once
 
-#include "shared/bullet_sim.h"
 #include "shared/constants.h"
 #include "shared/math_utils.h"
+#include "shared/sim/bullet_sim.h"
 #include <array>
 #include <cstdint>
 
@@ -14,21 +14,25 @@ enum class BossPattern {
 };
 
 struct BossSimState {
-  Vec2D position = {0.0f, 0.0f};
-  int32_t health = INITIAL_LP;
-  bool active = false;
-  int8_t current_phase = 1;
-  float pattern_switching_cooldown =
-      PATTERN_SWITCHING_COOLDOWNS_PER_PHASE[current_phase - 1];
-  BossPattern shooting_pattern = BossPattern::SPREAD_SHOT;
+  Vec2D position;
+  int32_t health;
+  bool active;
+  int8_t current_phase;
+  float pattern_switching_cooldown;
+  BossPattern shooting_pattern;
 
-  float phase2_shooting_cooldown = PHASE2_SHOOTING_COOLDOWN;
-  int phase2_bullets_shot = 0;
+  float phase2_shooting_cooldown;
+  int phase2_bullets_shot;
+  int direction;
 
   static constexpr float WIDTH = 100.0f;
   static constexpr float HEIGHT = 87.0f;
 
   static constexpr int INITIAL_LP = 100;
+  static constexpr float INITIAL_POSITION_Y = -30.0f;
+  static constexpr float FINAL_POSITION_Y = 80.0f;
+  static constexpr float INITIAL_DESCENT_SPEED = 70.0f;
+  static constexpr float CYCLE_SPEED = 400.0f;
 
   static constexpr float BULLETS_SPEED = BulletSimState::SPEED * 1.5f;
 
@@ -43,7 +47,13 @@ struct BossSimState {
   static constexpr std::array<float, PHASES_COUNT>
       PATTERN_SWITCHING_COOLDOWNS_PER_PHASE = {1.5f, 0.8f, 0.5f};
 
-  void spawnBullets(float dt, std::array<BulletSimState, MAX_BULLETS> &bullets,
-                    Vec2D player_position);
+  void
+  spawnBullets(float dt, std::array<BulletSimState, MAX_BULLETS> &bullets,
+               std::array<std::optional<Vec2D>, MAX_PLAYERS> &player_positions);
+  void init();
+  void stepEntrance(float dt);
+  bool isEntranceComplete();
+  void step(float dt, std::array<BulletSimState, MAX_BULLETS> &bullets_pool,
+            std::array<std::optional<Vec2D>, MAX_PLAYERS> &player_positions);
 };
 } // namespace shared

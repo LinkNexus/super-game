@@ -1,8 +1,11 @@
 add_library(supergame-shared STATIC
-    src/bullet_sim.cpp
-    src/enemy_sim.cpp
-    src/player_sim.cpp
-    src/boss_sim.cpp
+    src/sim/bullet_sim.cpp
+    src/sim/enemy_sim.cpp
+    src/sim/player_sim.cpp
+    src/sim/boss_sim.cpp
+    src/sim/game_sim.cpp
+    src/math_utils.cpp
+    src/rnd_generator.cpp
 )
 
 target_include_directories(supergame-shared PUBLIC

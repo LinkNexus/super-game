@@ -1,15 +1,15 @@
 #include "entities/boss.h"
 #include "constants.h"
 #include "entities/player.h"
-#include "shared/boss_sim.h"
 #include "shared/messages.h"
+#include "shared/sim/boss_sim.h"
 #include <cstddef>
 
 void Boss::loadTexture() { texture_ = LoadTexture("assets/boss.png"); }
 
 void Boss::unload() { UnloadTexture(texture_); }
 
-void Boss::draw(const shared::BossState &state) const {
+void Boss::draw(const shared::BossState &state, bool draw_health_bar) const {
   if (!state.active)
     return;
 
@@ -18,13 +18,15 @@ void Boss::draw(const shared::BossState &state) const {
   if (health_ratio < 0.0f)
     health_ratio = 0.0f;
 
-  DrawRectangle((int)bar_x, (int)HEALTH_BAR_Y, (int)HEALTH_BAR_WIDTH,
-                (int)HEALTH_BAR_HEIGHT, GRAY);
-  DrawRectangle((int)bar_x, (int)HEALTH_BAR_Y,
-                (int)(HEALTH_BAR_WIDTH * health_ratio), (int)HEALTH_BAR_HEIGHT,
-                RED);
-  DrawRectangleLines((int)bar_x, (int)HEALTH_BAR_Y, (int)HEALTH_BAR_WIDTH,
-                     (int)HEALTH_BAR_HEIGHT, WHITE);
+  if (draw_health_bar) {
+    DrawRectangle((int)bar_x, (int)HEALTH_BAR_Y, (int)HEALTH_BAR_WIDTH,
+                  (int)HEALTH_BAR_HEIGHT, GRAY);
+    DrawRectangle((int)bar_x, (int)HEALTH_BAR_Y,
+                  (int)(HEALTH_BAR_WIDTH * health_ratio),
+                  (int)HEALTH_BAR_HEIGHT, RED);
+    DrawRectangleLines((int)bar_x, (int)HEALTH_BAR_Y, (int)HEALTH_BAR_WIDTH,
+                       (int)HEALTH_BAR_HEIGHT, WHITE);
+  }
 
   if (texture_.id != 0) {
     float scale = 80.0f / texture_.width;

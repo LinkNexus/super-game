@@ -1,10 +1,10 @@
 #pragma once
 
 #include "raylib.h"
-#include "shared/enemy_sim.h"
+#include "shared/sim/enemy_sim.h"
 
 struct Enemy {
-  void draw(float pos_x, float pos_y, bool alive, shared::EnemyType type) const;
+  static void draw(float pos_x, float pos_y, shared::EnemyType type);
 
   static void loadTextures();
   static void unloadTextures();

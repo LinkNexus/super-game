@@ -1,7 +1,7 @@
-#include "shared/bullet_sim.h"
+#include "shared/sim/bullet_sim.h"
 #include "shared/constants.h"
 
-void shared::BulletSimState::stepBullet(float dt) {
+void shared::BulletSimState::step(float dt) {
   if (!active)
     return;
 
