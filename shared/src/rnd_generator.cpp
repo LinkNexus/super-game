@@ -1,4 +1,4 @@
-#include "rnd_generator.h"
+#include "shared/rnd_generator.h"
 #include <random>
 
 std::mt19937 RndGenerator::RNG_;
