@@ -5,7 +5,13 @@
 int main(int argc, char *argv[]) {
   shared::GameState state{};
 
-  std::printf("supergame_server stub, tick=%u\n", state.tick);
+  nlohmann::json j = state;
+  auto wire = j.dump();
+
+  std::printf("Serialized GameState: %s\n", wire.c_str());
+
+  auto received = nlohmann::json::parse(wire).get<shared::GameState>();
+  assert(received.tick == state.tick);
 
   uWS::App()
       .listen(9001,

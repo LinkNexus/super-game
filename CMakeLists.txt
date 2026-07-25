@@ -16,6 +16,9 @@ add_subdirectory(vendor/raylib)
 # uSockets / uWebSockets (server networking layer)
 include(vendor/uWebSockets.cmake)
 
+# nlohmann/json (message serialization)
+include(vendor/json.cmake)
+
 #Targets
 add_subdirectory(shared)
 add_subdirectory(client)

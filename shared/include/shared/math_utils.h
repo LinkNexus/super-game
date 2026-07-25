@@ -1,5 +1,7 @@
 #pragma once
 
+#include "nlohmann/json.hpp"
+
 namespace shared {
 struct Vec2D {
   float x, y;
@@ -22,6 +24,7 @@ struct Vec2D {
 
   Vec2D rotated(float angle) const;
 };
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(Vec2D, x, y)
 
 bool rectIntersection(Vec2D pos_a, float hw_a, float hh_a, Vec2D pos_b,
                       float hw_b, float hh_b);

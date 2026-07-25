@@ -22,6 +22,17 @@ void Game::init() {
 
   for (auto &s : stars_)
     s.initRandom(SCREEN_WIDTH, SCREEN_HEIGHT);
+
+  shared::PlayerInput input{
+      .tick = 42, .buttons = shared::BUTTON_LEFT, .player_id = 0};
+
+  nlohmann::json j = input;
+  std::string wire = j.dump();
+
+  std::printf("Serialized PlayerInput: %s\n", wire.c_str());
+
+  auto received = nlohmann::json::parse(wire).get<shared::PlayerInput>();
+  assert(received.tick == input.tick);
 }
 
 shared::Button Game::getPlayerInputs() {
@@ -129,6 +140,8 @@ void Game::handleInput() {
 }
 
 void drawBullet(const shared::BulletState &state) {
+  if (!state.active)
+    return;
   DrawRectangle((int)state.position.x - shared::BulletSimState::WIDTH / 2,
                 (int)state.position.y - shared::BulletSimState::HEIGHT / 2,
                 shared::BulletSimState::WIDTH, shared::BulletSimState::HEIGHT,
@@ -154,7 +167,7 @@ void Game::draw() {
     if (player_state != state_.players.end())
       player_.draw(*player_state);
 
-    for (const auto &b : state_.active_bullets)
+    for (const auto &b : state_.bullets)
       drawBullet(b);
 
     for (std::size_t idx = 0; idx < state_.enemies.size(); ++idx) {

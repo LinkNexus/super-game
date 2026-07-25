@@ -126,14 +126,13 @@ void GameSim::setGameState(GameState &state) {
 
   state.phase = static_cast<uint8_t>(phase_);
 
-  state.active_bullets.clear();
-  for (auto &bullet : bullets_pool_) {
-    if (bullet.active) {
-      BulletState bullet_state;
-      bullet_state.position = bullet.position;
-      bullet_state.type = static_cast<uint8_t>(bullet.type);
-      state.active_bullets.push_back(bullet_state);
-    }
+  for (std::size_t idx = 0; idx < bullets_pool_.size(); ++idx) {
+    auto &bullet_state = state.bullets[idx];
+    auto &bullet = bullets_pool_[idx];
+
+    bullet_state.position = bullet.position;
+    bullet_state.type = static_cast<uint8_t>(bullet.type);
+    bullet_state.active = bullet.active;
   }
 
   for (std::size_t idx = 0;
