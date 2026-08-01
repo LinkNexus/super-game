@@ -9,6 +9,15 @@
 #include <cfloat>
 #include <cstdlib>
 
+void Game::update(float dt) {
+  if (screen_ == Screen::CONNECTING) {
+    connection_timer_ += dt;
+    if (connection_timer_ > 1.0f) {
+      screen_ = Screen::WAITING;
+    }
+  }
+}
+
 void Game::init() {
   screen_ = Screen::MENU;
 
@@ -74,6 +83,8 @@ void Game::run() {
       for (auto &s : stars_)
         s.update(FIXED_DT, SCREEN_HEIGHT, SCREEN_WIDTH);
 
+      update(FIXED_DT);
+
       std::array<shared::PlayerInput, MAX_PLAYERS> inputs;
       inputs[0].buttons = getPlayerInputs();
       inputs[0].player_id = 0;
@@ -108,8 +119,29 @@ void Game::run() {
 void Game::handleInput() {
   switch (screen_) {
   case Screen::MENU:
-    if (IsKeyPressed(KEY_ENTER)) {
-      screen_ = Screen::PLAYING;
+    if (IsKeyPressed(KEY_LEFT)) {
+      mode_ = GameMode::LOCAL;
+    } else if (IsKeyPressed(KEY_RIGHT)) {
+      mode_ = GameMode::ONLINE;
+    } else if (IsKeyPressed(KEY_ENTER)) {
+      if (mode_ == GameMode::ONLINE) {
+        screen_ = Screen::CONNECTING;
+        connection_timer_ = 0.0f;
+      } else {
+        screen_ = Screen::PLAYING;
+      }
+    }
+    break;
+
+  case Screen::CONNECTING:
+    if (IsKeyPressed(KEY_ESCAPE)) {
+      screen_ = Screen::MENU;
+    }
+    break;
+
+  case Screen::WAITING:
+    if (IsKeyPressed(KEY_ESCAPE)) {
+      screen_ = Screen::MENU;
     }
     break;
 
@@ -154,8 +186,28 @@ void Game::draw() {
 
   switch (screen_) {
   case Screen::MENU:
-    DrawText("Press ENTER to start the game", SCREEN_WIDTH / 2 - 150,
-             SCREEN_HEIGHT / 2, 20, WHITE);
+    DrawText("Use LEFT/RIGHT to choose mode", SCREEN_WIDTH / 2 - 180,
+             SCREEN_HEIGHT / 2 - 40, 20, WHITE);
+    DrawText("Press ENTER to confirm", SCREEN_WIDTH / 2 - 150,
+             SCREEN_HEIGHT / 2 - 10, 20, WHITE);
+    DrawText("Local", SCREEN_WIDTH / 2 - 150, SCREEN_HEIGHT / 2 + 40, 24,
+             mode_ == GameMode::LOCAL ? YELLOW : WHITE);
+    DrawText("Online", SCREEN_WIDTH / 2 + 50, SCREEN_HEIGHT / 2 + 40, 24,
+             mode_ == GameMode::ONLINE ? YELLOW : WHITE);
+    break;
+
+  case Screen::CONNECTING:
+    DrawText("Connecting to server...", SCREEN_WIDTH / 2 - 170,
+             SCREEN_HEIGHT / 2, 24, LIGHTGRAY);
+    DrawText("Press ESC to cancel", SCREEN_WIDTH / 2 - 140,
+             SCREEN_HEIGHT / 2 + 40, 20, WHITE);
+    break;
+
+  case Screen::WAITING:
+    DrawText("Waiting for player 2...", SCREEN_WIDTH / 2 - 170,
+             SCREEN_HEIGHT / 2, 24, LIGHTGRAY);
+    DrawText("Press ESC to return to menu", SCREEN_WIDTH / 2 - 170,
+             SCREEN_HEIGHT / 2 + 40, 20, WHITE);
     break;
 
   case Screen::PLAYING:

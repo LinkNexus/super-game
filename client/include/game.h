@@ -8,7 +8,9 @@
 #include "shared/sim/game_sim.h"
 #include <array>
 
-enum class Screen { MENU, PLAYING, PAUSED, GAME_OVER, WIN };
+enum class Screen { MENU, CONNECTING, WAITING, PLAYING, PAUSED, GAME_OVER, WIN };
+
+enum class GameMode { LOCAL, ONLINE };
 
 class Game {
 public:
@@ -25,6 +27,8 @@ private:
   Boss boss_;
   std::array<Star, STAR_COUNT> stars_;
   Screen screen_;
+  GameMode mode_ = GameMode::LOCAL;
+  float connection_timer_ = 0.0f;
   shared::GameSim sim_;
   shared::GameState state_;
 };
