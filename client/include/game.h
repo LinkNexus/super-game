@@ -1,5 +1,6 @@
 #pragma once
 
+#include "raylib.h"
 #include "constants.h"
 #include "entities/boss.h"
 #include "entities/player.h"
@@ -20,6 +21,25 @@ private:
   void draw();
   void handleInput();
   shared::Button getPlayerInputs();
+
+  // Particle system for explosion effects (client-side only)
+  struct Particle {
+    Vector2 position{};
+    Vector2 velocity{};
+    float lifetime = 0.0f;
+    float max_lifetime = 0.0f;
+    Color color{255, 255, 255, 255};
+    float size = 3.0f;
+  };
+
+  void updateParticles(float dt);
+  void drawParticles() const;
+  void spawnExplosion(const Vector2 &pos, shared::EnemyType type);
+  void spawnEnemyExplosions(const shared::GameState &before,
+                            const shared::GameState &after);
+
+  static constexpr int MAX_PARTICLES = 128;
+  std::array<Particle, MAX_PARTICLES> particles_{};
 
   Player player_;
   Boss boss_;
