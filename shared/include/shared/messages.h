@@ -15,6 +15,17 @@ enum Button : uint8_t {
   BUTTON_SHOOT = 1 << 2,
 };
 
+enum class MessageType : uint8_t {
+  LOBBY_UPDATE,
+  GAME_STATE,
+};
+
+struct LobbyUpdate {
+  uint8_t player_count;
+  bool game_started;
+};
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(LobbyUpdate, player_count)
+
 struct PlayerInput {
   uint32_t tick;
   uint8_t buttons;

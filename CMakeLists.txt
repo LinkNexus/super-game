@@ -19,6 +19,9 @@ include(vendor/uWebSockets.cmake)
 # nlohmann/json (message serialization)
 include(vendor/json.cmake)
 
+# IXWebSocket (client-side WebSocket connection)
+include(vendor/ixwebsocket.cmake)
+
 #Targets
 add_subdirectory(shared)
 add_subdirectory(client)

@@ -15,24 +15,10 @@ void Game::init() {
   std::array<uint8_t, MAX_PLAYERS> player_ids;
   player_ids.fill(0);
 
-  sim_ = shared::GameSim();
-  sim_.start(player_ids);
-
   state_ = shared::GameState();
 
   for (auto &s : stars_)
     s.initRandom(SCREEN_WIDTH, SCREEN_HEIGHT);
-
-  shared::PlayerInput input{
-      .tick = 42, .buttons = shared::BUTTON_LEFT, .player_id = 0};
-
-  nlohmann::json j = input;
-  std::string wire = j.dump();
-
-  std::printf("Serialized PlayerInput: %s\n", wire.c_str());
-
-  auto received = nlohmann::json::parse(wire).get<shared::PlayerInput>();
-  assert(received.tick == input.tick);
 }
 
 shared::Button Game::getPlayerInputs() {
@@ -79,7 +65,7 @@ void Game::run() {
       inputs[0].player_id = 0;
 
       if (screen_ == Screen::PLAYING) {
-        sim_.step(state_, inputs, FIXED_DT);
+        state_ = session_->step(inputs[0], FIXED_DT);
       }
 
       if (screen_ != Screen::GAME_OVER && screen_ != Screen::WIN) {
@@ -108,33 +94,45 @@ void Game::run() {
 void Game::handleInput() {
   switch (screen_) {
   case Screen::MENU:
-    if (IsKeyPressed(KEY_ENTER)) {
+    if (IsKeyPressed(KEY_L)) {
+      session_ = std::make_unique<LocalSession>();
       screen_ = Screen::PLAYING;
     }
+
+    else if (IsKeyPressed(KEY_O)) {
+      session_ = std::make_unique<OnlineSession>("ws://localhost:9001");
+      screen_ = Screen::LOBBY;
+    }
+
+    break;
+
+  case Screen::LOBBY:
+    if (IsKeyPressed(KEY_ESCAPE))
+      screen_ = Screen::MENU;
+
     break;
 
   case Screen::PLAYING:
-    if (IsKeyPressed(KEY_ESCAPE)) {
+    if (IsKeyPressed(KEY_ESCAPE))
       screen_ = Screen::PAUSED;
-    }
     break;
 
   case Screen::PAUSED:
-    if (IsKeyPressed(KEY_ESCAPE)) {
+    if (IsKeyPressed(KEY_ESCAPE))
       screen_ = Screen::PLAYING;
-    }
+
     break;
 
   case Screen::GAME_OVER:
-    if (IsKeyPressed(KEY_ENTER)) {
+    if (IsKeyPressed(KEY_ENTER))
       init();
-    }
+
     break;
 
   case Screen::WIN:
-    if (IsKeyPressed(KEY_ENTER)) {
+    if (IsKeyPressed(KEY_ENTER))
       init();
-    }
+
     break;
   }
 }
@@ -153,10 +151,19 @@ void Game::draw() {
     s.draw();
 
   switch (screen_) {
-  case Screen::MENU:
-    DrawText("Press ENTER to start the game", SCREEN_WIDTH / 2 - 150,
+  case Screen::MENU: {
+    const auto text = "Press L to play locally or O to start an online session";
+    DrawText(text, (SCREEN_WIDTH - MeasureText(text, 20)) / 2,
              SCREEN_HEIGHT / 2, 20, WHITE);
     break;
+  }
+
+  case Screen::LOBBY: {
+    const auto text = "Waiting for players to join...";
+    DrawText(text, (SCREEN_WIDTH - MeasureText(text, 20)) / 2,
+             SCREEN_HEIGHT / 2, 20, WHITE);
+    break;
+  }
 
   case Screen::PLAYING:
   case Screen::PAUSED: {

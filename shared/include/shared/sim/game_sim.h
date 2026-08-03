@@ -1,3 +1,5 @@
+#pragma once
+
 #include "shared/constants.h"
 #include "shared/messages.h"
 #include "shared/sim/boss_sim.h"
