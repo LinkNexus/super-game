@@ -7,7 +7,9 @@
 #include "session.h"
 #include "shared/messages.h"
 #include "shared/sim/enemy_sim.h"
+#include <algorithm>
 #include <cfloat>
+#include <cmath>
 #include <cstdlib>
 #include <format>
 
@@ -75,7 +77,9 @@ void Game::run() {
       }
 
       if (screen_ == Screen::PLAYING) {
-        state_ = session_->step(inputs[0], shared::FIXED_DT);
+        auto previous_state = state_;
+        auto state = session_->step(inputs[0], shared::FIXED_DT);
+        spawnEnemyExplosions(previous_state, state_);
       }
 
       if (screen_ != Screen::GAME_OVER && screen_ != Screen::WIN) {
@@ -88,6 +92,9 @@ void Game::run() {
 
       accumulator -= shared::FIXED_DT;
     }
+
+    // Update particles using the real frame time so they feel smooth
+    updateParticles(frame_time);
 
     BeginDrawing();
     ClearBackground(BLACK);
@@ -193,6 +200,9 @@ void Game::draw() {
     for (const auto &b : state_.bullets)
       drawBullet(b);
 
+    // draw particle explosions (spawned when enemies die)
+    drawParticles();
+
     for (std::size_t idx = 0; idx < state_.enemies.size(); ++idx) {
       if (state_.enemies[idx][0] == 1) {
         float pos_x = state_.enemies_offset_x +
@@ -234,4 +244,107 @@ void Game::draw() {
   }
 
   DrawFPS(10, 10);
+}
+
+// --- Particle system implementation ---
+
+void Game::updateParticles(float dt) {
+  for (auto &p : particles_) {
+    if (p.lifetime <= 0.0f)
+      continue;
+
+    p.position.x += p.velocity.x * dt;
+    p.position.y += p.velocity.y * dt;
+
+    // simple damping and slight gravity
+    p.velocity.x *= 0.98f;
+    p.velocity.y *= 0.98f;
+    p.velocity.y += 20.0f * dt;
+
+    p.lifetime -= dt;
+    if (p.lifetime < 0.0f)
+      p.lifetime = 0.0f;
+  }
+}
+
+void Game::drawParticles() const {
+  for (const auto &p : particles_) {
+    if (p.lifetime <= 0.0f)
+      continue;
+
+    float ratio = p.lifetime / p.max_lifetime;
+    if (ratio < 0.0f)
+      ratio = 0.0f;
+    if (ratio > 1.0f)
+      ratio = 1.0f;
+
+    Color c = p.color;
+    c.a = static_cast<unsigned char>(255.0f * ratio);
+
+    if (p.size <= 3.0f) {
+      DrawCircleV(p.position, p.size, c);
+    } else {
+      DrawRectangleV(
+          {p.position.x - p.size / 2.0f, p.position.y - p.size / 2.0f},
+          {p.size, p.size}, c);
+    }
+  }
+}
+
+void Game::spawnExplosion(const Vector2 &pos, shared::EnemyType type) {
+  constexpr float kPI = 3.14159265358979323846f;
+  int count = 8 + GetRandomValue(0, 4); // 8..12 particles
+
+  for (int i = 0; i < count; ++i) {
+    // find a free particle slot
+    for (auto &p : particles_) {
+      if (p.lifetime > 0.0f)
+        continue;
+
+      float angle = GetRandomValue(0, 360) * (kPI / 180.0f);
+      float speed = static_cast<float>(GetRandomValue(40, 200));
+
+      p.position = pos;
+      p.velocity = {std::cos(angle) * speed, std::sin(angle) * speed};
+      p.lifetime = 0.35f + GetRandomValue(0, 50) / 100.0f; // 0.35 - 0.85s
+      p.max_lifetime = p.lifetime;
+      p.size = static_cast<float>(GetRandomValue(2, 6));
+
+      switch (type) {
+      case shared::EnemyType::TYPE_1:
+        p.color = ORANGE;
+        break;
+      case shared::EnemyType::TYPE_2:
+        p.color = PURPLE;
+        break;
+      default:
+        p.color = GOLD;
+        break;
+      }
+
+      break; // next particle
+    }
+  }
+}
+
+void Game::spawnEnemyExplosions(const shared::GameState &before,
+                                const shared::GameState &after) {
+  for (std::size_t idx = 0; idx < after.enemies.size(); ++idx) {
+    bool was_alive = before.enemies[idx][0] != 0;
+    bool is_alive = after.enemies[idx][0] != 0;
+
+    if (was_alive && !is_alive) {
+      float pos_x =
+          after.enemies_offset_x + (idx % shared::EnemiesPoolSimState::COLS) *
+                                       (shared::EnemySimState::WIDTH +
+                                        shared::EnemiesPoolSimState::SPACING_X);
+      float pos_y =
+          after.enemies_offset_y + (idx / shared::EnemiesPoolSimState::COLS) *
+                                       (shared::EnemySimState::HEIGHT +
+                                        shared::EnemiesPoolSimState::SPACING_Y);
+
+      spawnExplosion({pos_x, pos_y},
+                     static_cast<shared::EnemyType>(after.enemies[idx][1]));
+    }
+  }
 }

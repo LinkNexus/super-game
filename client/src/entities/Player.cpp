@@ -26,14 +26,17 @@ void Player::draw(const shared::PlayerState &state) const {
     float scale = (size * 2.0f) / texture.width;
     Vector2 draw_pos = {state.position.x - (texture.width * scale) / 2.0f,
                         state.position.y - (texture.height * scale) / 2.0f};
-    DrawTextureEx(texture, draw_pos, 0.0f, scale, WHITE);
+    // Tint player texture differently for player 2 (id == 1)
+    Color tint = (state.id == 1) ? SKYBLUE : WHITE;
+    DrawTextureEx(texture, draw_pos, 0.0f, scale, tint);
   } else {
     Vector2 tip = {state.position.x, state.position.y - size};
     Vector2 left = {state.position.x - size * 0.7f,
                     state.position.y + size * 0.7f};
     Vector2 right = {state.position.x + size * 0.7f,
                      state.position.y + size * 0.7f};
-    DrawTriangle(tip, left, right, SKYBLUE);
+    Color shipColor = (state.id == 1) ? PURPLE : SKYBLUE;
+    DrawTriangle(tip, left, right, shipColor);
     DrawTriangleLines(tip, left, right, WHITE);
   }
 
