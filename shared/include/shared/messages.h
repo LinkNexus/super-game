@@ -23,13 +23,15 @@ enum class MessageType : uint8_t {
 struct LobbyUpdate {
   uint8_t player_count;
   bool game_started;
+  uint8_t max_players;
 };
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(LobbyUpdate, player_count)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(LobbyUpdate, player_count, game_started,
+                                   max_players)
 
 struct PlayerInput {
   uint32_t tick;
   uint8_t buttons;
-  uint8_t player_id;
+  uint32_t player_id;
 };
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(PlayerInput, tick, buttons, player_id)
 

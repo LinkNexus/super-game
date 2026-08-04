@@ -4,21 +4,23 @@
 #include "entities/player.h"
 #include "entities/star.h"
 #include "raylib.h"
+#include "session.h"
 #include "shared/messages.h"
 #include "shared/sim/enemy_sim.h"
 #include <cfloat>
 #include <cstdlib>
+#include <format>
 
 void Game::init() {
   screen_ = Screen::MENU;
 
-  std::array<uint8_t, MAX_PLAYERS> player_ids;
+  std::array<uint8_t, shared::MAX_PLAYERS> player_ids;
   player_ids.fill(0);
 
   state_ = shared::GameState();
 
   for (auto &s : stars_)
-    s.initRandom(SCREEN_WIDTH, SCREEN_HEIGHT);
+    s.initRandom(shared::SCREEN_WIDTH, shared::SCREEN_HEIGHT);
 }
 
 shared::Button Game::getPlayerInputs() {
@@ -35,7 +37,7 @@ shared::Button Game::getPlayerInputs() {
 }
 
 void Game::run() {
-  InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "SUPER GAME");
+  InitWindow(shared::SCREEN_WIDTH, shared::SCREEN_HEIGHT, "SUPER GAME");
   ChangeDirectory(GetApplicationDirectory());
   SetExitKey(KEY_NULL);
   SetTargetFPS(TARGET_FPS);
@@ -56,16 +58,24 @@ void Game::run() {
       frame_time = 0.1f;
     accumulator += frame_time;
 
-    while (accumulator >= FIXED_DT) {
+    while (accumulator >= shared::FIXED_DT) {
       for (auto &s : stars_)
-        s.update(FIXED_DT, SCREEN_HEIGHT, SCREEN_WIDTH);
+        s.update(shared::FIXED_DT, shared::SCREEN_HEIGHT, shared::SCREEN_WIDTH);
 
-      std::array<shared::PlayerInput, MAX_PLAYERS> inputs;
+      std::array<shared::PlayerInput, shared::MAX_PLAYERS> inputs;
       inputs[0].buttons = getPlayerInputs();
       inputs[0].player_id = 0;
 
+      if (screen_ == Screen::LOBBY) {
+        if (OnlineSession *s = dynamic_cast<OnlineSession *>(session_.get())) {
+          if (s->getLobbyUpdate().game_started) {
+            screen_ = Screen::PLAYING;
+          }
+        }
+      }
+
       if (screen_ == Screen::PLAYING) {
-        state_ = session_->step(inputs[0], FIXED_DT);
+        state_ = session_->step(inputs[0], shared::FIXED_DT);
       }
 
       if (screen_ != Screen::GAME_OVER && screen_ != Screen::WIN) {
@@ -76,7 +86,7 @@ void Game::run() {
           screen_ = Screen::WIN;
       }
 
-      accumulator -= FIXED_DT;
+      accumulator -= shared::FIXED_DT;
     }
 
     BeginDrawing();
@@ -153,15 +163,21 @@ void Game::draw() {
   switch (screen_) {
   case Screen::MENU: {
     const auto text = "Press L to play locally or O to start an online session";
-    DrawText(text, (SCREEN_WIDTH - MeasureText(text, 20)) / 2,
-             SCREEN_HEIGHT / 2, 20, WHITE);
+    DrawText(text, (shared::SCREEN_WIDTH - MeasureText(text, 20)) / 2,
+             shared::SCREEN_HEIGHT / 2, 20, WHITE);
     break;
   }
 
   case Screen::LOBBY: {
-    const auto text = "Waiting for players to join...";
-    DrawText(text, (SCREEN_WIDTH - MeasureText(text, 20)) / 2,
-             SCREEN_HEIGHT / 2, 20, WHITE);
+    if (OnlineSession *s = dynamic_cast<OnlineSession *>(session_.get())) {
+      auto &lobbyUpdate = s->getLobbyUpdate();
+      const auto text =
+          std::format("Waiting for players to join ({}/{} players)",
+                      lobbyUpdate.player_count, lobbyUpdate.max_players);
+      DrawText(text.c_str(),
+               (shared::SCREEN_WIDTH - MeasureText(text.c_str(), 20)) / 2,
+               shared::SCREEN_HEIGHT / 2, 20, WHITE);
+    }
     break;
   }
 
@@ -196,11 +212,12 @@ void Game::draw() {
                                 shared::GamePhase::FIGHT_BOSS);
 
     if (screen_ == Screen::PAUSED) {
-      DrawRectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, Fade(BLACK, 0.6f));
-      DrawText("Game Paused", SCREEN_WIDTH / 2 - 100, SCREEN_HEIGHT / 2, 20,
-               WHITE);
-      DrawText("Press ESC to resume", SCREEN_WIDTH / 2 - 100,
-               SCREEN_HEIGHT / 2 + 30, 20, WHITE);
+      DrawRectangle(0, 0, shared::SCREEN_WIDTH, shared::SCREEN_HEIGHT,
+                    Fade(BLACK, 0.6f));
+      DrawText("Game Paused", shared::SCREEN_WIDTH / 2 - 100,
+               shared::SCREEN_HEIGHT / 2, 20, WHITE);
+      DrawText("Press ESC to resume", shared::SCREEN_WIDTH / 2 - 100,
+               shared::SCREEN_HEIGHT / 2 + 30, 20, WHITE);
     }
     break;
   }
@@ -208,9 +225,10 @@ void Game::draw() {
   case Screen::GAME_OVER:
   case Screen::WIN:
     DrawText(screen_ == Screen::GAME_OVER ? "Game Over" : "You Win!",
-             SCREEN_WIDTH / 2 - 100, SCREEN_HEIGHT / 2, 20, WHITE);
-    DrawText("Press ENTER to return to menu", SCREEN_WIDTH / 2 - 150,
-             SCREEN_HEIGHT / 2 + 30, 20, WHITE);
+             shared::SCREEN_WIDTH / 2 - 100, shared::SCREEN_HEIGHT / 2, 20,
+             WHITE);
+    DrawText("Press ENTER to return to menu", shared::SCREEN_WIDTH / 2 - 150,
+             shared::SCREEN_HEIGHT / 2 + 30, 20, WHITE);
 
     break;
   }

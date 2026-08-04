@@ -1,9 +1,17 @@
 #include "game.h"
+#include "WebSocketProtocol.h"
 #include "shared/constants.h"
+#include "shared/messages.h"
 #include <cstddef>
 
+void GameManager::forEachGame(std::function<void(Game *)> fn) {
+  for (const auto &game : gamesById) {
+    fn(game.second.get());
+  }
+}
+
 Game *GameManager::joinOrCreateGame(PlayerConnection *player) {
-  if (open_game_ && open_game_->getPlayerCount() < MAX_PLAYERS) {
+  if (open_game_ && open_game_->getPlayerCount() < shared::MAX_PLAYERS) {
     open_game_->addPlayer(player);
     return open_game_;
   } else {
@@ -32,9 +40,39 @@ Game *GameManager::findGameById(uint32_t id) {
 
 void GameManager::destroyGame(Game *game) { gamesById.erase(game->id); }
 
-void Game::update(float dt) { sim_.step(state_, {}, dt); }
+void Game::update(float dt) {
+  if (!is_running_)
+    return;
 
-const std::array<PlayerConnection *, MAX_PLAYERS> &Game::getPlayers() const {
+  std::array<shared::PlayerInput, shared::MAX_PLAYERS> inputs{};
+  for (std::size_t i = 0; i < players_.size(); ++i) {
+    if (!players_[i])
+      continue;
+
+    auto &p = *players_[i];
+    auto buttons = p.pending_movement;
+    if (p.pending_shots > 0) {
+      buttons =
+          static_cast<shared::Button>(buttons | shared::Button::BUTTON_SHOOT);
+      p.pending_shots--;
+    }
+    inputs[i] = {.buttons = buttons, .player_id = p.id};
+  }
+
+  sim_.step(state_, inputs, dt);
+
+  nlohmann::json envelope;
+  envelope["type"] = shared::MessageType::GAME_STATE;
+  envelope["payload"] = state_;
+  auto msg = envelope.dump();
+
+  for (const auto &p : players_)
+    if (p)
+      p->ws->send(msg, uWS::OpCode::TEXT);
+}
+
+const std::array<PlayerConnection *, shared::MAX_PLAYERS> &
+Game::getPlayers() const {
   return players_;
 }
 
@@ -50,7 +88,7 @@ std::size_t Game::getPlayerCount() const {
 void Game::addPlayer(PlayerConnection *player) {
   int playerCount = getPlayerCount();
 
-  if (playerCount >= MAX_PLAYERS) {
+  if (playerCount >= shared::MAX_PLAYERS) {
     return; // Game is full, cannot add more players
   }
 
@@ -63,8 +101,8 @@ void Game::addPlayer(PlayerConnection *player) {
     }
   }
 
-  if (playerCount == MAX_PLAYERS) {
-    std::array<uint8_t, MAX_PLAYERS> playerIds;
+  if (playerCount == shared::MAX_PLAYERS) {
+    std::array<uint8_t, shared::MAX_PLAYERS> playerIds;
     std::transform(players_.begin(), players_.end(), playerIds.begin(),
                    [](const auto *p) { return p->id; });
     sim_.start(playerIds);

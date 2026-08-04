@@ -38,7 +38,8 @@ void Player::draw(const shared::PlayerState &state) const {
   }
 
   for (int i = 0; i < state.lives; i++) {
-    float x = SCREEN_WIDTH - 10 - HEART_SIZE - i * (HEART_SIZE + HEART_SPACING);
+    float x = shared::SCREEN_WIDTH - 10 - HEART_SIZE -
+              i * (HEART_SIZE + HEART_SPACING);
     float y = 10.0f;
 
     if (heart_texture_.id != 0) {
@@ -59,6 +60,7 @@ void Player::draw(const shared::PlayerState &state) const {
 
   const char *points_text = TextFormat("Points: %d", state.points);
   DrawText(points_text,
-           SCREEN_WIDTH - 10 - MeasureText(points_text, STATUS_FONT_SIZE),
+           shared::SCREEN_WIDTH - 10 -
+               MeasureText(points_text, STATUS_FONT_SIZE),
            10 + HEART_SIZE, STATUS_FONT_SIZE, WHITE);
 }

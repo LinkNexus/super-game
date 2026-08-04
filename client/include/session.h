@@ -4,6 +4,19 @@
 #include "shared/messages.h"
 #include "shared/sim/game_sim.h"
 #include <mutex>
+#include <optional>
+
+template <typename T> class MailBox {
+public:
+  void set(T value);
+
+  std::optional<T> take();
+
+private:
+  std::mutex mutex_;
+  T pending_;
+  bool has_pending_;
+};
 
 class Session {
 public:
@@ -28,11 +41,15 @@ public:
   explicit OnlineSession(const std::string &url);
   const shared::GameState &step(const shared::PlayerInput &input,
                                 float dt) override;
+  const shared::LobbyUpdate getLobbyUpdate();
 
 private:
   void onMessage(const std::string &msg);
+
+private:
   NetworkClient client_;
-  shared::GameState state_, pending_state_;
-  std::mutex mutex_;
-  bool has_pending_state_ = false;
+  MailBox<shared::GameState> state_box_;
+  MailBox<shared::LobbyUpdate> lobby_update_box_;
+  shared::GameState state_;
+  shared::LobbyUpdate lobby_update_;
 };
