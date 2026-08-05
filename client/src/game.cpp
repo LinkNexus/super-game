@@ -16,13 +16,20 @@ void Game::update(float dt) {
       screen_ = Screen::WAITING;
     }
   }
+
+  // animate score screen border when showing final results
+  if (screen_ == Screen::GAME_OVER || screen_ == Screen::WIN) {
+    score_anim_time_ += dt;
+  }
 }
 
 void Game::init() {
   screen_ = Screen::MENU;
 
   std::array<uint8_t, MAX_PLAYERS> player_ids;
-  player_ids.fill(0);
+  for (uint8_t i = 0; i < MAX_PLAYERS; ++i) {
+    player_ids[i] = i;
+  }
 
   sim_ = shared::GameSim();
   sim_.start(player_ids);
@@ -201,10 +208,16 @@ void Game::handleInput() {
     if (IsKeyPressed(KEY_ENTER)) {
       init();
     }
+    if (IsKeyPressed(KEY_R)) {
+      init();
+    }
     break;
 
   case Screen::WIN:
     if (IsKeyPressed(KEY_ENTER)) {
+      init();
+    }
+    if (IsKeyPressed(KEY_R)) {
       init();
     }
     break;
@@ -292,12 +305,57 @@ void Game::draw() {
 
   case Screen::GAME_OVER:
   case Screen::WIN:
-    DrawText(screen_ == Screen::GAME_OVER ? "Game Over" : "You Win!",
-             SCREEN_WIDTH / 2 - 100, SCREEN_HEIGHT / 2, 20, WHITE);
-    DrawText("Press ENTER to return to menu", SCREEN_WIDTH / 2 - 150,
-             SCREEN_HEIGHT / 2 + 30, 20, WHITE);
+  {
+    // Draw a centered panel with final scores and animated border
+    const int boxW = 440;
+    const int boxH = 200;
+    const float bx = SCREEN_WIDTH / 2.0f - boxW / 2.0f;
+    const float by = SCREEN_HEIGHT / 2.0f - boxH / 2.0f;
+    Rectangle rec{bx, by, (float)boxW, (float)boxH};
+    DrawRectangleRec(rec, Fade(BLACK, 0.7f));
 
+    // animated border pulse
+    float pulse = (sinf(score_anim_time_ * 3.0f) * 0.5f + 0.5f);
+    Color borderCol = Fade(YELLOW, 0.4f + 0.6f * pulse);
+    DrawRectangleLinesEx(rec, 4, borderCol);
+
+    // Title
+    const char *title = (screen_ == Screen::GAME_OVER) ? "Game Over" : "Final Score";
+    DrawText(title, (int)(SCREEN_WIDTH / 2 - MeasureText(title, 32) / 2),
+             (int)(by + 12), 32, WHITE);
+
+    // Player scores
+    int y = (int)(by + 60);
+    int idx = 0;
+    int winner_id = 0;
+    uint32_t best = 0;
+    for (const auto &p : state_.players) {
+      // display only valid players (id < MAX_PLAYERS)
+      if (p.id >= MAX_PLAYERS)
+        continue;
+      const char *line = TextFormat("Player %d: %u", p.id, p.points);
+      Color col = (p.id == 0) ? YELLOW : LIGHTGRAY;
+      DrawText(line, (int)(bx + 24), y, 20, col);
+      y += 28;
+      if (p.points > best) {
+        best = p.points;
+        winner_id = p.id;
+      }
+      if (++idx >= MAX_PLAYERS)
+        break;
+    }
+
+    // Winner line
+    const char *winLine = TextFormat("Winner: Player %d", winner_id);
+    DrawText(winLine, (int)(SCREEN_WIDTH / 2 - MeasureText(winLine, 24) / 2),
+             (int)(by + boxH - 60), 24, WHITE);
+
+    // Controls
+    DrawText("Press R to restart or ENTER to return to menu",
+             (int)(SCREEN_WIDTH / 2 - MeasureText("Press R to restart or ENTER to return to menu", 18) / 2),
+             (int)(by + boxH - 30), 18, LIGHTGRAY);
     break;
+  }
   }
 
   DrawFPS(10, 10);
