@@ -36,18 +36,6 @@ int main(int argc, char *argv[]) {
   us_timer_set(
       timer,
       [](auto t) {
-        static int ticks = 0;
-        static auto last = std::chrono::steady_clock::now();
-        if (++ticks % 60 == 0) {
-          auto now = std::chrono::steady_clock::now();
-          std::printf(
-              "60 timer firings in %lldms\n",
-              (long long)std::chrono::duration_cast<std::chrono::milliseconds>(
-                  now - last)
-                  .count());
-          last = now;
-        }
-
         GameManager *manager;
         memcpy(&manager, us_timer_ext(t), sizeof(GameManager *));
 
@@ -63,6 +51,7 @@ int main(int argc, char *argv[]) {
       16, 16);
 
   uWS::App()
+      .get("/health", [](auto *res, auto *req) { res->end("OK"); })
       .ws<PerSocketData>(
           "/*",
           {.open =
