@@ -100,10 +100,18 @@ build:server:
       - vendor/uWebSockets
     expire_in: 1 hour
 
-# Builds and pushes the server image to this project's GitLab Container
-# Registry via Kaniko - no Docker-in-Docker / privileged runner needed,
-# unlike a plain `docker build`, so this should work on a plain shared
-# runner as-is.
+# Builds and pushes the server image to Docker Hub via Kaniko - no
+# Docker-in-Docker / privileged runner needed, unlike a plain `docker
+# build`, so this should work on a plain shared runner as-is.
+#
+# This project's GitLab instance has no Container Registry service (only
+# Package registry, a lighter/different feature), so this pushes to Docker
+# Hub instead - needed anyway for Dokploy (L17) to pull from. Requires two
+# masked CI/CD variables set in Settings > CI/CD > Variables:
+#   DOCKERHUB_USERNAME - your Docker Hub username
+#   DOCKERHUB_TOKEN    - a Docker Hub access token (Account Settings >
+#                        Security > New Access Token, Read & Write scope) -
+#                        not your account password.
 docker:server:
   stage: docker
   image:
@@ -123,10 +131,10 @@ docker:server:
   script:
     - mkdir -p /kaniko/.docker
     - >
-      echo "{\"auths\":{\"$CI_REGISTRY\":{\"auth\":\"$(printf '%s:%s' "$CI_REGISTRY_USER" "$CI_JOB_TOKEN" | base64 | tr -d '\n')\"}}}"
+      echo "{\"auths\":{\"https://index.docker.io/v1/\":{\"auth\":\"$(printf '%s:%s' "$DOCKERHUB_USERNAME" "$DOCKERHUB_TOKEN" | base64 | tr -d '\n')\"}}}"
       > /kaniko/.docker/config.json
     - /kaniko/executor
         --context "$CI_PROJECT_DIR"
         --dockerfile "$CI_PROJECT_DIR/Dockerfile"
-        --destination "$CI_REGISTRY_IMAGE/server:$CI_COMMIT_SHORT_SHA"
-        --destination "$CI_REGISTRY_IMAGE/server:latest"
+        --destination "docker.io/$DOCKERHUB_USERNAME/supergame-server:$CI_COMMIT_SHORT_SHA"
+        --destination "docker.io/$DOCKERHUB_USERNAME/supergame-server:latest"
