@@ -18,18 +18,19 @@ enum class GamePhase : uint8_t {
 
 class GameSim {
 public:
-  void start(std::array<uint8_t, MAX_PLAYERS> &player_ids);
+  void start(std::array<std::optional<uint8_t>, MAX_PLAYERS> &player_ids);
   void step(GameState &state,
-            const std::array<PlayerInput, MAX_PLAYERS> &inputs, float dt);
+            const std::array<std::optional<PlayerInput>, MAX_PLAYERS> &inputs,
+            float dt);
 
 private:
   void checkCollisions();
   void setGameState(GameState &state);
 
-  std::array<PlayerSimState, MAX_PLAYERS> players_;
-  std::array<BulletSimState, MAX_BULLETS> bullets_pool_;
-  EnemiesPoolSimState enemies_pool_;
-  BossSimState boss_;
-  GamePhase phase_;
+  std::array<std::optional<PlayerSimState>, MAX_PLAYERS> players_{};
+  std::array<BulletSimState, MAX_BULLETS> bullets_pool_{};
+  EnemiesPoolSimState enemies_pool_{};
+  BossSimState boss_{};
+  GamePhase phase_{};
 };
 } // namespace shared

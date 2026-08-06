@@ -3,6 +3,7 @@
 #include "shared/constants.h"
 #include "shared/messages.h"
 #include <algorithm>
+#include <cstdint>
 #include <mutex>
 #include <optional>
 #include <string>
@@ -23,13 +24,14 @@ template <typename T> std::optional<T> MailBox<T>::take() {
 }
 
 LocalSession::LocalSession() {
-  std::array<uint8_t, shared::MAX_PLAYERS> ids{};
+  std::array<std::optional<uint8_t>, shared::MAX_PLAYERS> ids{};
+  ids[0] = 1;
   sim_.start(ids);
 }
 
 const shared::GameState &LocalSession::step(const shared::PlayerInput &input,
                                             float dt) {
-  std::array<shared::PlayerInput, shared::MAX_PLAYERS> inputs{};
+  std::array<std::optional<shared::PlayerInput>, shared::MAX_PLAYERS> inputs{};
   inputs[0] = input;
   sim_.step(state_, inputs, dt);
   return state_;
@@ -55,6 +57,12 @@ const shared::LobbyUpdate OnlineSession::getLobbyUpdate() {
   return lobby_update_;
 }
 
+const uint32_t OnlineSession::getPlayerId() {
+  if (auto msg = welcome_message_box_.take())
+    welcome_message_ = std::move(*msg);
+  return welcome_message_.player_id;
+}
+
 void OnlineSession::onMessage(const std::string &msg) {
   auto j = nlohmann::json::parse(msg);
   auto payload = j.at("payload");
@@ -65,6 +73,9 @@ void OnlineSession::onMessage(const std::string &msg) {
     break;
   case shared::MessageType::GAME_STATE:
     state_box_.set(payload.get<shared::GameState>());
+    break;
+  case shared::MessageType::WELCOME:
+    welcome_message_box_.set(payload.get<shared::WelcomeMessage>());
     break;
   }
 }

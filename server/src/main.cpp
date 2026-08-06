@@ -50,7 +50,15 @@ int main(int argc, char *argv[]) {
 
         GameManager *manager;
         memcpy(&manager, us_timer_ext(t), sizeof(GameManager *));
-        manager->forEachGame([](auto g) { g->update(shared::FIXED_DT); });
+
+        std::vector<Game *> finishedGames;
+        manager->forEachGame([&manager, &finishedGames](Game *g) {
+          g->update(shared::FIXED_DT);
+          if (g->isOver())
+            finishedGames.push_back(g);
+        });
+        for (auto *g : finishedGames)
+          manager->destroyGame(g);
       },
       16, 16);
 
@@ -64,6 +72,13 @@ int main(int argc, char *argv[]) {
                      new PlayerConnection{manager.next_player_id++, ws};
                  data->player = player;
                  data->game = manager.joinOrCreateGame(player);
+
+                 nlohmann::json welcomeEnvelope;
+                 welcomeEnvelope["type"] = shared::MessageType::WELCOME;
+                 welcomeEnvelope["payload"] =
+                     shared::WelcomeMessage{.player_id = player->id};
+                 ws->send(welcomeEnvelope.dump());
+
                  sendLobbyUpdate(data);
                },
            .message =
@@ -90,9 +105,8 @@ int main(int argc, char *argv[]) {
 
                  if (playerCount == 0)
                    manager.destroyGame(data->game);
-                 else {
+                 else
                    sendLobbyUpdate(data);
-                 }
                }})
       .listen(9001,
               [](auto *token) {

@@ -1,10 +1,10 @@
 #pragma once
 
-#include "raylib.h"
 #include "constants.h"
 #include "entities/boss.h"
 #include "entities/player.h"
 #include "entities/star.h"
+#include "raylib.h"
 #include "session.h"
 #include "shared/messages.h"
 #include <array>
@@ -45,6 +45,7 @@ private:
   Boss boss_;
   std::array<Star, STAR_COUNT> stars_;
   Screen screen_;
-  std::unique_ptr<Session> session_;
+  std::unique_ptr<Session> session_ = nullptr;
   shared::GameState state_;
+  float status_text_offset_y_ = 10.0f;
 };

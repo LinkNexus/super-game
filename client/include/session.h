@@ -32,8 +32,8 @@ public:
                                 float dt) override;
 
 private:
-  shared::GameSim sim_;
-  shared::GameState state_;
+  shared::GameSim sim_{};
+  shared::GameState state_{};
 };
 
 class OnlineSession : public Session {
@@ -42,14 +42,17 @@ public:
   const shared::GameState &step(const shared::PlayerInput &input,
                                 float dt) override;
   const shared::LobbyUpdate getLobbyUpdate();
+  const uint32_t getPlayerId();
 
 private:
   void onMessage(const std::string &msg);
 
 private:
   NetworkClient client_;
-  MailBox<shared::GameState> state_box_;
-  MailBox<shared::LobbyUpdate> lobby_update_box_;
-  shared::GameState state_;
-  shared::LobbyUpdate lobby_update_;
+  MailBox<shared::GameState> state_box_{};
+  MailBox<shared::LobbyUpdate> lobby_update_box_{};
+  MailBox<shared::WelcomeMessage> welcome_message_box_{};
+  shared::GameState state_{};
+  shared::LobbyUpdate lobby_update_{};
+  shared::WelcomeMessage welcome_message_{};
 };

@@ -11,7 +11,8 @@ void GameManager::forEachGame(std::function<void(Game *)> fn) {
 }
 
 Game *GameManager::joinOrCreateGame(PlayerConnection *player) {
-  if (open_game_ && open_game_->getPlayerCount() < shared::MAX_PLAYERS) {
+  if (open_game_ && open_game_->getPlayerCount() < shared::MAX_PLAYERS &&
+      !open_game_->isOver()) {
     open_game_->addPlayer(player);
     return open_game_;
   } else {
@@ -38,13 +39,19 @@ Game *GameManager::findGameById(uint32_t id) {
   return nullptr;
 }
 
-void GameManager::destroyGame(Game *game) { gamesById.erase(game->id); }
+void GameManager::destroyGame(Game *game) {
+  if (open_game_ == game)
+    open_game_ = nullptr;
+  gamesById.erase(game->id);
+}
+
+bool Game::isOver() const { return is_over_; }
 
 void Game::update(float dt) {
   if (!is_running_)
     return;
 
-  std::array<shared::PlayerInput, shared::MAX_PLAYERS> inputs{};
+  std::array<std::optional<shared::PlayerInput>, shared::MAX_PLAYERS> inputs{};
   for (std::size_t i = 0; i < players_.size(); ++i) {
     if (!players_[i])
       continue;
@@ -69,6 +76,12 @@ void Game::update(float dt) {
   for (const auto &p : players_)
     if (p)
       p->ws->send(msg, uWS::OpCode::TEXT);
+
+  if (state_.phase == static_cast<uint8_t>(shared::GamePhase::GAME_OVER) ||
+      state_.phase == static_cast<uint8_t>(shared::GamePhase::WON)) {
+    is_running_ = false;
+    is_over_ = true;
+  }
 }
 
 const std::array<PlayerConnection *, shared::MAX_PLAYERS> &
@@ -102,7 +115,7 @@ void Game::addPlayer(PlayerConnection *player) {
   }
 
   if (playerCount == shared::MAX_PLAYERS) {
-    std::array<uint8_t, shared::MAX_PLAYERS> playerIds;
+    std::array<std::optional<uint8_t>, shared::MAX_PLAYERS> playerIds;
     std::transform(players_.begin(), players_.end(), playerIds.begin(),
                    [](const auto *p) { return p->id; });
     sim_.start(playerIds);

@@ -7,7 +7,7 @@
 #include "session.h"
 #include "shared/messages.h"
 #include "shared/sim/enemy_sim.h"
-#include <algorithm>
+#include "shared/sim/game_sim.h"
 #include <cfloat>
 #include <cmath>
 #include <cstdlib>
@@ -15,9 +15,6 @@
 
 void Game::init() {
   screen_ = Screen::MENU;
-
-  std::array<uint8_t, shared::MAX_PLAYERS> player_ids;
-  player_ids.fill(0);
 
   state_ = shared::GameState();
 
@@ -66,7 +63,7 @@ void Game::run() {
 
       std::array<shared::PlayerInput, shared::MAX_PLAYERS> inputs;
       inputs[0].buttons = getPlayerInputs();
-      inputs[0].player_id = 0;
+      inputs[0].player_id = 1;
 
       if (screen_ == Screen::LOBBY) {
         if (OnlineSession *s = dynamic_cast<OnlineSession *>(session_.get())) {
@@ -78,16 +75,22 @@ void Game::run() {
 
       if (screen_ == Screen::PLAYING) {
         auto previous_state = state_;
-        auto state = session_->step(inputs[0], shared::FIXED_DT);
+        if (session_)
+          state_ = session_->step(inputs[0], shared::FIXED_DT);
         spawnEnemyExplosions(previous_state, state_);
       }
 
       if (screen_ != Screen::GAME_OVER && screen_ != Screen::WIN) {
         auto phase = static_cast<shared::GamePhase>(state_.phase);
-        if (phase == shared::GamePhase::GAME_OVER)
-          screen_ = Screen::GAME_OVER;
-        if (phase == shared::GamePhase::WON)
-          screen_ = Screen::WIN;
+
+        if (phase == shared::GamePhase::GAME_OVER ||
+            phase == shared::GamePhase::WON) {
+          session_ = nullptr;
+          if (phase == shared::GamePhase::GAME_OVER)
+            screen_ = Screen::GAME_OVER;
+          if (phase == shared::GamePhase::WON)
+            screen_ = Screen::WIN;
+        }
       }
 
       accumulator -= shared::FIXED_DT;
@@ -124,8 +127,9 @@ void Game::handleInput() {
     break;
 
   case Screen::LOBBY:
-    if (IsKeyPressed(KEY_ESCAPE))
+    if (IsKeyPressed(KEY_ESCAPE)) {
       screen_ = Screen::MENU;
+    }
 
     break;
 
@@ -190,12 +194,7 @@ void Game::draw() {
 
   case Screen::PLAYING:
   case Screen::PAUSED: {
-    auto player_state =
-        std::find_if(state_.players.begin(), state_.players.end(),
-                     [](auto &p) { return p.id == 0; });
-
-    if (player_state != state_.players.end())
-      player_.draw(*player_state);
+    player_.draw(session_.get(), state_.players);
 
     for (const auto &b : state_.bullets)
       drawBullet(b);

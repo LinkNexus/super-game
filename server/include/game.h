@@ -32,12 +32,14 @@ public:
   void removePlayer(uint32_t playerId);
   std::size_t getPlayerCount() const;
   const std::array<PlayerConnection *, shared::MAX_PLAYERS> &getPlayers() const;
+  bool isOver() const;
 
 private:
   bool is_running_ = false;
+  bool is_over_ = false;
   shared::GameSim sim_;
   shared::GameState state_;
-  std::array<PlayerConnection *, shared::MAX_PLAYERS> players_;
+  std::array<PlayerConnection *, shared::MAX_PLAYERS> players_{};
 };
 
 class GameManager {
@@ -53,6 +55,6 @@ public:
   void forEachGame(std::function<void(Game *)> fn);
 
 private:
-  std::unordered_map<uint32_t, std::unique_ptr<Game>> gamesById;
+  std::unordered_map<uint32_t, std::unique_ptr<Game>> gamesById{};
   Game *open_game_ = nullptr;
 };
