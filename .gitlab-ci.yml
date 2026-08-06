@@ -1,0 +1,132 @@
+stages:
+  - build
+  - docker
+
+variables:
+  # Selective submodule init, matching README.md: NOT --recursive. uWebSockets
+  # and uSockets bundle their own submodules (BoringSSL, lsquic, a fuzzing
+  # corpus - 1GB+) that this project doesn't use, since the server speaks
+  # plain ws:// with no compression. GitLab's own submodule checkout only
+  # handles the top-level submodules listed in .gitmodules; the nested
+  # uSockets-inside-uWebSockets submodule still needs a manual step below.
+  GIT_SUBMODULE_STRATEGY: normal
+  GIT_SUBMODULE_DEPTH: 1
+
+build:client:
+  stage: build
+  image: debian:bookworm-slim
+  before_script:
+    - apt-get update -qq
+    # raylib (PLATFORM_DESKTOP/GLFW on Linux) needs the X11/GL/ALSA -dev
+    # packages too, on top of the toolchain the server build also needs.
+    - apt-get install -y -qq --no-install-recommends cmake ninja-build g++ git ca-certificates
+        libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev
+        libgl1-mesa-dev libasound2-dev
+    - git -C vendor/uWebSockets submodule update --init uSockets
+  script:
+    - cmake --preset debug
+    - cmake --build --preset debug --target supergame-client
+    - cmake --preset release
+    - cmake --build --preset release --target supergame-client
+  artifacts:
+    name: supergame-client-linux-$CI_COMMIT_SHORT_SHA
+    paths:
+      - build/release/bin/
+    expire_in: 30 days
+  cache:
+    key: client-$CI_COMMIT_REF_SLUG
+    paths:
+      - build/debug
+      - build/release
+
+build:client:windows:
+  stage: build
+  image: debian:bookworm-slim
+  before_script:
+    - apt-get update -qq
+    # g++-mingw-w64-x86-64 cross-compiles for Windows from this Linux
+    # runner - no Windows machine/runner needed. No X11/GL/ALSA -dev
+    # packages required here: those are the *Linux* raylib backend's deps,
+    # the Windows one links against opengl32/gdi32/winmm from the mingw
+    # sysroot instead (see cmake/mingw-w64-toolchain.cmake).
+    - apt-get install -y -qq --no-install-recommends cmake ninja-build git ca-certificates g++-mingw-w64-x86-64
+    # Debian's mingw-w64 package ships both win32 and posix thread-model
+    # variants; win32 doesn't implement std::thread/mutex/condition_variable
+    # at all (the headers exist but their contents are compiled out), which
+    # ixwebsocket needs. Force the posix variant explicitly rather than
+    # relying on whatever update-alternatives defaults to.
+    - update-alternatives --set x86_64-w64-mingw32-g++ /usr/bin/x86_64-w64-mingw32-g++-posix
+    - update-alternatives --set x86_64-w64-mingw32-gcc /usr/bin/x86_64-w64-mingw32-gcc-posix
+    - git -C vendor/uWebSockets submodule update --init uSockets
+  script:
+    - cmake --preset windows-client-release
+    - cmake --build --preset windows-client-release
+  artifacts:
+    name: supergame-client-windows-$CI_COMMIT_SHORT_SHA
+    paths:
+      - build/windows-client-release/bin/
+    expire_in: 30 days
+  cache:
+    key: client-windows-$CI_COMMIT_REF_SLUG
+    paths:
+      - build/windows-client-release
+
+build:server:
+  stage: build
+  image: debian:bookworm-slim
+  variables:
+    # Server build never touches raylib/ixwebsocket - skip cloning them.
+    GIT_SUBMODULE_PATHS: vendor/uWebSockets
+  before_script:
+    - apt-get update -qq
+    - apt-get install -y -qq --no-install-recommends cmake ninja-build g++ git ca-certificates
+    - git -C vendor/uWebSockets submodule update --init uSockets
+  script:
+    - cmake -S . -B build/server-debug -G Ninja -DCMAKE_BUILD_TYPE=Debug -DBUILD_CLIENT=OFF
+    - cmake --build build/server-debug --target supergame-server
+    - cmake -S . -B build/server-release -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_CLIENT=OFF
+    - cmake --build build/server-release --target supergame-server
+  cache:
+    key: server-$CI_COMMIT_REF_SLUG
+    paths:
+      - build/server-debug
+      - build/server-release
+  # docker:server reuses this job's already-populated vendor/uWebSockets
+  # (incl. the nested uSockets submodule) instead of cloning it again
+  # inside the Kaniko image, which has no package manager to fix TLS/git
+  # the way the apt-get line above does.
+  artifacts:
+    paths:
+      - vendor/uWebSockets
+    expire_in: 1 hour
+
+# Builds and pushes the server image to this project's GitLab Container
+# Registry via Kaniko - no Docker-in-Docker / privileged runner needed,
+# unlike a plain `docker build`, so this should work on a plain shared
+# runner as-is.
+docker:server:
+  stage: docker
+  image:
+    name: gcr.io/kaniko-project/executor:v1.23.2-debug
+    entrypoint: [""]
+  # Reuses build:server's already-populated vendor/uWebSockets (incl. the
+  # nested uSockets submodule) via its artifact instead of cloning it here -
+  # this image has no package manager, so there'd be no way to install
+  # ca-certificates if a plain `git clone` hit the same TLS trust-store gap
+  # the debian-based jobs need `ca-certificates` for.
+  needs:
+    - build:server
+  variables:
+    GIT_SUBMODULE_PATHS: vendor/uWebSockets
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+  script:
+    - mkdir -p /kaniko/.docker
+    - >
+      echo "{\"auths\":{\"$CI_REGISTRY\":{\"auth\":\"$(printf '%s:%s' "$CI_REGISTRY_USER" "$CI_JOB_TOKEN" | base64 | tr -d '\n')\"}}}"
+      > /kaniko/.docker/config.json
+    - /kaniko/executor
+        --context "$CI_PROJECT_DIR"
+        --dockerfile "$CI_PROJECT_DIR/Dockerfile"
+        --destination "$CI_REGISTRY_IMAGE/server:$CI_COMMIT_SHORT_SHA"
+        --destination "$CI_REGISTRY_IMAGE/server:latest"

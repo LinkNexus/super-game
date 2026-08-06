@@ -11,7 +11,6 @@
 #include <cfloat>
 #include <cmath>
 #include <cstdlib>
-#include <format>
 
 void Game::init() {
   screen_ = Screen::MENU;
@@ -212,9 +211,9 @@ void Game::draw() {
   case Screen::LOBBY: {
     if (OnlineSession *s = dynamic_cast<OnlineSession *>(session_.get())) {
       auto &lobbyUpdate = s->getLobbyUpdate();
-      const auto text =
-          std::format("Waiting for players to join ({}/{} players)",
-                      lobbyUpdate.player_count, lobbyUpdate.max_players);
+      const auto text = "Waiting for players to join (" +
+                        std::to_string(lobbyUpdate.player_count) + "/" +
+                        std::to_string(lobbyUpdate.max_players) + " players)";
       DrawText(text.c_str(),
                (shared::SCREEN_WIDTH - MeasureText(text.c_str(), 20)) / 2,
                shared::SCREEN_HEIGHT / 2, 20, WHITE);

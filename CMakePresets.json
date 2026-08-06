@@ -25,6 +25,15 @@
 			"cacheVariables": {
 				"CMAKE_BUILD_TYPE": "Release"
 			}
+		},
+		{
+			"name": "windows-client-release",
+			"displayName": "Windows client (Release, MinGW-w64 cross-compile)",
+			"inherits": "base",
+			"cacheVariables": {
+				"CMAKE_BUILD_TYPE": "Release",
+				"CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/mingw-w64-toolchain.cmake"
+			}
 		}
 	],
 	"buildPresets": [
@@ -35,6 +44,11 @@
 		{
 			"name": "release",
 			"configurePreset": "release"
+		},
+		{
+			"name": "windows-client-release",
+			"configurePreset": "windows-client-release",
+			"targets": "supergame-client"
 		}
 	]
 }
