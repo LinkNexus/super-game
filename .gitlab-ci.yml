@@ -45,6 +45,13 @@ build:client:windows:
     # the Windows one links against opengl32/gdi32/winmm from the mingw
     # sysroot instead (see cmake/mingw-w64-toolchain.cmake).
     - apt-get install -y -qq --no-install-recommends cmake ninja-build git ca-certificates g++-mingw-w64-x86-64
+    # Debian's mingw-w64 package ships both win32 and posix thread-model
+    # variants; win32 doesn't implement std::thread/mutex/condition_variable
+    # at all (the headers exist but their contents are compiled out), which
+    # ixwebsocket needs. Force the posix variant explicitly rather than
+    # relying on whatever update-alternatives defaults to.
+    - update-alternatives --set x86_64-w64-mingw32-g++ /usr/bin/x86_64-w64-mingw32-g++-posix
+    - update-alternatives --set x86_64-w64-mingw32-gcc /usr/bin/x86_64-w64-mingw32-gcc-posix
     - git -C vendor/uWebSockets submodule update --init uSockets
   script:
     - cmake --preset windows-client-release
