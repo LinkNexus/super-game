@@ -1,15 +1,15 @@
 #pragma once
 
-#include "raylib.h"
 #include "constants.h"
 #include "entities/boss.h"
 #include "entities/player.h"
 #include "entities/star.h"
+#include "raylib.h"
+#include "session.h"
 #include "shared/messages.h"
-#include "shared/sim/game_sim.h"
 #include <array>
 
-enum class Screen { MENU, PLAYING, PAUSED, GAME_OVER, WIN };
+enum class Screen { MENU, LOBBY, PLAYING, PAUSED, GAME_OVER, WIN };
 
 class Game {
 public:
@@ -45,6 +45,7 @@ private:
   Boss boss_;
   std::array<Star, STAR_COUNT> stars_;
   Screen screen_;
-  shared::GameSim sim_;
+  std::unique_ptr<Session> session_ = nullptr;
   shared::GameState state_;
+  float status_text_offset_y_ = 10.0f;
 };

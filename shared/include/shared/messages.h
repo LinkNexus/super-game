@@ -5,6 +5,25 @@
 #include "shared/math_utils.h"
 #include "shared/sim/enemy_sim.h"
 #include <cstdint>
+#include <optional>
+
+namespace nlohmann {
+template <typename T> struct adl_serializer<std::optional<T>> {
+  static void to_json(json &j, const std::optional<T> &opt) {
+    if (opt)
+      j = *opt;
+    else
+      j = nullptr;
+  }
+
+  static void from_json(const json &j, std::optional<T> &opt) {
+    if (j.is_null())
+      opt = std::nullopt;
+    else
+      opt = j.template get<T>();
+  }
+};
+} // namespace nlohmann
 
 namespace shared {
 
@@ -15,10 +34,29 @@ enum Button : uint8_t {
   BUTTON_SHOOT = 1 << 2,
 };
 
+enum class MessageType : uint8_t {
+  WELCOME,
+  LOBBY_UPDATE,
+  GAME_STATE,
+};
+
+struct WelcomeMessage {
+  uint32_t player_id;
+};
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(WelcomeMessage, player_id);
+
+struct LobbyUpdate {
+  uint8_t player_count;
+  bool game_started;
+  uint8_t max_players;
+};
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(LobbyUpdate, player_count, game_started,
+                                   max_players)
+
 struct PlayerInput {
   uint32_t tick;
   uint8_t buttons;
-  uint8_t player_id;
+  uint32_t player_id;
 };
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(PlayerInput, tick, buttons, player_id)
 
@@ -47,7 +85,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(BossState, position, active, health)
 struct GameState {
   uint32_t tick;
   uint8_t phase;
-  std::array<PlayerState, MAX_PLAYERS> players;
+  std::array<std::optional<PlayerState>, MAX_PLAYERS> players;
   std::array<BulletState, MAX_BULLETS> bullets;
   std::array<std::array<uint8_t, 2>,
              EnemiesPoolSimState::COLS * EnemiesPoolSimState::ROWS>
