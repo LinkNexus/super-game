@@ -1,0 +1,12 @@
+CompileFlags:
+  Add:
+    - -std=c++20
+    - -Ishared/include
+    - -Iclient/include
+    - -Iserver/include
+    - -Ivendor/json/include
+    - -Ivendor/ixwebsocket
+    - -Ivendor/uWebSockets/src
+    - -Ivendor/uWebSockets/uSockets/src
+    - -DUWS_NO_ZLIB
+    - -DLIBUS_NO_SSL

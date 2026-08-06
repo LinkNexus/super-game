@@ -11,7 +11,7 @@
 ```bash
 git clone git@gitlab.rz.htw-berlin.de:s0594529/super_game.git
 cd super_game
-git submodule update --init vendor/raylib vendor/uWebSockets
+git submodule update --init vendor/raylib vendor/uWebSockets vendor/ixwebsocket
 git -C vendor/uWebSockets submodule update --init uSockets
 ```
 

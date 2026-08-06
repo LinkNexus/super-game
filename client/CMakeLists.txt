@@ -5,9 +5,11 @@ add_executable(supergame-client
     src/entities/enemy.cpp
     src/entities/boss.cpp
     src/entities/star.cpp
+    src/network_client.cpp
+    src/session.cpp
 )
 
-target_link_libraries(supergame-client PRIVATE raylib supergame-shared)
+target_link_libraries(supergame-client PRIVATE raylib supergame-shared ixwebsocket)
 
 target_include_directories(supergame-client PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src

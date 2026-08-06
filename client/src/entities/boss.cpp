@@ -1,6 +1,4 @@
 #include "entities/boss.h"
-#include "constants.h"
-#include "entities/player.h"
 #include "shared/messages.h"
 #include "shared/sim/boss_sim.h"
 #include <cstddef>
@@ -13,7 +11,7 @@ void Boss::draw(const shared::BossState &state, bool draw_health_bar) const {
   if (!state.active)
     return;
 
-  float bar_x = (SCREEN_WIDTH - HEALTH_BAR_WIDTH) / 2.0f;
+  float bar_x = (shared::SCREEN_WIDTH - HEALTH_BAR_WIDTH) / 2.0f;
   float health_ratio = (float)state.health / shared::BossSimState::INITIAL_LP;
   if (health_ratio < 0.0f)
     health_ratio = 0.0f;
@@ -37,8 +35,4 @@ void Boss::draw(const shared::BossState &state, bool draw_health_bar) const {
     DrawRectangle((int)state.position.x - 40, (int)state.position.y - 20, 80,
                   40, RED);
   }
-
-  const char *text = TextFormat("Boss Health: %d", state.health);
-  DrawText(text, SCREEN_WIDTH - 10 - MeasureText(text, STATUS_FONT_SIZE),
-           10 + STATUS_FONT_SIZE + Player::HEART_SIZE, STATUS_FONT_SIZE, WHITE);
 }
