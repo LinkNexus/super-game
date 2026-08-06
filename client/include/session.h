@@ -21,15 +21,14 @@ private:
 class Session {
 public:
   virtual ~Session() = default;
-  virtual const shared::GameState &step(const shared::PlayerInput &input,
-                                        float dt) = 0;
+  virtual shared::GameState step(const shared::PlayerInput &input,
+                                 float dt) = 0;
 };
 
 class LocalSession : public Session {
 public:
   LocalSession();
-  const shared::GameState &step(const shared::PlayerInput &input,
-                                float dt) override;
+  shared::GameState step(const shared::PlayerInput &input, float dt) override;
 
 private:
   shared::GameSim sim_{};
@@ -39,20 +38,22 @@ private:
 class OnlineSession : public Session {
 public:
   explicit OnlineSession(const std::string &url);
-  const shared::GameState &step(const shared::PlayerInput &input,
-                                float dt) override;
+  shared::GameState step(const shared::PlayerInput &input, float dt) override;
   const shared::LobbyUpdate getLobbyUpdate();
   const uint32_t getPlayerId();
 
 private:
   void onMessage(const std::string &msg);
+  shared::GameState interpolateState() const;
 
 private:
   NetworkClient client_;
   MailBox<shared::GameState> state_box_{};
   MailBox<shared::LobbyUpdate> lobby_update_box_{};
   MailBox<shared::WelcomeMessage> welcome_message_box_{};
-  shared::GameState state_{};
+  shared::GameState target_state_{};
+  std::optional<shared::GameState> previous_state_{};
   shared::LobbyUpdate lobby_update_{};
+  std::chrono::steady_clock::time_point last_update_time_{};
   shared::WelcomeMessage welcome_message_{};
 };

@@ -29,8 +29,8 @@ LocalSession::LocalSession() {
   sim_.start(ids);
 }
 
-const shared::GameState &LocalSession::step(const shared::PlayerInput &input,
-                                            float dt) {
+shared::GameState LocalSession::step(const shared::PlayerInput &input,
+                                     float dt) {
   std::array<std::optional<shared::PlayerInput>, shared::MAX_PLAYERS> inputs{};
   inputs[0] = input;
   sim_.step(state_, inputs, dt);
@@ -42,13 +42,16 @@ OnlineSession::OnlineSession(const std::string &url)
   client_.connect();
 }
 
-const shared::GameState &OnlineSession::step(const shared::PlayerInput &input,
-                                             float dt) {
+shared::GameState OnlineSession::step(const shared::PlayerInput &input,
+                                      float dt) {
   client_.send(nlohmann::json(input).dump());
 
-  if (auto s = state_box_.take())
-    state_ = std::move(*s);
-  return state_;
+  if (auto s = state_box_.take()) {
+    last_update_time_ = std::chrono::steady_clock::now();
+    previous_state_ = std::move(target_state_);
+    target_state_ = std::move(*s);
+  }
+  return interpolateState();
 }
 
 const shared::LobbyUpdate OnlineSession::getLobbyUpdate() {
@@ -78,4 +81,49 @@ void OnlineSession::onMessage(const std::string &msg) {
     welcome_message_box_.set(payload.get<shared::WelcomeMessage>());
     break;
   }
+}
+
+shared::GameState OnlineSession::interpolateState() const {
+  if (!previous_state_.has_value())
+    return target_state_;
+
+  shared::GameState interpolatedState = target_state_;
+  float alpha =
+      std::clamp(std::chrono::duration<float>(std::chrono::steady_clock::now() -
+                                              last_update_time_)
+                         .count() /
+                     shared::FIXED_DT,
+                 0.0f, 1.0f);
+
+  for (std::size_t idx = 0; idx < interpolatedState.players.size(); ++idx) {
+    auto &targetPlayer = target_state_.players[idx];
+    auto &previousPlayer = previous_state_->players[idx];
+
+    if (!targetPlayer.has_value() || !previousPlayer.has_value())
+      continue;
+
+    interpolatedState.players[idx]->position =
+        previousPlayer->position.lerp(targetPlayer->position, alpha);
+  }
+
+  for (std::size_t idx = 0; idx < interpolatedState.bullets.size(); ++idx) {
+    auto &targetBullet = target_state_.bullets[idx];
+    auto &previousBullet = previous_state_->bullets[idx];
+    interpolatedState.bullets[idx].position =
+        previousBullet.position.lerp(targetBullet.position, alpha);
+  }
+
+  interpolatedState.boss.position =
+      previous_state_->boss.position.lerp(target_state_.boss.position, alpha);
+
+  interpolatedState.enemies_offset_x =
+      previous_state_->enemies_offset_x +
+      (target_state_.enemies_offset_x - previous_state_->enemies_offset_x) *
+          alpha;
+  interpolatedState.enemies_offset_y =
+      previous_state_->enemies_offset_y +
+      (target_state_.enemies_offset_y - previous_state_->enemies_offset_y) *
+          alpha;
+
+  return interpolatedState;
 }
