@@ -1,0 +1,10 @@
+# Not needed for the server-only (BUILD_CLIENT=OFF) image - keeps the
+# build context (and thus `docker build` upload/COPY time) small.
+vendor/raylib
+vendor/ixwebsocket
+client/assets
+
+build/
+.git
+.clangd
+*.md
