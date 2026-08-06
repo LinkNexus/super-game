@@ -19,7 +19,7 @@ build:client:
     - apt-get update -qq
     # raylib (PLATFORM_DESKTOP/GLFW on Linux) needs the X11/GL/ALSA -dev
     # packages too, on top of the toolchain the server build also needs.
-    - apt-get install -y -qq --no-install-recommends cmake ninja-build g++ git
+    - apt-get install -y -qq --no-install-recommends cmake ninja-build g++ git ca-certificates
         libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev
         libgl1-mesa-dev libasound2-dev
     - git -C vendor/uWebSockets submodule update --init uSockets
@@ -44,7 +44,7 @@ build:client:windows:
     # packages required here: those are the *Linux* raylib backend's deps,
     # the Windows one links against opengl32/gdi32/winmm from the mingw
     # sysroot instead (see cmake/mingw-w64-toolchain.cmake).
-    - apt-get install -y -qq --no-install-recommends cmake ninja-build git g++-mingw-w64-x86-64
+    - apt-get install -y -qq --no-install-recommends cmake ninja-build git ca-certificates g++-mingw-w64-x86-64
     - git -C vendor/uWebSockets submodule update --init uSockets
   script:
     - cmake --preset windows-client-release
@@ -67,7 +67,7 @@ build:server:
     GIT_SUBMODULE_PATHS: vendor/uWebSockets
   before_script:
     - apt-get update -qq
-    - apt-get install -y -qq --no-install-recommends cmake ninja-build g++ git
+    - apt-get install -y -qq --no-install-recommends cmake ninja-build g++ git ca-certificates
     - git -C vendor/uWebSockets submodule update --init uSockets
   script:
     - cmake -S . -B build/server-debug -G Ninja -DCMAKE_BUILD_TYPE=Debug -DBUILD_CLIENT=OFF
@@ -79,6 +79,14 @@ build:server:
     paths:
       - build/server-debug
       - build/server-release
+  # docker:server reuses this job's already-populated vendor/uWebSockets
+  # (incl. the nested uSockets submodule) instead of cloning it again
+  # inside the Kaniko image, which has no package manager to fix TLS/git
+  # the way the apt-get line above does.
+  artifacts:
+    paths:
+      - vendor/uWebSockets
+    expire_in: 1 hour
 
 # Builds and pushes the server image to this project's GitLab Container
 # Registry via Kaniko - no Docker-in-Docker / privileged runner needed,
@@ -89,12 +97,17 @@ docker:server:
   image:
     name: gcr.io/kaniko-project/executor:v1.23.2-debug
     entrypoint: [""]
+  # Reuses build:server's already-populated vendor/uWebSockets (incl. the
+  # nested uSockets submodule) via its artifact instead of cloning it here -
+  # this image has no package manager, so there'd be no way to install
+  # ca-certificates if a plain `git clone` hit the same TLS trust-store gap
+  # the debian-based jobs need `ca-certificates` for.
+  needs:
+    - build:server
   variables:
     GIT_SUBMODULE_PATHS: vendor/uWebSockets
   rules:
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
-  before_script:
-    - git -C vendor/uWebSockets submodule update --init uSockets
   script:
     - mkdir -p /kaniko/.docker
     - >
