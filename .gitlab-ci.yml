@@ -28,6 +28,11 @@ build:client:
     - cmake --build --preset debug --target supergame-client
     - cmake --preset release
     - cmake --build --preset release --target supergame-client
+  artifacts:
+    name: supergame-client-linux-$CI_COMMIT_SHORT_SHA
+    paths:
+      - build/release/bin/
+    expire_in: 30 days
   cache:
     key: client-$CI_COMMIT_REF_SLUG
     paths:
