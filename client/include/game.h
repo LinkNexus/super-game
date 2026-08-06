@@ -9,7 +9,9 @@
 #include "shared/messages.h"
 #include <array>
 
-enum class Screen { MENU, LOBBY, PLAYING, PAUSED, GAME_OVER, WIN };
+enum class Screen { MENU, CONNECTING, LOBBY, PLAYING, PAUSED, GAME_OVER, WIN };
+
+enum class GameMode { LOCAL, ONLINE };
 
 class Game {
 public:
@@ -17,7 +19,6 @@ public:
 
 private:
   void init();
-  void update(float dt);
   void draw();
   void handleInput();
   shared::Button getPlayerInputs();
@@ -45,6 +46,7 @@ private:
   Boss boss_;
   std::array<Star, STAR_COUNT> stars_;
   Screen screen_;
+  GameMode mode_ = GameMode::LOCAL;
   std::unique_ptr<Session> session_ = nullptr;
   shared::GameState state_;
   float status_text_offset_y_ = 10.0f;

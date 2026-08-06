@@ -65,6 +65,14 @@ void Game::run() {
       inputs[0].buttons = getPlayerInputs();
       inputs[0].player_id = 1;
 
+      if (screen_ == Screen::CONNECTING) {
+        if (OnlineSession *s = dynamic_cast<OnlineSession *>(session_.get())) {
+          if (s->getPlayerId() != 0) {
+            screen_ = Screen::LOBBY;
+          }
+        }
+      }
+
       if (screen_ == Screen::LOBBY) {
         if (OnlineSession *s = dynamic_cast<OnlineSession *>(session_.get())) {
           if (s->getLobbyUpdate().game_started) {
@@ -114,16 +122,25 @@ void Game::run() {
 void Game::handleInput() {
   switch (screen_) {
   case Screen::MENU:
-    if (IsKeyPressed(KEY_L)) {
-      session_ = std::make_unique<LocalSession>();
-      screen_ = Screen::PLAYING;
+    if (IsKeyPressed(KEY_LEFT)) {
+      mode_ = GameMode::LOCAL;
+    } else if (IsKeyPressed(KEY_RIGHT)) {
+      mode_ = GameMode::ONLINE;
+    } else if (IsKeyPressed(KEY_ENTER)) {
+      if (mode_ == GameMode::ONLINE) {
+        session_ = std::make_unique<OnlineSession>("ws://localhost:9001");
+        screen_ = Screen::CONNECTING;
+      } else {
+        session_ = std::make_unique<LocalSession>();
+        screen_ = Screen::PLAYING;
+      }
     }
+    break;
 
-    else if (IsKeyPressed(KEY_O)) {
-      session_ = std::make_unique<OnlineSession>("ws://localhost:9001");
-      screen_ = Screen::LOBBY;
+  case Screen::CONNECTING:
+    if (IsKeyPressed(KEY_ESCAPE)) {
+      screen_ = Screen::MENU;
     }
-
     break;
 
   case Screen::LOBBY:
@@ -172,12 +189,25 @@ void Game::draw() {
     s.draw();
 
   switch (screen_) {
-  case Screen::MENU: {
-    const auto text = "Press L to play locally or O to start an online session";
-    DrawText(text, (shared::SCREEN_WIDTH - MeasureText(text, 20)) / 2,
-             shared::SCREEN_HEIGHT / 2, 20, WHITE);
+  case Screen::MENU:
+    DrawText("Use LEFT/RIGHT to choose mode", shared::SCREEN_WIDTH / 2 - 180,
+             shared::SCREEN_HEIGHT / 2 - 40, 20, WHITE);
+    DrawText("Press ENTER to confirm", shared::SCREEN_WIDTH / 2 - 150,
+             shared::SCREEN_HEIGHT / 2 - 10, 20, WHITE);
+    DrawText("Local", shared::SCREEN_WIDTH / 2 - 150,
+             shared::SCREEN_HEIGHT / 2 + 40, 24,
+             mode_ == GameMode::LOCAL ? YELLOW : WHITE);
+    DrawText("Online", shared::SCREEN_WIDTH / 2 + 50,
+             shared::SCREEN_HEIGHT / 2 + 40, 24,
+             mode_ == GameMode::ONLINE ? YELLOW : WHITE);
     break;
-  }
+
+  case Screen::CONNECTING:
+    DrawText("Connecting to server...", shared::SCREEN_WIDTH / 2 - 170,
+             shared::SCREEN_HEIGHT / 2, 24, LIGHTGRAY);
+    DrawText("Press ESC to cancel", shared::SCREEN_WIDTH / 2 - 140,
+             shared::SCREEN_HEIGHT / 2 + 40, 20, WHITE);
+    break;
 
   case Screen::LOBBY: {
     if (OnlineSession *s = dynamic_cast<OnlineSession *>(session_.get())) {
