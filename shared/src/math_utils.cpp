@@ -48,6 +48,10 @@ shared::Vec2D shared::Vec2D::rotated(float angle) const {
   return {x * cos_a - y * sin_a, x * sin_a + y * cos_a};
 }
 
+shared::Vec2D shared::Vec2D::lerp(const Vec2D &other, const float t) const {
+  return *this + (other - *this) * t;
+}
+
 bool shared::rectIntersection(shared::Vec2D pos_a, float hw_a, float hh_a,
                               shared::Vec2D pos_b, float hw_b, float hh_b) {
   return std::abs(pos_a.x - pos_b.x) <= (hw_a + hw_b) &&

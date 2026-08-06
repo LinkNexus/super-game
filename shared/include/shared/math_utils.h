@@ -23,6 +23,8 @@ struct Vec2D {
   Vec2D normalized() const;
 
   Vec2D rotated(float angle) const;
+
+  Vec2D lerp(const Vec2D &other, const float t) const;
 };
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(Vec2D, x, y)
 
