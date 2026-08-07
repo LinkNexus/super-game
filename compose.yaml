@@ -1,0 +1,15 @@
+# For deploying supergame-server as a Dokploy "Compose" app in "Docker
+# Compose" mode (plain `docker compose up`, not Docker Stack/Swarm) - avoids
+# the Swarm VIP endpoint-mode issue that "Application"-type (always Swarm)
+# deployments hit on this Proxmox LXC-hosted VPS. See ROADMAP.md L17.
+#
+# No `build:` here on purpose - Compose mode doesn't support it, and it's
+# not needed anyway since the image is already built + pushed by the
+# docker:server CI job. Domain/TLS/Traefik routing is configured through
+# Dokploy's own Domains tab (Method 1), not hardcoded here - Dokploy injects
+# the necessary Traefik labels and network attachment itself at deploy time.
+
+services:
+  server:
+    image: levynkenenghtw/supergame-server:latest
+    restart: unless-stopped
