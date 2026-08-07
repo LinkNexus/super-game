@@ -23,6 +23,17 @@ void NetworkClient::connect() {
   ws_ = std::make_unique<ix::WebSocket>();
   ws_->setUrl(url_);
 
+  // IXWebSocket's mbedTLS backend can't load the OS trust store on macOS or
+  // Linux (loadSystemCertificates() in IXSocketMbedTLS.cpp is an
+  // unimplemented stub on both) - the default caFile="SYSTEM" silently
+  // fails TLS connections there. Point it at a bundled CA cert file instead
+  // (copied next to the binary alongside assets/); Windows doesn't need
+  // this since its system-store path is actually implemented, but pointing
+  // it at the same bundle everywhere is simpler than branching per OS.
+  ix::SocketTLSOptions tlsOptions;
+  tlsOptions.caFile = "assets/cacert.pem";
+  ws_->setTLSOptions(tlsOptions);
+
   std::cout << "Connecting to " << url_ << "..." << std::endl;
 
   ws_->setOnMessageCallback([this](const ix::WebSocketMessagePtr &msg) {

@@ -7,3 +7,6 @@
 [submodule "vendor/ixwebsocket"]
 	path = vendor/ixwebsocket
 	url = https://github.com/machinezone/IXWebSocket
+[submodule "vendor/mbedtls"]
+	path = vendor/mbedtls
+	url = https://github.com/Mbed-TLS/mbedtls

@@ -5,12 +5,15 @@
 #include "entities/star.h"
 #include "raylib.h"
 #include "session.h"
+#include "shared/constants.h"
 #include "shared/messages.h"
 #include "shared/sim/enemy_sim.h"
 #include "shared/sim/game_sim.h"
 #include <cfloat>
 #include <cmath>
 #include <cstdlib>
+
+Game::Game(std::string server_url) : server_url_(std::move(server_url)) {}
 
 void Game::init() {
   screen_ = Screen::MENU;
@@ -127,7 +130,7 @@ void Game::handleInput() {
       mode_ = GameMode::ONLINE;
     } else if (IsKeyPressed(KEY_ENTER)) {
       if (mode_ == GameMode::ONLINE) {
-        session_ = std::make_unique<OnlineSession>("ws://localhost:9001");
+        session_ = std::make_unique<OnlineSession>(server_url_);
         screen_ = Screen::CONNECTING;
       } else {
         session_ = std::make_unique<LocalSession>();

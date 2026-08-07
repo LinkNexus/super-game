@@ -2,6 +2,7 @@
 # build context (and thus `docker build` upload/COPY time) small.
 vendor/raylib
 vendor/ixwebsocket
+vendor/mbedtls
 client/assets
 
 build/
