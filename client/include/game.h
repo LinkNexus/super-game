@@ -8,6 +8,7 @@
 #include "session.h"
 #include "shared/messages.h"
 #include <array>
+#include <string>
 
 enum class Screen { MENU, CONNECTING, LOBBY, PLAYING, PAUSED, GAME_OVER, WIN };
 
@@ -15,6 +16,7 @@ enum class GameMode { LOCAL, ONLINE };
 
 class Game {
 public:
+  explicit Game(std::string server_url = shared::default_server_url);
   void run();
 
 private:
@@ -50,4 +52,5 @@ private:
   std::unique_ptr<Session> session_ = nullptr;
   shared::GameState state_;
   float status_text_offset_y_ = 10.0f;
+  std::string server_url_;
 };

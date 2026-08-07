@@ -3,13 +3,19 @@
 # implemented in the library"). Used by client/ only; server/ keeps using
 # uWebSockets.
 #
-# Built without TLS/zlib, matching uWebSockets' UWS_NO_ZLIB setup: the game
-# speaks plain ws://, so there's no permessage-deflate or wss:// to support,
-# and this keeps the dependency footprint down (no OpenSSL/zlib needed to
-# build on a fresh machine, Windows included).
+# TLS is on (via vendored mbedTLS, see vendor/mbedtls.cmake) since the
+# deployed server sits behind Cloudflare/NPM and needs wss://, not ws://.
+# zlib stays off - no permessage-deflate/compression needed either way.
 
-set(USE_TLS OFF CACHE BOOL "" FORCE)
+include(${CMAKE_CURRENT_SOURCE_DIR}/vendor/mbedtls.cmake)
+
+set(USE_TLS ON CACHE BOOL "" FORCE)
+set(USE_MBED_TLS ON CACHE BOOL "" FORCE)
 set(USE_ZLIB OFF CACHE BOOL "" FORCE)
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+# We never `cmake --install` this project - skip ixwebsocket's own
+# install(EXPORT ...) step, which would otherwise fail validation since our
+# vendored mbedtls/mbedx509/mbedcrypto targets aren't part of any export set.
+set(IXWEBSOCKET_INSTALL OFF CACHE BOOL "" FORCE)
 
 add_subdirectory(vendor/ixwebsocket)
