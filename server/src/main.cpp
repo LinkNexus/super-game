@@ -97,10 +97,9 @@ int main(int argc, char *argv[]) {
                  else
                    sendLobbyUpdate(data);
                }})
-      .listen(9001,
+      .listen("0.0.0.0", 9001,
               [](auto *token) {
-                setvbuf(stdout, nullptr, _IONBF,
-                        0); // Disable buffering for stdout
+                setvbuf(stdout, nullptr, _IONBF, 0);
                 if (token) {
                   std::printf("uWebSockets listening on port 9001\n");
                 } else {
