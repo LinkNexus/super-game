@@ -99,11 +99,14 @@ int main(int argc, char *argv[]) {
                }})
       .listen(9001,
               [](auto *token) {
+                setvbuf(stdout, nullptr, _IONBF,
+                        0); // Disable buffering for stdout
                 if (token) {
                   std::printf("uWebSockets listening on port 9001\n");
                 } else {
                   std::printf("uWebSockets failed to listen on port 9001\n");
                 }
+                std::fflush(stdout);
               })
       .run();
 
