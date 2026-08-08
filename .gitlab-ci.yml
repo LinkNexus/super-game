@@ -14,7 +14,7 @@ variables:
 
 build:client:
   stage: build
-  image: debian:bookworm-slim
+  image: debian:trixie-slim
   before_script:
     - apt-get update -qq
     # raylib (PLATFORM_DESKTOP/GLFW on Linux) needs the X11/GL/ALSA -dev
@@ -42,7 +42,7 @@ build:client:
 
 build:client:windows:
   stage: build
-  image: debian:bookworm-slim
+  image: debian:trixie-slim
   before_script:
     - apt-get update -qq
     # g++-mingw-w64-x86-64 cross-compiles for Windows from this Linux
@@ -75,7 +75,7 @@ build:client:windows:
 
 build:server:
   stage: build
-  image: debian:bookworm-slim
+  image: debian:trixie-slim
   variables:
     # Server build never touches raylib/ixwebsocket - skip cloning them.
     GIT_SUBMODULE_PATHS: vendor/uWebSockets

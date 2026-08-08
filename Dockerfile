@@ -10,7 +10,7 @@
 # this image - they're excluded via .dockerignore and never referenced when
 # BUILD_CLIENT=OFF.
 
-FROM debian:bookworm-slim AS builder
+FROM debian:trixie-slim AS builder
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     cmake \
@@ -26,7 +26,7 @@ RUN cmake -S . -B build -G Ninja \
     -DBUILD_CLIENT=OFF \
     && cmake --build build --target supergame-server -j"$(nproc)"
 
-FROM debian:bookworm-slim AS runtime
+FROM debian:trixie-slim AS runtime
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libstdc++6 \
