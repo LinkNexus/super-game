@@ -1,6 +1,15 @@
 #pragma once
 
-#include "ixwebsocket/IXWebSocket.h"
+// Forward-declare ixwebsocket types to avoid forcing the header to include the
+// full third-party headers (which the editor indexer may not resolve).
+namespace ix {
+class WebSocket;
+struct WebSocketMessagePtr;
+enum class WebSocketMessageType : int;
+struct SocketTLSOptions;
+}
+
+#include <functional>
 #include <memory>
 #include <string>
 
