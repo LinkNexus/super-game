@@ -308,51 +308,92 @@ void Game::draw() {
   {
     // Draw a centered panel with final scores and animated border
     const int boxW = 440;
-    const int boxH = 200;
+    const int boxH = 220;
     const float bx = SCREEN_WIDTH / 2.0f - boxW / 2.0f;
     const float by = SCREEN_HEIGHT / 2.0f - boxH / 2.0f;
     Rectangle rec{bx, by, (float)boxW, (float)boxH};
-    DrawRectangleRec(rec, Fade(BLACK, 0.7f));
+    DrawRectangleRec(rec, Fade(BLACK, 0.75f));
 
     // animated border pulse
     float pulse = (sinf(score_anim_time_ * 3.0f) * 0.5f + 0.5f);
     Color borderCol = Fade(YELLOW, 0.4f + 0.6f * pulse);
     DrawRectangleLinesEx(rec, 4, borderCol);
 
-    // Title
-    const char *title = (screen_ == Screen::GAME_OVER) ? "Game Over" : "Final Score";
+    const bool local_mode = (mode_ == GameMode::LOCAL);
+    const bool local_won = state_.players[0].lives > 0 &&
+                           static_cast<shared::GamePhase>(state_.phase) == shared::GamePhase::WON;
+    const bool local_alive = state_.players[0].lives > 0;
+
+    const char *title = nullptr;
+    if (local_mode) {
+      title = local_alive ? "You Survived" : "Game Over";
+    } else {
+      title = (screen_ == Screen::GAME_OVER) ? "Game Over" : "Final Score";
+    }
+
     DrawText(title, (int)(SCREEN_WIDTH / 2 - MeasureText(title, 32) / 2),
              (int)(by + 12), 32, WHITE);
 
-    // Player scores
     int y = (int)(by + 60);
-    int idx = 0;
-    int winner_id = 0;
-    uint32_t best = 0;
-    for (const auto &p : state_.players) {
-      // display only valid players (id < MAX_PLAYERS)
-      if (p.id >= MAX_PLAYERS)
-        continue;
-      const char *line = TextFormat("Player %d: %u", p.id, p.points);
-      Color col = (p.id == 0) ? YELLOW : LIGHTGRAY;
-      DrawText(line, (int)(bx + 24), y, 20, col);
+    if (local_mode) {
+      const char *line = TextFormat("Player 1: %u points", state_.players[0].points);
+      DrawText(line, (int)(bx + 24), y, 20, YELLOW);
       y += 28;
-      if (p.points > best) {
-        best = p.points;
-        winner_id = p.id;
+      const char *livesText = TextFormat("Lives: %u", state_.players[0].lives);
+      DrawText(livesText, (int)(bx + 24), y, 20, LIGHTGRAY);
+      y += 40;
+
+      const char *resultText = local_alive ? "Result: You survived!" : "Result: You lost";
+      DrawText(resultText, (int)(SCREEN_WIDTH / 2 - MeasureText(resultText, 22) / 2),
+               y, 22, WHITE);
+      y += 28;
+    } else {
+      uint32_t best_score = 0;
+      int winner_id = 0;
+      int best_lives = -1;
+      bool tie = false;
+
+      for (const auto &p : state_.players) {
+        if (p.id >= MAX_PLAYERS)
+          continue;
+
+        const char *line = TextFormat("Player %d: %u pts | %u lives", p.id + 1,
+                                     p.points, p.lives);
+        Color col = (p.id == 0) ? YELLOW : LIGHTGRAY;
+        DrawText(line, (int)(bx + 24), y, 20, col);
+        y += 28;
+
+        if (best_lives < 0 || p.lives > (uint32_t)best_lives) {
+          best_lives = p.lives;
+          best_score = p.points;
+          winner_id = p.id;
+          tie = false;
+        } else if (p.lives == (uint32_t)best_lives) {
+          if (p.points > best_score) {
+            best_score = p.points;
+            winner_id = p.id;
+            tie = false;
+          } else if (p.points == best_score) {
+            tie = true;
+          }
+        }
       }
-      if (++idx >= MAX_PLAYERS)
-        break;
+
+      y += 8;
+      const char *winLine;
+      if (tie) {
+        winLine = "Result: Tie";
+      } else {
+        winLine = TextFormat("Winner: Player %d", winner_id + 1);
+      }
+      DrawText(winLine, (int)(SCREEN_WIDTH / 2 - MeasureText(winLine, 24) / 2),
+               y, 24, WHITE);
+      y += 32;
     }
 
-    // Winner line
-    const char *winLine = TextFormat("Winner: Player %d", winner_id);
-    DrawText(winLine, (int)(SCREEN_WIDTH / 2 - MeasureText(winLine, 24) / 2),
-             (int)(by + boxH - 60), 24, WHITE);
-
-    // Controls
-    DrawText("Press R to restart or ENTER to return to menu",
-             (int)(SCREEN_WIDTH / 2 - MeasureText("Press R to restart or ENTER to return to menu", 18) / 2),
+    const char *controls = "Press R to restart or ENTER to return to menu";
+    DrawText(controls,
+             (int)(SCREEN_WIDTH / 2 - MeasureText(controls, 18) / 2),
              (int)(by + boxH - 30), 18, LIGHTGRAY);
     break;
   }
