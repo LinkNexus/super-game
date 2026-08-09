@@ -271,18 +271,38 @@ void Game::draw() {
     s.draw();
 
   switch (screen_) {
-  case Screen::MENU:
-    DrawText("Use LEFT/RIGHT to choose mode", shared::SCREEN_WIDTH / 2 - 180,
-             shared::SCREEN_HEIGHT / 2 - 40, 20, WHITE);
-    DrawText("Press ENTER to confirm", shared::SCREEN_WIDTH / 2 - 150,
-             shared::SCREEN_HEIGHT / 2 - 10, 20, WHITE);
+  case Screen::MENU: {
+    const std::string title = "THE SUPER GAME";
+    const int title_size = 64;
+    const int title_x = (shared::SCREEN_WIDTH - MeasureText(title.c_str(), title_size)) / 2;
+    DrawText(title.c_str(), title_x, 120, title_size, YELLOW);
+
+    const std::string subtitle = "Press ENTER to play";
+    const int subtitle_x = (shared::SCREEN_WIDTH - MeasureText(subtitle.c_str(), 24)) / 2;
+    DrawText(subtitle.c_str(), subtitle_x, 220, 24, WHITE);
+
+    DrawText("Mode selection:", shared::SCREEN_WIDTH / 2 - 180,
+             shared::SCREEN_HEIGHT / 2 - 40, 20, LIGHTGRAY);
     DrawText("Local", shared::SCREEN_WIDTH / 2 - 150,
-             shared::SCREEN_HEIGHT / 2 + 40, 24,
+             shared::SCREEN_HEIGHT / 2 + 40, 28,
              mode_ == GameMode::LOCAL ? YELLOW : WHITE);
     DrawText("Online", shared::SCREEN_WIDTH / 2 + 50,
-             shared::SCREEN_HEIGHT / 2 + 40, 24,
+             shared::SCREEN_HEIGHT / 2 + 40, 28,
              mode_ == GameMode::ONLINE ? YELLOW : WHITE);
+
+    DrawText("Controls:", shared::SCREEN_WIDTH / 2 - 210,
+             shared::SCREEN_HEIGHT / 2 + 120, 22, LIGHTGRAY);
+    DrawText("- LEFT / RIGHT: move", shared::SCREEN_WIDTH / 2 - 180,
+             shared::SCREEN_HEIGHT / 2 + 150, 20, WHITE);
+    DrawText("- SPACE: shoot", shared::SCREEN_WIDTH / 2 - 180,
+             shared::SCREEN_HEIGHT / 2 + 180, 20, WHITE);
+    DrawText("- A / D / W: second player (dual)",
+             shared::SCREEN_WIDTH / 2 - 180, shared::SCREEN_HEIGHT / 2 + 210,
+             20, WHITE);
+    DrawText("- ESC: cancel / pause", shared::SCREEN_WIDTH / 2 - 180,
+             shared::SCREEN_HEIGHT / 2 + 240, 20, WHITE);
     break;
+  }
 
   case Screen::CONNECTING:
     DrawText("Connecting to server...", shared::SCREEN_WIDTH / 2 - 170,
