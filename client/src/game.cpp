@@ -19,22 +19,44 @@ void Game::init() {
   screen_ = Screen::MENU;
 
   state_ = shared::GameState();
+  inputs_[1] = std::nullopt;
 
   for (auto &s : stars_)
     s.initRandom(shared::SCREEN_WIDTH, shared::SCREEN_HEIGHT);
 }
 
-shared::Button Game::getPlayerInputs() {
-  shared::Button buttons = shared::BUTTON_NONE;
+void Game::getPlayersInputs() {
+  shared::Button mainPlayerButtons = shared::BUTTON_NONE;
 
   if (IsKeyDown(KEY_LEFT))
-    buttons = static_cast<shared::Button>(buttons | shared::BUTTON_LEFT);
+    mainPlayerButtons =
+        static_cast<shared::Button>(mainPlayerButtons | shared::BUTTON_LEFT);
   if (IsKeyDown(KEY_RIGHT))
-    buttons = static_cast<shared::Button>(buttons | shared::BUTTON_RIGHT);
+    mainPlayerButtons =
+        static_cast<shared::Button>(mainPlayerButtons | shared::BUTTON_RIGHT);
   if (IsKeyDown(KEY_SPACE))
-    buttons = static_cast<shared::Button>(buttons | shared::BUTTON_SHOOT);
+    mainPlayerButtons =
+        static_cast<shared::Button>(mainPlayerButtons | shared::BUTTON_SHOOT);
 
-  return buttons;
+  inputs_[0]->buttons = mainPlayerButtons;
+
+  if (LocalSession *s = dynamic_cast<LocalSession *>(session_.get())) {
+    if (s->getMode() == LocalMode::DUAL_PLAYER) {
+      auto secondPlayerButtons = shared::BUTTON_NONE;
+
+      if (IsKeyDown(KEY_A))
+        secondPlayerButtons = static_cast<shared::Button>(secondPlayerButtons |
+                                                          shared::BUTTON_LEFT);
+      if (IsKeyDown(KEY_D))
+        secondPlayerButtons = static_cast<shared::Button>(secondPlayerButtons |
+                                                          shared::BUTTON_RIGHT);
+      if (IsKeyDown(KEY_W))
+        secondPlayerButtons = static_cast<shared::Button>(secondPlayerButtons |
+                                                          shared::BUTTON_SHOOT);
+
+      inputs_[1]->buttons = secondPlayerButtons;
+    }
+  }
 }
 
 void Game::run() {
@@ -63,10 +85,6 @@ void Game::run() {
       for (auto &s : stars_)
         s.update(shared::FIXED_DT, shared::SCREEN_HEIGHT, shared::SCREEN_WIDTH);
 
-      std::array<shared::PlayerInput, shared::MAX_PLAYERS> inputs;
-      inputs[0].buttons = getPlayerInputs();
-      inputs[0].player_id = 1;
-
       if (screen_ == Screen::CONNECTING) {
         if (OnlineSession *s = dynamic_cast<OnlineSession *>(session_.get())) {
           if (s->getPlayerId() != 0) {
@@ -84,9 +102,10 @@ void Game::run() {
       }
 
       if (screen_ == Screen::PLAYING) {
+        getPlayersInputs();
         auto previous_state = state_;
         if (session_)
-          state_ = session_->step(inputs[0], shared::FIXED_DT);
+          state_ = session_->step(inputs_, shared::FIXED_DT);
         spawnEnemyExplosions(previous_state, state_);
       }
 
@@ -133,9 +152,10 @@ void Game::handleInput() {
         session_ = std::make_unique<OnlineSession>(server_url_);
         screen_ = Screen::CONNECTING;
       } else {
-        session_ = std::make_unique<LocalSession>();
-        screen_ = Screen::PLAYING;
+        screen_ = Screen::SELECT_LOCAL_MODE;
+        selected_local_mode_ = LocalMode::SINGLE_PLAYER;
       }
+      inputs_[0].emplace();
     }
     break;
 
@@ -150,6 +170,26 @@ void Game::handleInput() {
       screen_ = Screen::MENU;
     }
 
+    break;
+
+  case Screen::SELECT_LOCAL_MODE:
+    if (IsKeyPressed(KEY_ESCAPE)) {
+      screen_ = Screen::MENU;
+    } else if (IsKeyPressed(KEY_LEFT)) {
+      selected_local_mode_ = LocalMode::SINGLE_PLAYER;
+    } else if (IsKeyPressed(KEY_RIGHT)) {
+      selected_local_mode_ = LocalMode::DUAL_PLAYER;
+    } else if (IsKeyPressed(KEY_ENTER) && selected_local_mode_.has_value()) {
+      session_ = std::make_unique<LocalSession>(selected_local_mode_.value());
+      screen_ = Screen::PLAYING;
+
+      inputs_[0]->player_id = 1;
+
+      if (selected_local_mode_ == LocalMode::DUAL_PLAYER) {
+        inputs_[1].emplace();
+        inputs_[1]->player_id = 2;
+      }
+    }
     break;
 
   case Screen::PLAYING:
@@ -221,6 +261,36 @@ void Game::draw() {
                (shared::SCREEN_WIDTH - MeasureText(text.c_str(), 20)) / 2,
                shared::SCREEN_HEIGHT / 2, 20, WHITE);
     }
+    break;
+  }
+
+  case Screen::SELECT_LOCAL_MODE: {
+    const std::string instructions_text =
+        "Prefer single player or dual player on the same keyboard?";
+    DrawText(
+        instructions_text.c_str(),
+        (shared::SCREEN_WIDTH - MeasureText(instructions_text.c_str(), 20)) / 2,
+        shared::SCREEN_HEIGHT / 2 - 40, 20, WHITE);
+
+    const std::string confirm_text =
+        "Use LEFT/RIGHT to choose and ENTER to confirm";
+    const auto confirm_text_width = MeasureText(confirm_text.c_str(), 20);
+    const auto confirm_text_offset_x =
+        (shared::SCREEN_WIDTH - confirm_text_width) / 2;
+    DrawText(confirm_text.c_str(), confirm_text_offset_x,
+             shared::SCREEN_HEIGHT / 2 - 10, 20, WHITE);
+
+    const std::string single_player_text = "Single";
+    const std::string dual_player_text = "Dual";
+    DrawText(single_player_text.c_str(), confirm_text_offset_x,
+             shared::SCREEN_HEIGHT / 2 + 40, 24,
+             selected_local_mode_ == LocalMode::SINGLE_PLAYER ? YELLOW : WHITE);
+    DrawText(dual_player_text.c_str(),
+             confirm_text_offset_x + confirm_text_width -
+                 MeasureText(dual_player_text.c_str(), 24),
+             shared::SCREEN_HEIGHT / 2 + 40, 24,
+             selected_local_mode_ == LocalMode::DUAL_PLAYER ? YELLOW : WHITE);
+
     break;
   }
 

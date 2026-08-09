@@ -1,6 +1,7 @@
 #pragma once
 
 #include "network_client.h"
+#include "shared/constants.h"
 #include "shared/messages.h"
 #include "shared/sim/game_sim.h"
 #include <mutex>
@@ -21,16 +22,24 @@ private:
 class Session {
 public:
   virtual ~Session() = default;
-  virtual shared::GameState step(const shared::PlayerInput &input,
-                                 float dt) = 0;
+  virtual shared::GameState
+  step(const std::array<std::optional<shared::PlayerInput>, shared::MAX_PLAYERS>
+           &inputs,
+       float dt) = 0;
 };
+
+enum class LocalMode { SINGLE_PLAYER, DUAL_PLAYER };
 
 class LocalSession : public Session {
 public:
-  LocalSession();
-  shared::GameState step(const shared::PlayerInput &input, float dt) override;
+  LocalSession(LocalMode mode = LocalMode::SINGLE_PLAYER);
+  shared::GameState step(const std::array<std::optional<shared::PlayerInput>,
+                                          shared::MAX_PLAYERS> &inputs,
+                         float dt) override;
+  LocalMode getMode() const;
 
 private:
+  LocalMode mode_{LocalMode::SINGLE_PLAYER};
   shared::GameSim sim_{};
   shared::GameState state_{};
 };
@@ -38,7 +47,9 @@ private:
 class OnlineSession : public Session {
 public:
   explicit OnlineSession(const std::string &url);
-  shared::GameState step(const shared::PlayerInput &input, float dt) override;
+  shared::GameState step(const std::array<std::optional<shared::PlayerInput>,
+                                          shared::MAX_PLAYERS> &inputs,
+                         float dt) override;
   const shared::LobbyUpdate getLobbyUpdate();
   const uint32_t getPlayerId();
 

@@ -10,7 +10,16 @@
 #include <array>
 #include <string>
 
-enum class Screen { MENU, CONNECTING, LOBBY, PLAYING, PAUSED, GAME_OVER, WIN };
+enum class Screen {
+  MENU,
+  CONNECTING,
+  LOBBY,
+  SELECT_LOCAL_MODE,
+  PLAYING,
+  PAUSED,
+  GAME_OVER,
+  WIN
+};
 
 enum class GameMode { LOCAL, ONLINE };
 
@@ -23,7 +32,7 @@ private:
   void init();
   void draw();
   void handleInput();
-  shared::Button getPlayerInputs();
+  void getPlayersInputs();
 
   // Particle system for explosion effects (client-side only)
   struct Particle {
@@ -49,6 +58,8 @@ private:
   std::array<Star, STAR_COUNT> stars_;
   Screen screen_;
   GameMode mode_ = GameMode::LOCAL;
+  std::array<std::optional<shared::PlayerInput>, shared::MAX_PLAYERS> inputs_{};
+  std::optional<LocalMode> selected_local_mode_{};
   std::unique_ptr<Session> session_ = nullptr;
   shared::GameState state_;
   float status_text_offset_y_ = 10.0f;

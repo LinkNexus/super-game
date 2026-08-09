@@ -23,16 +23,23 @@ template <typename T> std::optional<T> MailBox<T>::take() {
   return std::move(pending_);
 }
 
-LocalSession::LocalSession() {
+LocalSession::LocalSession(LocalMode mode) {
+  mode_ = mode;
+
   std::array<std::optional<uint8_t>, shared::MAX_PLAYERS> ids{};
   ids[0] = 1;
+  if (mode_ == LocalMode::DUAL_PLAYER)
+    ids[1] = 2;
+
   sim_.start(ids);
 }
 
-shared::GameState LocalSession::step(const shared::PlayerInput &input,
-                                     float dt) {
-  std::array<std::optional<shared::PlayerInput>, shared::MAX_PLAYERS> inputs{};
-  inputs[0] = input;
+LocalMode LocalSession::getMode() const { return mode_; }
+
+shared::GameState LocalSession::step(
+    const std::array<std::optional<shared::PlayerInput>, shared::MAX_PLAYERS>
+        &inputs,
+    float dt) {
   sim_.step(state_, inputs, dt);
   return state_;
 }
@@ -42,9 +49,11 @@ OnlineSession::OnlineSession(const std::string &url)
   client_.connect();
 }
 
-shared::GameState OnlineSession::step(const shared::PlayerInput &input,
-                                      float dt) {
-  client_.send(nlohmann::json(input).dump());
+shared::GameState OnlineSession::step(
+    const std::array<std::optional<shared::PlayerInput>, shared::MAX_PLAYERS>
+        &inputs,
+    float dt) {
+  client_.send(nlohmann::json(inputs[0]).dump());
 
   if (auto s = state_box_.take()) {
     last_update_time_ = std::chrono::steady_clock::now();
