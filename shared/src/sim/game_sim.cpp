@@ -11,22 +11,28 @@
 
 using namespace shared;
 
-void GameSim::start(std::array<uint8_t, MAX_PLAYERS> &player_ids) {
+void GameSim::start(
+    std::array<std::optional<uint8_t>, MAX_PLAYERS> &player_ids) {
   RndGenerator::seed();
 
   for (std::size_t idx = 0; idx < players_.size(); ++idx) {
-    players_[idx].init(player_ids[idx]);
+    if (player_ids[idx].has_value()) {
+      players_[idx].emplace();
+      players_[idx]->init(player_ids[idx].value());
+    }
   }
 
   bullets_pool_.fill(BulletSimState());
 
   enemies_pool_.init();
+  boss_ = BossSimState();
   phase_ = GamePhase::ENEMIES_ENTRANCE;
 }
 
-void GameSim::step(GameState &state,
-                   const std::array<PlayerInput, MAX_PLAYERS> &inputs,
-                   float dt) {
+void GameSim::step(
+    GameState &state,
+    const std::array<std::optional<PlayerInput>, MAX_PLAYERS> &inputs,
+    float dt) {
   bool can_fire_bullets =
       phase_ == GamePhase::FIGHT_ENEMIES || phase_ == GamePhase::FIGHT_BOSS;
 
@@ -36,16 +42,21 @@ void GameSim::step(GameState &state,
   for (std::size_t idx = 0; idx < players_.size(); ++idx) {
     auto &player = players_[idx];
 
-    if (player.lives > 0) {
+    if (!player.has_value())
+      continue;
+
+    if (player->lives > 0) {
       all_players_dead = false;
-      player_positions[idx] = player.position;
+      player_positions[idx] = player->position;
 
       auto player_input =
-          std::find_if(inputs.begin(), inputs.end(),
-                       [&](const auto &i) { return i.player_id == player.id; });
+          std::find_if(inputs.begin(), inputs.end(), [&](const auto &i) {
+            return i.has_value() && i->player_id == player->id;
+          });
 
-      if (player_input != inputs.end()) {
-        player.step(*player_input, dt, bullets_pool_, can_fire_bullets);
+      if (player_input != inputs.end() && player_input->has_value()) {
+        player->step(player_input->value(), dt, bullets_pool_,
+                     can_fire_bullets);
       }
     }
   }
@@ -118,10 +129,17 @@ void GameSim::setGameState(GameState &state) {
 
   for (std::size_t idx = 0; idx < players_.size(); ++idx) {
     auto &player = players_[idx];
-    state.players[idx].position = player.position;
-    state.players[idx].lives = player.lives;
-    state.players[idx].points = player.points;
-    state.players[idx].id = player.id;
+
+    if (!player.has_value())
+      continue;
+
+    if (!state.players[idx].has_value())
+      state.players[idx].emplace();
+
+    state.players[idx]->position = player->position;
+    state.players[idx]->lives = player->lives;
+    state.players[idx]->points = player->points;
+    state.players[idx]->id = player->id;
   }
 
   state.phase = static_cast<uint8_t>(phase_);
@@ -163,8 +181,8 @@ void GameSim::checkCollisions() {
 
             boss_.health--;
             for (auto &player : players_) {
-              if (player.id == bullet.owner_id) {
-                player.points += POINTS_PER_HIT;
+              if (player.has_value() && player->id == bullet.owner_id) {
+                player->points += POINTS_PER_HIT;
                 break;
               }
             }
@@ -182,8 +200,8 @@ void GameSim::checkCollisions() {
               enemy.alive = false;
               bullet.active = false;
               for (auto &player : players_) {
-                if (player.id == bullet.owner_id) {
-                  player.points += POINTS_PER_HIT;
+                if (player.has_value() && player->id == bullet.owner_id) {
+                  player->points += POINTS_PER_HIT;
                   break;
                 }
               }
@@ -193,13 +211,13 @@ void GameSim::checkCollisions() {
         }
       } else if (bullet.type == BulletType::ENEMY) {
         for (auto &player : players_) {
-          if (player.lives > 0 &&
+          if (player.has_value() && player->lives > 0 &&
               rectIntersection(
                   bullet.position, BulletSimState::WIDTH / 2,
-                  BulletSimState::HEIGHT / 2, player.position,
+                  BulletSimState::HEIGHT / 2, player->position,
                   PlayerSimState::SIZE * PlayerSimState::HITBOX_SCALE / 2,
                   PlayerSimState::SIZE * PlayerSimState::HITBOX_SCALE / 2)) {
-            player.lives--;
+            player->lives--;
             bullet.active = false;
           }
         }
