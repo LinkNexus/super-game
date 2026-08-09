@@ -21,6 +21,9 @@ void Game::init() {
   state_ = shared::GameState();
   inputs_[1] = std::nullopt;
 
+  // keep a copy of the previous state for detecting events
+  prev_state_ = state_;
+
   for (auto &s : stars_)
     s.initRandom(shared::SCREEN_WIDTH, shared::SCREEN_HEIGHT);
 }
@@ -67,6 +70,17 @@ void Game::run() {
 
   init();
 
+  // initialize audio device and load SFX
+  InitAudioDevice();
+  if (IsAudioDeviceReady()) {
+    audio_ready_ = true;
+    shoot_sfx_ = LoadSound("assets/shoot.wav");
+    explosion_sfx_ = LoadSound("assets/explosion.wav");
+    boss_hit_sfx_ = LoadSound("assets/boss_hit.wav");
+  } else {
+    audio_ready_ = false;
+  }
+
   player_.loadTexture();
   Enemy::loadTextures();
   boss_.loadTexture();
@@ -103,10 +117,26 @@ void Game::run() {
 
       if (screen_ == Screen::PLAYING) {
         getPlayersInputs();
-        auto previous_state = state_;
         if (session_)
           state_ = session_->step(inputs_, shared::FIXED_DT);
-        spawnEnemyExplosions(previous_state, state_);
+
+        // play sounds for events (enemy death, boss hit)
+        if (audio_ready_) {
+          for (std::size_t idx = 0; idx < state_.enemies.size(); ++idx) {
+            if (prev_state_.enemies[idx][0] == 1 &&
+                state_.enemies[idx][0] == 0) {
+              PlaySound(explosion_sfx_);
+            }
+          }
+
+          if (prev_state_.boss.active && state_.boss.active &&
+              prev_state_.boss.health > state_.boss.health) {
+            PlaySound(boss_hit_sfx_);
+          }
+        }
+
+        spawnEnemyExplosions(prev_state_, state_);
+        prev_state_ = state_;
       }
 
       if (screen_ != Screen::GAME_OVER && screen_ != Screen::WIN) {
@@ -137,6 +167,12 @@ void Game::run() {
   player_.unload();
   Enemy::unloadTextures();
   boss_.unload();
+  if (audio_ready_) {
+    UnloadSound(shoot_sfx_);
+    UnloadSound(explosion_sfx_);
+    UnloadSound(boss_hit_sfx_);
+    CloseAudioDevice();
+  }
   CloseWindow();
 }
 
@@ -195,6 +231,10 @@ void Game::handleInput() {
   case Screen::PLAYING:
     if (IsKeyPressed(KEY_ESCAPE))
       screen_ = Screen::PAUSED;
+    if (IsKeyPressed(KEY_SPACE)) {
+      if (audio_ready_)
+        PlaySound(shoot_sfx_);
+    }
     break;
 
   case Screen::PAUSED:

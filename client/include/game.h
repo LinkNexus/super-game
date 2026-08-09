@@ -62,6 +62,13 @@ private:
   std::optional<LocalMode> selected_local_mode_{};
   std::unique_ptr<Session> session_ = nullptr;
   shared::GameState state_;
+  shared::GameState prev_state_;
+
+  // audio
+  Sound shoot_sfx_;
+  Sound explosion_sfx_;
+  Sound boss_hit_sfx_;
+  bool audio_ready_ = false;
   float status_text_offset_y_ = 10.0f;
   std::string server_url_;
 };
