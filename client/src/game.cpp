@@ -4,10 +4,16 @@
 #include "entities/player.h"
 #include "entities/star.h"
 #include "raylib.h"
+#include "session.h"
+#include "shared/constants.h"
 #include "shared/messages.h"
 #include "shared/sim/enemy_sim.h"
+#include "shared/sim/game_sim.h"
 #include <cfloat>
+#include <cmath>
 #include <cstdlib>
+
+Game::Game(std::string server_url) : server_url_(std::move(server_url)) {}
 
 void Game::update(float dt) {
   if (screen_ == Screen::CONNECTING) {
@@ -26,49 +32,53 @@ void Game::update(float dt) {
 void Game::init() {
   screen_ = Screen::MENU;
 
-  std::array<uint8_t, MAX_PLAYERS> player_ids;
-  for (uint8_t i = 0; i < MAX_PLAYERS; ++i) {
-    player_ids[i] = i;
-  }
-
-  sim_ = shared::GameSim();
-  sim_.start(player_ids);
-
+  // (session-based play) session is created when starting a game
   state_ = shared::GameState();
+  inputs_[1] = std::nullopt;
 
   // keep a copy of the previous state for detecting events
   prev_state_ = state_;
 
   for (auto &s : stars_)
-    s.initRandom(SCREEN_WIDTH, SCREEN_HEIGHT);
-
-  shared::PlayerInput input{
-      .tick = 42, .buttons = shared::BUTTON_LEFT, .player_id = 0};
-
-  nlohmann::json j = input;
-  std::string wire = j.dump();
-
-  std::printf("Serialized PlayerInput: %s\n", wire.c_str());
-
-  auto received = nlohmann::json::parse(wire).get<shared::PlayerInput>();
-  assert(received.tick == input.tick);
+    s.initRandom(shared::SCREEN_WIDTH, shared::SCREEN_HEIGHT);
 }
 
-shared::Button Game::getPlayerInputs() {
-  shared::Button buttons = shared::BUTTON_NONE;
+void Game::getPlayersInputs() {
+  shared::Button mainPlayerButtons = shared::BUTTON_NONE;
 
   if (IsKeyDown(KEY_LEFT))
-    buttons = static_cast<shared::Button>(buttons | shared::BUTTON_LEFT);
+    mainPlayerButtons =
+        static_cast<shared::Button>(mainPlayerButtons | shared::BUTTON_LEFT);
   if (IsKeyDown(KEY_RIGHT))
-    buttons = static_cast<shared::Button>(buttons | shared::BUTTON_RIGHT);
+    mainPlayerButtons =
+        static_cast<shared::Button>(mainPlayerButtons | shared::BUTTON_RIGHT);
   if (IsKeyDown(KEY_SPACE))
-    buttons = static_cast<shared::Button>(buttons | shared::BUTTON_SHOOT);
+    mainPlayerButtons =
+        static_cast<shared::Button>(mainPlayerButtons | shared::BUTTON_SHOOT);
 
-  return buttons;
+  inputs_[0]->buttons = mainPlayerButtons;
+
+  if (LocalSession *s = dynamic_cast<LocalSession *>(session_.get())) {
+    if (s->getMode() == LocalMode::DUAL_PLAYER) {
+      auto secondPlayerButtons = shared::BUTTON_NONE;
+
+      if (IsKeyDown(KEY_A))
+        secondPlayerButtons = static_cast<shared::Button>(secondPlayerButtons |
+                                                          shared::BUTTON_LEFT);
+      if (IsKeyDown(KEY_D))
+        secondPlayerButtons = static_cast<shared::Button>(secondPlayerButtons |
+                                                          shared::BUTTON_RIGHT);
+      if (IsKeyDown(KEY_W))
+        secondPlayerButtons = static_cast<shared::Button>(secondPlayerButtons |
+                                                          shared::BUTTON_SHOOT);
+
+      inputs_[1]->buttons = secondPlayerButtons;
+    }
+  }
 }
 
 void Game::run() {
-  InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "SUPER GAME");
+  InitWindow(shared::SCREEN_WIDTH, shared::SCREEN_HEIGHT, "SUPER GAME");
   ChangeDirectory(GetApplicationDirectory());
   SetExitKey(KEY_NULL);
   SetTargetFPS(TARGET_FPS);
@@ -100,23 +110,36 @@ void Game::run() {
       frame_time = 0.1f;
     accumulator += frame_time;
 
-    while (accumulator >= FIXED_DT) {
+    while (accumulator >= shared::FIXED_DT) {
       for (auto &s : stars_)
-        s.update(FIXED_DT, SCREEN_HEIGHT, SCREEN_WIDTH);
+        s.update(shared::FIXED_DT, shared::SCREEN_HEIGHT, shared::SCREEN_WIDTH);
 
-      update(FIXED_DT);
+      if (screen_ == Screen::CONNECTING) {
+        if (OnlineSession *s = dynamic_cast<OnlineSession *>(session_.get())) {
+          if (s->getPlayerId() != 0) {
+            screen_ = Screen::LOBBY;
+          }
+        }
+      }
 
-      std::array<shared::PlayerInput, MAX_PLAYERS> inputs;
-      inputs[0].buttons = getPlayerInputs();
-      inputs[0].player_id = 0;
+      if (screen_ == Screen::LOBBY) {
+        if (OnlineSession *s = dynamic_cast<OnlineSession *>(session_.get())) {
+          if (s->getLobbyUpdate().game_started) {
+            screen_ = Screen::PLAYING;
+          }
+        }
+      }
 
       if (screen_ == Screen::PLAYING) {
-        sim_.step(state_, inputs, FIXED_DT);
+        getPlayersInputs();
+        if (session_)
+          state_ = session_->step(inputs_, shared::FIXED_DT);
 
         // play sounds for events (enemy death, boss hit)
         if (audio_ready_) {
           for (std::size_t idx = 0; idx < state_.enemies.size(); ++idx) {
-            if (prev_state_.enemies[idx][0] == 1 && state_.enemies[idx][0] == 0) {
+            if (prev_state_.enemies[idx][0] == 1 &&
+                state_.enemies[idx][0] == 0) {
               PlaySound(explosion_sfx_);
             }
           }
@@ -127,19 +150,28 @@ void Game::run() {
           }
         }
 
+        spawnEnemyExplosions(prev_state_, state_);
         prev_state_ = state_;
       }
 
       if (screen_ != Screen::GAME_OVER && screen_ != Screen::WIN) {
         auto phase = static_cast<shared::GamePhase>(state_.phase);
-        if (phase == shared::GamePhase::GAME_OVER)
-          screen_ = Screen::GAME_OVER;
-        if (phase == shared::GamePhase::WON)
-          screen_ = Screen::WIN;
+
+        if (phase == shared::GamePhase::GAME_OVER ||
+            phase == shared::GamePhase::WON) {
+          session_ = nullptr;
+          if (phase == shared::GamePhase::GAME_OVER)
+            screen_ = Screen::GAME_OVER;
+          if (phase == shared::GamePhase::WON)
+            screen_ = Screen::WIN;
+        }
       }
 
-      accumulator -= FIXED_DT;
+      accumulator -= shared::FIXED_DT;
     }
+
+    // Update particles using the real frame time so they feel smooth
+    updateParticles(frame_time);
 
     BeginDrawing();
     ClearBackground(BLACK);
@@ -168,11 +200,13 @@ void Game::handleInput() {
       mode_ = GameMode::ONLINE;
     } else if (IsKeyPressed(KEY_ENTER)) {
       if (mode_ == GameMode::ONLINE) {
+        session_ = std::make_unique<OnlineSession>(server_url_);
         screen_ = Screen::CONNECTING;
-        connection_timer_ = 0.0f;
       } else {
-        screen_ = Screen::PLAYING;
+        screen_ = Screen::SELECT_LOCAL_MODE;
+        selected_local_mode_ = LocalMode::SINGLE_PLAYER;
       }
+      inputs_[0].emplace();
     }
     break;
 
@@ -182,16 +216,36 @@ void Game::handleInput() {
     }
     break;
 
-  case Screen::WAITING:
+  case Screen::LOBBY:
     if (IsKeyPressed(KEY_ESCAPE)) {
       screen_ = Screen::MENU;
+    }
+
+    break;
+
+  case Screen::SELECT_LOCAL_MODE:
+    if (IsKeyPressed(KEY_ESCAPE)) {
+      screen_ = Screen::MENU;
+    } else if (IsKeyPressed(KEY_LEFT)) {
+      selected_local_mode_ = LocalMode::SINGLE_PLAYER;
+    } else if (IsKeyPressed(KEY_RIGHT)) {
+      selected_local_mode_ = LocalMode::DUAL_PLAYER;
+    } else if (IsKeyPressed(KEY_ENTER) && selected_local_mode_.has_value()) {
+      session_ = std::make_unique<LocalSession>(selected_local_mode_.value());
+      screen_ = Screen::PLAYING;
+
+      inputs_[0]->player_id = 1;
+
+      if (selected_local_mode_ == LocalMode::DUAL_PLAYER) {
+        inputs_[1].emplace();
+        inputs_[1]->player_id = 2;
+      }
     }
     break;
 
   case Screen::PLAYING:
-    if (IsKeyPressed(KEY_ESCAPE)) {
+    if (IsKeyPressed(KEY_ESCAPE))
       screen_ = Screen::PAUSED;
-    }
     if (IsKeyPressed(KEY_SPACE)) {
       if (audio_ready_)
         PlaySound(shoot_sfx_);
@@ -199,27 +253,35 @@ void Game::handleInput() {
     break;
 
   case Screen::PAUSED:
-    if (IsKeyPressed(KEY_ESCAPE)) {
+    if (IsKeyPressed(KEY_ESCAPE))
       screen_ = Screen::PLAYING;
-    }
+
     break;
 
   case Screen::GAME_OVER:
-    if (IsKeyPressed(KEY_ENTER)) {
+    if (IsKeyPressed(KEY_ENTER))
       init();
+<<<<<<< HEAD
     }
     if (IsKeyPressed(KEY_R)) {
       init();
     }
+=======
+
+>>>>>>> 7988e2fda4712663ce040de8c0b5f359cf8b8548
     break;
 
   case Screen::WIN:
-    if (IsKeyPressed(KEY_ENTER)) {
+    if (IsKeyPressed(KEY_ENTER))
       init();
+<<<<<<< HEAD
     }
     if (IsKeyPressed(KEY_R)) {
       init();
     }
+=======
+
+>>>>>>> 7988e2fda4712663ce040de8c0b5f359cf8b8548
     break;
   }
 }
@@ -239,41 +301,77 @@ void Game::draw() {
 
   switch (screen_) {
   case Screen::MENU:
-    DrawText("Use LEFT/RIGHT to choose mode", SCREEN_WIDTH / 2 - 180,
-             SCREEN_HEIGHT / 2 - 40, 20, WHITE);
-    DrawText("Press ENTER to confirm", SCREEN_WIDTH / 2 - 150,
-             SCREEN_HEIGHT / 2 - 10, 20, WHITE);
-    DrawText("Local", SCREEN_WIDTH / 2 - 150, SCREEN_HEIGHT / 2 + 40, 24,
+    DrawText("Use LEFT/RIGHT to choose mode", shared::SCREEN_WIDTH / 2 - 180,
+             shared::SCREEN_HEIGHT / 2 - 40, 20, WHITE);
+    DrawText("Press ENTER to confirm", shared::SCREEN_WIDTH / 2 - 150,
+             shared::SCREEN_HEIGHT / 2 - 10, 20, WHITE);
+    DrawText("Local", shared::SCREEN_WIDTH / 2 - 150,
+             shared::SCREEN_HEIGHT / 2 + 40, 24,
              mode_ == GameMode::LOCAL ? YELLOW : WHITE);
-    DrawText("Online", SCREEN_WIDTH / 2 + 50, SCREEN_HEIGHT / 2 + 40, 24,
+    DrawText("Online", shared::SCREEN_WIDTH / 2 + 50,
+             shared::SCREEN_HEIGHT / 2 + 40, 24,
              mode_ == GameMode::ONLINE ? YELLOW : WHITE);
     break;
 
   case Screen::CONNECTING:
-    DrawText("Connecting to server...", SCREEN_WIDTH / 2 - 170,
-             SCREEN_HEIGHT / 2, 24, LIGHTGRAY);
-    DrawText("Press ESC to cancel", SCREEN_WIDTH / 2 - 140,
-             SCREEN_HEIGHT / 2 + 40, 20, WHITE);
+    DrawText("Connecting to server...", shared::SCREEN_WIDTH / 2 - 170,
+             shared::SCREEN_HEIGHT / 2, 24, LIGHTGRAY);
+    DrawText("Press ESC to cancel", shared::SCREEN_WIDTH / 2 - 140,
+             shared::SCREEN_HEIGHT / 2 + 40, 20, WHITE);
     break;
 
-  case Screen::WAITING:
-    DrawText("Waiting for player 2...", SCREEN_WIDTH / 2 - 170,
-             SCREEN_HEIGHT / 2, 24, LIGHTGRAY);
-    DrawText("Press ESC to return to menu", SCREEN_WIDTH / 2 - 170,
-             SCREEN_HEIGHT / 2 + 40, 20, WHITE);
+  case Screen::LOBBY: {
+    if (OnlineSession *s = dynamic_cast<OnlineSession *>(session_.get())) {
+      auto &lobbyUpdate = s->getLobbyUpdate();
+      const auto text = "Waiting for players to join (" +
+                        std::to_string(lobbyUpdate.player_count) + "/" +
+                        std::to_string(lobbyUpdate.max_players) + " players)";
+      DrawText(text.c_str(),
+               (shared::SCREEN_WIDTH - MeasureText(text.c_str(), 20)) / 2,
+               shared::SCREEN_HEIGHT / 2, 20, WHITE);
+    }
     break;
+  }
+
+  case Screen::SELECT_LOCAL_MODE: {
+    const std::string instructions_text =
+        "Prefer single player or dual player on the same keyboard?";
+    DrawText(
+        instructions_text.c_str(),
+        (shared::SCREEN_WIDTH - MeasureText(instructions_text.c_str(), 20)) / 2,
+        shared::SCREEN_HEIGHT / 2 - 40, 20, WHITE);
+
+    const std::string confirm_text =
+        "Use LEFT/RIGHT to choose and ENTER to confirm";
+    const auto confirm_text_width = MeasureText(confirm_text.c_str(), 20);
+    const auto confirm_text_offset_x =
+        (shared::SCREEN_WIDTH - confirm_text_width) / 2;
+    DrawText(confirm_text.c_str(), confirm_text_offset_x,
+             shared::SCREEN_HEIGHT / 2 - 10, 20, WHITE);
+
+    const std::string single_player_text = "Single";
+    const std::string dual_player_text = "Dual";
+    DrawText(single_player_text.c_str(), confirm_text_offset_x,
+             shared::SCREEN_HEIGHT / 2 + 40, 24,
+             selected_local_mode_ == LocalMode::SINGLE_PLAYER ? YELLOW : WHITE);
+    DrawText(dual_player_text.c_str(),
+             confirm_text_offset_x + confirm_text_width -
+                 MeasureText(dual_player_text.c_str(), 24),
+             shared::SCREEN_HEIGHT / 2 + 40, 24,
+             selected_local_mode_ == LocalMode::DUAL_PLAYER ? YELLOW : WHITE);
+
+    break;
+  }
 
   case Screen::PLAYING:
   case Screen::PAUSED: {
-    auto player_state =
-        std::find_if(state_.players.begin(), state_.players.end(),
-                     [](auto &p) { return p.id == 0; });
-
-    if (player_state != state_.players.end())
-      player_.draw(*player_state);
+    player_.draw(session_.get(), state_.players);
 
     for (const auto &b : state_.bullets)
       drawBullet(b);
+
+    // draw particle explosions (spawned when enemies die)
+    drawParticles();
 
     for (std::size_t idx = 0; idx < state_.enemies.size(); ++idx) {
       if (state_.enemies[idx][0] == 1) {
@@ -294,11 +392,12 @@ void Game::draw() {
                                 shared::GamePhase::FIGHT_BOSS);
 
     if (screen_ == Screen::PAUSED) {
-      DrawRectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, Fade(BLACK, 0.6f));
-      DrawText("Game Paused", SCREEN_WIDTH / 2 - 100, SCREEN_HEIGHT / 2, 20,
-               WHITE);
-      DrawText("Press ESC to resume", SCREEN_WIDTH / 2 - 100,
-               SCREEN_HEIGHT / 2 + 30, 20, WHITE);
+      DrawRectangle(0, 0, shared::SCREEN_WIDTH, shared::SCREEN_HEIGHT,
+                    Fade(BLACK, 0.6f));
+      DrawText("Game Paused", shared::SCREEN_WIDTH / 2 - 100,
+               shared::SCREEN_HEIGHT / 2, 20, WHITE);
+      DrawText("Press ESC to resume", shared::SCREEN_WIDTH / 2 - 100,
+               shared::SCREEN_HEIGHT / 2 + 30, 20, WHITE);
     }
     break;
   }
@@ -309,8 +408,8 @@ void Game::draw() {
     // Draw a centered panel with final scores and animated border
     const int boxW = 440;
     const int boxH = 220;
-    const float bx = SCREEN_WIDTH / 2.0f - boxW / 2.0f;
-    const float by = SCREEN_HEIGHT / 2.0f - boxH / 2.0f;
+    const float bx = shared::SCREEN_WIDTH / 2.0f - boxW / 2.0f;
+    const float by = shared::SCREEN_HEIGHT / 2.0f - boxH / 2.0f;
     Rectangle rec{bx, by, (float)boxW, (float)boxH};
     DrawRectangleRec(rec, Fade(BLACK, 0.75f));
 
@@ -400,4 +499,107 @@ void Game::draw() {
   }
 
   DrawFPS(10, 10);
+}
+
+// --- Particle system implementation ---
+
+void Game::updateParticles(float dt) {
+  for (auto &p : particles_) {
+    if (p.lifetime <= 0.0f)
+      continue;
+
+    p.position.x += p.velocity.x * dt;
+    p.position.y += p.velocity.y * dt;
+
+    // simple damping and slight gravity
+    p.velocity.x *= 0.98f;
+    p.velocity.y *= 0.98f;
+    p.velocity.y += 20.0f * dt;
+
+    p.lifetime -= dt;
+    if (p.lifetime < 0.0f)
+      p.lifetime = 0.0f;
+  }
+}
+
+void Game::drawParticles() const {
+  for (const auto &p : particles_) {
+    if (p.lifetime <= 0.0f)
+      continue;
+
+    float ratio = p.lifetime / p.max_lifetime;
+    if (ratio < 0.0f)
+      ratio = 0.0f;
+    if (ratio > 1.0f)
+      ratio = 1.0f;
+
+    Color c = p.color;
+    c.a = static_cast<unsigned char>(255.0f * ratio);
+
+    if (p.size <= 3.0f) {
+      DrawCircleV(p.position, p.size, c);
+    } else {
+      DrawRectangleV(
+          {p.position.x - p.size / 2.0f, p.position.y - p.size / 2.0f},
+          {p.size, p.size}, c);
+    }
+  }
+}
+
+void Game::spawnExplosion(const Vector2 &pos, shared::EnemyType type) {
+  constexpr float kPI = 3.14159265358979323846f;
+  int count = 8 + GetRandomValue(0, 4); // 8..12 particles
+
+  for (int i = 0; i < count; ++i) {
+    // find a free particle slot
+    for (auto &p : particles_) {
+      if (p.lifetime > 0.0f)
+        continue;
+
+      float angle = GetRandomValue(0, 360) * (kPI / 180.0f);
+      float speed = static_cast<float>(GetRandomValue(40, 200));
+
+      p.position = pos;
+      p.velocity = {std::cos(angle) * speed, std::sin(angle) * speed};
+      p.lifetime = 0.35f + GetRandomValue(0, 50) / 100.0f; // 0.35 - 0.85s
+      p.max_lifetime = p.lifetime;
+      p.size = static_cast<float>(GetRandomValue(2, 6));
+
+      switch (type) {
+      case shared::EnemyType::TYPE_1:
+        p.color = ORANGE;
+        break;
+      case shared::EnemyType::TYPE_2:
+        p.color = PURPLE;
+        break;
+      default:
+        p.color = GOLD;
+        break;
+      }
+
+      break; // next particle
+    }
+  }
+}
+
+void Game::spawnEnemyExplosions(const shared::GameState &before,
+                                const shared::GameState &after) {
+  for (std::size_t idx = 0; idx < after.enemies.size(); ++idx) {
+    bool was_alive = before.enemies[idx][0] != 0;
+    bool is_alive = after.enemies[idx][0] != 0;
+
+    if (was_alive && !is_alive) {
+      float pos_x =
+          after.enemies_offset_x + (idx % shared::EnemiesPoolSimState::COLS) *
+                                       (shared::EnemySimState::WIDTH +
+                                        shared::EnemiesPoolSimState::SPACING_X);
+      float pos_y =
+          after.enemies_offset_y + (idx / shared::EnemiesPoolSimState::COLS) *
+                                       (shared::EnemySimState::HEIGHT +
+                                        shared::EnemiesPoolSimState::SPACING_Y);
+
+      spawnExplosion({pos_x, pos_y},
+                     static_cast<shared::EnemyType>(after.enemies[idx][1]));
+    }
+  }
 }
