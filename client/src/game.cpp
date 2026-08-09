@@ -135,7 +135,7 @@ void Game::run() {
           }
         }
 
-        spawnEnemyExplosions(previous_state, state_);
+        spawnEnemyExplosions(prev_state_, state_);
         prev_state_ = state_;
       }
 
@@ -231,31 +231,30 @@ void Game::handleInput() {
   case Screen::PLAYING:
     if (IsKeyPressed(KEY_ESCAPE))
       screen_ = Screen::PAUSED;
+    if (IsKeyPressed(KEY_SPACE)) {
+      if (audio_ready_)
+        PlaySound(shoot_sfx_);
+    }
+    break;
+
+  case Screen::PAUSED:
+    if (IsKeyPressed(KEY_ESCAPE))
+      screen_ = Screen::PLAYING;
+
+    break;
+
+  case Screen::GAME_OVER:
+    if (IsKeyPressed(KEY_ENTER))
+      init();
+
+    break;
+
+  case Screen::WIN:
+    if (IsKeyPressed(KEY_ENTER))
+      init();
+
+    break;
   }
-  if (IsKeyPressed(KEY_SPACE)) {
-    if (audio_ready_)
-      PlaySound(shoot_sfx_);
-  }
-  break;
-
-case Screen::PAUSED:
-  if (IsKeyPressed(KEY_ESCAPE))
-    screen_ = Screen::PLAYING;
-
-  break;
-
-case Screen::GAME_OVER:
-  if (IsKeyPressed(KEY_ENTER))
-    init();
-
-  break;
-
-case Screen::WIN:
-  if (IsKeyPressed(KEY_ENTER))
-    init();
-
-  break;
-}
 }
 
 void drawBullet(const shared::BulletState &state) {
