@@ -70,13 +70,21 @@ void Game::run() {
 
   init();
 
-  // initialize audio device and load SFX
+  // initialize audio device and load SFX + music
   InitAudioDevice();
   if (IsAudioDeviceReady()) {
     audio_ready_ = true;
     shoot_sfx_ = LoadSound("assets/shoot.wav");
     explosion_sfx_ = LoadSound("assets/explosion.wav");
     boss_hit_sfx_ = LoadSound("assets/boss_hit.wav");
+    background_music_ = LoadMusicStream("assets/backgroundsound.wav");
+    if (IsMusicValid(background_music_)) {
+      music_loaded_ = true;
+      target_music_volume_ = 0.0f;
+      music_volume_ = 0.0f;
+      SetMusicVolume(background_music_, 0.0f);
+      PlayMusicStream(background_music_);
+    }
   } else {
     audio_ready_ = false;
   }
@@ -98,6 +106,22 @@ void Game::run() {
     while (accumulator >= shared::FIXED_DT) {
       for (auto &s : stars_)
         s.update(shared::FIXED_DT, shared::SCREEN_HEIGHT, shared::SCREEN_WIDTH);
+
+if (audio_ready_ && music_loaded_) {
+        if (screen_ == Screen::PLAYING)
+          target_music_volume_ = 0.25f;
+        else
+          target_music_volume_ = 0.7f;
+
+        if (music_volume_ < target_music_volume_) {
+          music_volume_ = std::min(music_volume_ + MUSIC_FADE_SPEED * shared::FIXED_DT,
+                                   target_music_volume_);
+        } else if (music_volume_ > target_music_volume_) {
+          music_volume_ = std::max(music_volume_ - MUSIC_FADE_SPEED * shared::FIXED_DT,
+                                   target_music_volume_);
+        }
+        SetMusicVolume(background_music_, music_volume_);
+      }
 
       if (screen_ == Screen::CONNECTING) {
         if (OnlineSession *s = dynamic_cast<OnlineSession *>(session_.get())) {
@@ -158,6 +182,10 @@ void Game::run() {
     // Update particles using the real frame time so they feel smooth
     updateParticles(frame_time);
 
+    if (audio_ready_ && music_loaded_) {
+      UpdateMusicStream(background_music_);
+    }
+
     BeginDrawing();
     ClearBackground(BLACK);
     draw();
@@ -171,6 +199,8 @@ void Game::run() {
     UnloadSound(shoot_sfx_);
     UnloadSound(explosion_sfx_);
     UnloadSound(boss_hit_sfx_);
+    if (music_loaded_)
+      UnloadMusicStream(background_music_);
     CloseAudioDevice();
   }
   CloseWindow();
