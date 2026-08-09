@@ -73,8 +73,14 @@ int main(int argc, char *argv[]) {
            .message =
                [](auto *ws, std::string_view message, uWS::OpCode opCode) {
                  auto *data = ws->getUserData();
-                 auto input =
-                     nlohmann::json::parse(message).get<shared::PlayerInput>();
+                 shared::PlayerInput input{};
+
+                 try {
+                   input = nlohmann::json::parse(message)
+                               .get<shared::PlayerInput>();
+                 } catch (const nlohmann::json::exception &e) {
+                   return;
+                 }
 
                  bool shoot_now = input.buttons & shared::Button::BUTTON_SHOOT;
                  if (shoot_now && !data->player->prev_shoot_held)
