@@ -18,6 +18,7 @@ Game::Game(std::string server_url) : server_url_(std::move(server_url)) {}
 void Game::init() {
   screen_ = Screen::MENU;
 
+  // (session-based play) session is created when starting a game
   state_ = shared::GameState();
   inputs_[1] = std::nullopt;
 
@@ -150,6 +151,9 @@ void Game::run() {
           if (phase == shared::GamePhase::WON)
             screen_ = Screen::WIN;
         }
+      } else {
+        // animate score screen border while showing final results
+        score_anim_time_ += shared::FIXED_DT;
       }
 
       accumulator -= shared::FIXED_DT;
@@ -244,13 +248,13 @@ void Game::handleInput() {
     break;
 
   case Screen::GAME_OVER:
-    if (IsKeyPressed(KEY_ENTER))
+    if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_R))
       init();
 
     break;
 
   case Screen::WIN:
-    if (IsKeyPressed(KEY_ENTER))
+    if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_R))
       init();
 
     break;
@@ -374,14 +378,109 @@ void Game::draw() {
   }
 
   case Screen::GAME_OVER:
-  case Screen::WIN:
-    DrawText(screen_ == Screen::GAME_OVER ? "Game Over" : "You Win!",
-             shared::SCREEN_WIDTH / 2 - 100, shared::SCREEN_HEIGHT / 2, 20,
-             WHITE);
-    DrawText("Press ENTER to return to menu", shared::SCREEN_WIDTH / 2 - 150,
-             shared::SCREEN_HEIGHT / 2 + 30, 20, WHITE);
+  case Screen::WIN: {
+    // Draw a centered panel with final scores and animated border
+    const int boxW = 440;
+    const int boxH = 220;
+    const float bx = shared::SCREEN_WIDTH / 2.0f - boxW / 2.0f;
+    const float by = shared::SCREEN_HEIGHT / 2.0f - boxH / 2.0f;
+    Rectangle rec{bx, by, (float)boxW, (float)boxH};
+    DrawRectangleRec(rec, Fade(BLACK, 0.75f));
 
+    // animated border pulse
+    float pulse = (sinf(score_anim_time_ * 3.0f) * 0.5f + 0.5f);
+    Color borderCol = Fade(YELLOW, 0.4f + 0.6f * pulse);
+    DrawRectangleLinesEx(rec, 4, borderCol);
+
+    std::size_t active_players = 0;
+    for (const auto &p : state_.players) {
+      if (p.has_value())
+        ++active_players;
+    }
+    const bool single_player_view = (active_players <= 1);
+
+    const auto &local_player = state_.players[0];
+    const bool local_alive = local_player.has_value() && local_player->lives > 0;
+    const char *title = nullptr;
+    if (single_player_view) {
+      title = local_alive ? "You Survived" : "Game Over";
+    } else {
+      title = (screen_ == Screen::GAME_OVER) ? "Game Over" : "Final Score";
+    }
+
+    DrawText(title,
+             (int)(shared::SCREEN_WIDTH / 2 - MeasureText(title, 32) / 2),
+             (int)(by + 12), 32, WHITE);
+
+    int y = (int)(by + 60);
+    if (single_player_view) {
+      const uint32_t points = local_player.has_value() ? local_player->points : 0;
+      const uint32_t lives = local_player.has_value() ? local_player->lives : 0;
+
+      const char *line = TextFormat("Player 1: %u points", points);
+      DrawText(line, (int)(bx + 24), y, 20, YELLOW);
+      y += 28;
+      const char *livesText = TextFormat("Lives: %u", lives);
+      DrawText(livesText, (int)(bx + 24), y, 20, LIGHTGRAY);
+      y += 40;
+
+      const char *resultText =
+          local_alive ? "Result: You survived!" : "Result: You lost";
+      DrawText(resultText,
+               (int)(shared::SCREEN_WIDTH / 2 - MeasureText(resultText, 22) / 2),
+               y, 22, WHITE);
+      y += 28;
+    } else {
+      uint32_t best_score = 0;
+      int winner_id = 0;
+      int best_lives = -1;
+      bool tie = false;
+
+      for (const auto &p : state_.players) {
+        if (!p.has_value() || p->id >= shared::MAX_PLAYERS)
+          continue;
+
+        const char *line = TextFormat("Player %d: %u pts | %u lives",
+                                      p->id + 1, p->points, p->lives);
+        Color col = (p->id == 0) ? YELLOW : LIGHTGRAY;
+        DrawText(line, (int)(bx + 24), y, 20, col);
+        y += 28;
+
+        if (best_lives < 0 || p->lives > (uint32_t)best_lives) {
+          best_lives = p->lives;
+          best_score = p->points;
+          winner_id = p->id;
+          tie = false;
+        } else if (p->lives == (uint32_t)best_lives) {
+          if (p->points > best_score) {
+            best_score = p->points;
+            winner_id = p->id;
+            tie = false;
+          } else if (p->points == best_score) {
+            tie = true;
+          }
+        }
+      }
+
+      y += 8;
+      const char *winLine;
+      if (tie) {
+        winLine = "Result: Tie";
+      } else {
+        winLine = TextFormat("Winner: Player %d", winner_id + 1);
+      }
+      DrawText(winLine,
+               (int)(shared::SCREEN_WIDTH / 2 - MeasureText(winLine, 24) / 2),
+               y, 24, WHITE);
+      y += 32;
+    }
+
+    const char *controls = "Press R to restart or ENTER to return to menu";
+    DrawText(controls,
+             (int)(shared::SCREEN_WIDTH / 2 - MeasureText(controls, 18) / 2),
+             (int)(by + boxH - 30), 18, LIGHTGRAY);
     break;
+  }
   }
 
   DrawFPS(10, 10);

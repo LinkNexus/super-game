@@ -1,7 +1,7 @@
 #pragma once
 
 #include "ixwebsocket/IXWebSocket.h"
-#include <memory>
+#include <functional>
 #include <string>
 
 class NetworkClient {

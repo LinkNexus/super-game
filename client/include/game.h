@@ -69,6 +69,8 @@ private:
   Sound explosion_sfx_;
   Sound boss_hit_sfx_;
   bool audio_ready_ = false;
+
+  float score_anim_time_ = 0.0f;
   float status_text_offset_y_ = 10.0f;
   std::string server_url_;
 };
