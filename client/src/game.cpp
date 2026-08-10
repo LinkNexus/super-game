@@ -15,20 +15,6 @@
 
 Game::Game(std::string server_url) : server_url_(std::move(server_url)) {}
 
-void Game::update(float dt) {
-  if (screen_ == Screen::CONNECTING) {
-    connection_timer_ += dt;
-    if (connection_timer_ > 1.0f) {
-      screen_ = Screen::WAITING;
-    }
-  }
-
-  // animate score screen border when showing final results
-  if (screen_ == Screen::GAME_OVER || screen_ == Screen::WIN) {
-    score_anim_time_ += dt;
-  }
-}
-
 void Game::init() {
   screen_ = Screen::MENU;
 
@@ -165,6 +151,9 @@ void Game::run() {
           if (phase == shared::GamePhase::WON)
             screen_ = Screen::WIN;
         }
+      } else {
+        // animate score screen border while showing final results
+        score_anim_time_ += shared::FIXED_DT;
       }
 
       accumulator -= shared::FIXED_DT;
@@ -259,29 +248,15 @@ void Game::handleInput() {
     break;
 
   case Screen::GAME_OVER:
-    if (IsKeyPressed(KEY_ENTER))
+    if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_R))
       init();
-<<<<<<< HEAD
-    }
-    if (IsKeyPressed(KEY_R)) {
-      init();
-    }
-=======
 
->>>>>>> 7988e2fda4712663ce040de8c0b5f359cf8b8548
     break;
 
   case Screen::WIN:
-    if (IsKeyPressed(KEY_ENTER))
+    if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_R))
       init();
-<<<<<<< HEAD
-    }
-    if (IsKeyPressed(KEY_R)) {
-      init();
-    }
-=======
 
->>>>>>> 7988e2fda4712663ce040de8c0b5f359cf8b8548
     break;
   }
 }
@@ -403,8 +378,7 @@ void Game::draw() {
   }
 
   case Screen::GAME_OVER:
-  case Screen::WIN:
-  {
+  case Screen::WIN: {
     // Draw a centered panel with final scores and animated border
     const int boxW = 440;
     const int boxH = 220;
@@ -418,32 +392,42 @@ void Game::draw() {
     Color borderCol = Fade(YELLOW, 0.4f + 0.6f * pulse);
     DrawRectangleLinesEx(rec, 4, borderCol);
 
-    const bool local_mode = (mode_ == GameMode::LOCAL);
-    const bool local_won = state_.players[0].lives > 0 &&
-                           static_cast<shared::GamePhase>(state_.phase) == shared::GamePhase::WON;
-    const bool local_alive = state_.players[0].lives > 0;
+    std::size_t active_players = 0;
+    for (const auto &p : state_.players) {
+      if (p.has_value())
+        ++active_players;
+    }
+    const bool single_player_view = (active_players <= 1);
 
+    const auto &local_player = state_.players[0];
+    const bool local_alive = local_player.has_value() && local_player->lives > 0;
     const char *title = nullptr;
-    if (local_mode) {
+    if (single_player_view) {
       title = local_alive ? "You Survived" : "Game Over";
     } else {
       title = (screen_ == Screen::GAME_OVER) ? "Game Over" : "Final Score";
     }
 
-    DrawText(title, (int)(SCREEN_WIDTH / 2 - MeasureText(title, 32) / 2),
+    DrawText(title,
+             (int)(shared::SCREEN_WIDTH / 2 - MeasureText(title, 32) / 2),
              (int)(by + 12), 32, WHITE);
 
     int y = (int)(by + 60);
-    if (local_mode) {
-      const char *line = TextFormat("Player 1: %u points", state_.players[0].points);
+    if (single_player_view) {
+      const uint32_t points = local_player.has_value() ? local_player->points : 0;
+      const uint32_t lives = local_player.has_value() ? local_player->lives : 0;
+
+      const char *line = TextFormat("Player 1: %u points", points);
       DrawText(line, (int)(bx + 24), y, 20, YELLOW);
       y += 28;
-      const char *livesText = TextFormat("Lives: %u", state_.players[0].lives);
+      const char *livesText = TextFormat("Lives: %u", lives);
       DrawText(livesText, (int)(bx + 24), y, 20, LIGHTGRAY);
       y += 40;
 
-      const char *resultText = local_alive ? "Result: You survived!" : "Result: You lost";
-      DrawText(resultText, (int)(SCREEN_WIDTH / 2 - MeasureText(resultText, 22) / 2),
+      const char *resultText =
+          local_alive ? "Result: You survived!" : "Result: You lost";
+      DrawText(resultText,
+               (int)(shared::SCREEN_WIDTH / 2 - MeasureText(resultText, 22) / 2),
                y, 22, WHITE);
       y += 28;
     } else {
@@ -453,26 +437,26 @@ void Game::draw() {
       bool tie = false;
 
       for (const auto &p : state_.players) {
-        if (p.id >= MAX_PLAYERS)
+        if (!p.has_value() || p->id >= shared::MAX_PLAYERS)
           continue;
 
-        const char *line = TextFormat("Player %d: %u pts | %u lives", p.id + 1,
-                                     p.points, p.lives);
-        Color col = (p.id == 0) ? YELLOW : LIGHTGRAY;
+        const char *line = TextFormat("Player %d: %u pts | %u lives",
+                                      p->id + 1, p->points, p->lives);
+        Color col = (p->id == 0) ? YELLOW : LIGHTGRAY;
         DrawText(line, (int)(bx + 24), y, 20, col);
         y += 28;
 
-        if (best_lives < 0 || p.lives > (uint32_t)best_lives) {
-          best_lives = p.lives;
-          best_score = p.points;
-          winner_id = p.id;
+        if (best_lives < 0 || p->lives > (uint32_t)best_lives) {
+          best_lives = p->lives;
+          best_score = p->points;
+          winner_id = p->id;
           tie = false;
-        } else if (p.lives == (uint32_t)best_lives) {
-          if (p.points > best_score) {
-            best_score = p.points;
-            winner_id = p.id;
+        } else if (p->lives == (uint32_t)best_lives) {
+          if (p->points > best_score) {
+            best_score = p->points;
+            winner_id = p->id;
             tie = false;
-          } else if (p.points == best_score) {
+          } else if (p->points == best_score) {
             tie = true;
           }
         }
@@ -485,14 +469,15 @@ void Game::draw() {
       } else {
         winLine = TextFormat("Winner: Player %d", winner_id + 1);
       }
-      DrawText(winLine, (int)(SCREEN_WIDTH / 2 - MeasureText(winLine, 24) / 2),
+      DrawText(winLine,
+               (int)(shared::SCREEN_WIDTH / 2 - MeasureText(winLine, 24) / 2),
                y, 24, WHITE);
       y += 32;
     }
 
     const char *controls = "Press R to restart or ENTER to return to menu";
     DrawText(controls,
-             (int)(SCREEN_WIDTH / 2 - MeasureText(controls, 18) / 2),
+             (int)(shared::SCREEN_WIDTH / 2 - MeasureText(controls, 18) / 2),
              (int)(by + boxH - 30), 18, LIGHTGRAY);
     break;
   }

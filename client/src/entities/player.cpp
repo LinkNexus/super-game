@@ -1,6 +1,7 @@
 #include "entities/player.h"
 #include "constants.h"
 #include "raylib.h"
+#include "shared/math_utils.h"
 #include "shared/messages.h"
 #include "shared/sim/player_sim.h"
 
@@ -19,85 +20,44 @@ void Player::unload() {
   }
 }
 
-<<<<<<< HEAD
-void Player::draw(const shared::PlayerState &state) const {
-  auto size = shared::PlayerSimState::SIZE;
+void Player::drawPlayer(const shared::Vec2D position, bool main) const {
+  const auto size = shared::PlayerSimState::SIZE;
 
   if (texture.id != 0) {
     float scale = (size * 2.0f) / texture.width;
-    Vector2 draw_pos = {state.position.x - (texture.width * scale) / 2.0f,
-                        state.position.y - (texture.height * scale) / 2.0f};
-    DrawTextureEx(texture, draw_pos, 0.0f, scale, WHITE);
+    Vector2 draw_pos = {position.x - (texture.width * scale) / 2.0f,
+                        position.y - (texture.height * scale) / 2.0f};
+
+    Color tint = !main ? SKYBLUE : WHITE;
+    DrawTextureEx(texture, draw_pos, 0.0f, scale, tint);
   } else {
-    Vector2 tip = {state.position.x, state.position.y - size};
-    Vector2 left = {state.position.x - size * 0.7f,
-                    state.position.y + size * 0.7f};
-    Vector2 right = {state.position.x + size * 0.7f,
-                     state.position.y + size * 0.7f};
-    DrawTriangle(tip, left, right, SKYBLUE);
+    Vector2 tip = {position.x, position.y - size};
+    Vector2 left = {position.x - size * 0.7f, position.y + size * 0.7f};
+    Vector2 right = {position.x + size * 0.7f, position.y + size * 0.7f};
+    Color shipColor = main ? PURPLE : SKYBLUE;
+    DrawTriangle(tip, left, right, shipColor);
     DrawTriangleLines(tip, left, right, WHITE);
   }
+}
 
-  for (int i = 0; i < state.lives; i++) {
-    float x = SCREEN_WIDTH - 10 - HEART_SIZE - i * (HEART_SIZE + HEART_SPACING);
-    #include "shared/math_utils.h"
+void Player::drawLives(uint8_t lives, float y_offset) const {
+  for (int i = 0; i < lives; i++) {
+    float x = shared::SCREEN_WIDTH - 10 - HEART_SIZE -
+              i * (HEART_SIZE + HEART_SPACING);
 
-    void Player::drawPlayer(const shared::Vec2D position, bool main) const {
-      const auto size = shared::PlayerSimState::SIZE;
-
-      if (texture.id != 0) {
-        float scale = (size * 2.0f) / texture.width;
-        Vector2 draw_pos = {position.x - (texture.width * scale) / 2.0f,
-                            position.y - (texture.height * scale) / 2.0f};
-
-        Color tint = !main ? SKYBLUE : WHITE;
-        DrawTextureEx(texture, draw_pos, 0.0f, scale, tint);
-      } else {
-        Vector2 tip = {position.x, position.y - size};
-        Vector2 left = {position.x - size * 0.7f, position.y + size * 0.7f};
-        Vector2 right = {position.x + size * 0.7f, position.y + size * 0.7f};
-        Color shipColor = main ? PURPLE : SKYBLUE;
-        DrawTriangle(tip, left, right, shipColor);
-        DrawTriangleLines(tip, left, right, WHITE);
-      }
-    }
-
-    void Player::drawLives(uint8_t lives, float y_offset) const {
-      for (int i = 0; i < lives; i++) {
-        float x = shared::SCREEN_WIDTH - 10 - HEART_SIZE -
-                  i * (HEART_SIZE + HEART_SPACING);
-
-        if (heart_texture_.id != 0) {
-          float scale = HEART_SIZE / heart_texture_.width;
-          DrawTextureEx(heart_texture_, {x, y_offset}, 0.0f, scale, WHITE);
-        } else {
-          float cx = x + HEART_SIZE / 2.0f;
-          float lobe_r = HEART_SIZE * 0.28f;
-          float lobe_y = y_offset + lobe_r;
-          DrawCircle(cx - lobe_r, lobe_y, lobe_r, RED);
-          DrawCircle(cx + lobe_r, lobe_y, lobe_r, RED);
-          Vector2 bottom = {cx, y_offset + HEART_SIZE};
-          Vector2 leftPt = {x, lobe_y};
-          Vector2 rightPt = {x + HEART_SIZE, lobe_y};
-          DrawTriangle(leftPt, bottom, rightPt, RED);
-        }
-      }
+    if (heart_texture_.id != 0) {
+      float scale = HEART_SIZE / heart_texture_.width;
+      DrawTextureEx(heart_texture_, {x, y_offset}, 0.0f, scale, WHITE);
+    } else {
+      float cx = x + HEART_SIZE / 2.0f;
+      float lobe_r = HEART_SIZE * 0.28f;
       float lobe_y = y_offset + lobe_r;
       DrawCircle(cx - lobe_r, lobe_y, lobe_r, RED);
       DrawCircle(cx + lobe_r, lobe_y, lobe_r, RED);
       Vector2 bottom = {cx, y_offset + HEART_SIZE};
->>>>>>> 7988e2fda4712663ce040de8c0b5f359cf8b8548
       Vector2 leftPt = {x, lobe_y};
       Vector2 rightPt = {x + HEART_SIZE, lobe_y};
       DrawTriangle(leftPt, bottom, rightPt, RED);
     }
   }
-<<<<<<< HEAD
-
-  const char *points_text = TextFormat("Points: %d", state.points);
-  DrawText(points_text,
-           SCREEN_WIDTH - 10 - MeasureText(points_text, STATUS_FONT_SIZE),
-           10 + HEART_SIZE, STATUS_FONT_SIZE, WHITE);
-=======
->>>>>>> 7988e2fda4712663ce040de8c0b5f359cf8b8548
 }
