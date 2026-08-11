@@ -79,6 +79,7 @@ struct BossState {
   Vec2D position;
   uint8_t active;
   uint32_t health;
+  uint32_t max_health;
 };
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(BossState, position, active, health)
 

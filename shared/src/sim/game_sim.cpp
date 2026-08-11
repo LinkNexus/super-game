@@ -165,6 +165,7 @@ void GameSim::setGameState(GameState &state) {
   state.boss.position = boss_.position;
   state.boss.active = boss_.active;
   state.boss.health = boss_.health;
+  state.boss.max_health = boss_.max_health;
 }
 
 void GameSim::checkCollisions() {

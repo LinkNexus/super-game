@@ -15,6 +15,14 @@
 
 Game::Game(std::string server_url) : server_url_(std::move(server_url)) {}
 
+void Game::restart() {
+  if (mode_ == GameMode::LOCAL) {
+    startLocalSession(selected_local_mode_.value(), Screen::PLAYING);
+  } else {
+    startOnlineSession();
+  }
+}
+
 void Game::init() {
   screen_ = Screen::MENU;
 
@@ -108,18 +116,20 @@ void Game::run() {
       for (auto &s : stars_)
         s.update(shared::FIXED_DT, shared::SCREEN_HEIGHT, shared::SCREEN_WIDTH);
 
-if (audio_ready_ && music_loaded_) {
+      if (audio_ready_ && music_loaded_) {
         if (screen_ == Screen::PLAYING)
           target_music_volume_ = 0.25f;
         else
           target_music_volume_ = 0.7f;
 
         if (music_volume_ < target_music_volume_) {
-          music_volume_ = std::min(music_volume_ + MUSIC_FADE_SPEED * shared::FIXED_DT,
-                                   target_music_volume_);
+          music_volume_ =
+              std::min(music_volume_ + MUSIC_FADE_SPEED * shared::FIXED_DT,
+                       target_music_volume_);
         } else if (music_volume_ > target_music_volume_) {
-          music_volume_ = std::max(music_volume_ - MUSIC_FADE_SPEED * shared::FIXED_DT,
-                                   target_music_volume_);
+          music_volume_ =
+              std::max(music_volume_ - MUSIC_FADE_SPEED * shared::FIXED_DT,
+                       target_music_volume_);
         }
         SetMusicVolume(background_music_, music_volume_);
       }
@@ -210,6 +220,30 @@ if (audio_ready_ && music_loaded_) {
   CloseWindow();
 }
 
+void Game::startLocalSession(LocalMode mode, Screen startScreen) {
+  selected_local_mode_ = mode;
+  session_ = std::make_unique<LocalSession>(mode);
+  screen_ = Screen::PLAYING;
+
+  inputs_[0].emplace();
+  inputs_[0]->player_id = 1;
+
+  if (mode == LocalMode::DUAL_PLAYER) {
+    inputs_[1].emplace();
+    inputs_[1]->player_id = 2;
+  }
+
+  state_ = shared::GameState();
+  prev_state_ = state_;
+  screen_ = startScreen;
+}
+
+void Game::startOnlineSession() {
+  inputs_[0].emplace();
+  session_ = std::make_unique<OnlineSession>(server_url_);
+  screen_ = Screen::CONNECTING;
+}
+
 void Game::handleInput() {
   switch (screen_) {
   case Screen::MENU:
@@ -219,13 +253,10 @@ void Game::handleInput() {
       mode_ = GameMode::ONLINE;
     } else if (IsKeyPressed(KEY_ENTER)) {
       if (mode_ == GameMode::ONLINE) {
-        session_ = std::make_unique<OnlineSession>(server_url_);
-        screen_ = Screen::CONNECTING;
+        startOnlineSession();
       } else {
-        screen_ = Screen::SELECT_LOCAL_MODE;
-        selected_local_mode_ = LocalMode::SINGLE_PLAYER;
+        startLocalSession(LocalMode::SINGLE_PLAYER, Screen::SELECT_LOCAL_MODE);
       }
-      inputs_[0].emplace();
     }
     break;
 
@@ -278,14 +309,18 @@ void Game::handleInput() {
     break;
 
   case Screen::GAME_OVER:
-    if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_R))
+    if (IsKeyPressed(KEY_ENTER))
       init();
+    if (IsKeyPressed(KEY_R))
+      restart();
 
     break;
 
   case Screen::WIN:
-    if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_R))
+    if (IsKeyPressed(KEY_ENTER))
       init();
+    if (IsKeyPressed(KEY_R))
+      restart();
 
     break;
   }
@@ -308,11 +343,13 @@ void Game::draw() {
   case Screen::MENU: {
     const std::string title = "THE SUPER GAME";
     const int title_size = 64;
-    const int title_x = (shared::SCREEN_WIDTH - MeasureText(title.c_str(), title_size)) / 2;
+    const int title_x =
+        (shared::SCREEN_WIDTH - MeasureText(title.c_str(), title_size)) / 2;
     DrawText(title.c_str(), title_x, 120, title_size, YELLOW);
 
     const std::string subtitle = "Press ENTER to play";
-    const int subtitle_x = (shared::SCREEN_WIDTH - MeasureText(subtitle.c_str(), 24)) / 2;
+    const int subtitle_x =
+        (shared::SCREEN_WIDTH - MeasureText(subtitle.c_str(), 24)) / 2;
     DrawText(subtitle.c_str(), subtitle_x, 220, 24, WHITE);
 
     DrawText("Mode selection:", shared::SCREEN_WIDTH / 2 - 180,
@@ -442,86 +479,21 @@ void Game::draw() {
     Color borderCol = Fade(YELLOW, 0.4f + 0.6f * pulse);
     DrawRectangleLinesEx(rec, 4, borderCol);
 
-    std::size_t active_players = 0;
-    for (const auto &p : state_.players) {
-      if (p.has_value())
-        ++active_players;
-    }
-    const bool single_player_view = (active_players <= 1);
-
-    const auto &local_player = state_.players[0];
-    const bool local_alive = local_player.has_value() && local_player->lives > 0;
-    const char *title = nullptr;
-    if (single_player_view) {
-      title = local_alive ? "You Survived" : "Game Over";
-    } else {
-      title = (screen_ == Screen::GAME_OVER) ? "Game Over" : "Final Score";
-    }
+    const char *title = (screen_ == Screen::WIN) ? "Victory!" : "Game Over";
 
     DrawText(title,
              (int)(shared::SCREEN_WIDTH / 2 - MeasureText(title, 32) / 2),
              (int)(by + 12), 32, WHITE);
 
     int y = (int)(by + 60);
-    if (single_player_view) {
-      const uint32_t points = local_player.has_value() ? local_player->points : 0;
-      const uint32_t lives = local_player.has_value() ? local_player->lives : 0;
+    for (const auto &p : state_.players) {
+      if (!p.has_value())
+        continue;
 
-      const char *line = TextFormat("Player 1: %u points", points);
-      DrawText(line, (int)(bx + 24), y, 20, YELLOW);
-      y += 28;
-      const char *livesText = TextFormat("Lives: %u", lives);
-      DrawText(livesText, (int)(bx + 24), y, 20, LIGHTGRAY);
-      y += 40;
-
-      const char *resultText =
-          local_alive ? "Result: You survived!" : "Result: You lost";
-      DrawText(resultText,
-               (int)(shared::SCREEN_WIDTH / 2 - MeasureText(resultText, 22) / 2),
-               y, 22, WHITE);
-      y += 28;
-    } else {
-      uint32_t best_score = 0;
-      int winner_id = 0;
-      int best_lives = -1;
-      bool tie = false;
-
-      for (const auto &p : state_.players) {
-        if (!p.has_value() || p->id >= shared::MAX_PLAYERS)
-          continue;
-
-        const char *line = TextFormat("Player %d: %u pts | %u lives",
-                                      p->id + 1, p->points, p->lives);
-        Color col = (p->id == 0) ? YELLOW : LIGHTGRAY;
-        DrawText(line, (int)(bx + 24), y, 20, col);
-        y += 28;
-
-        if (best_lives < 0 || p->lives > (uint32_t)best_lives) {
-          best_lives = p->lives;
-          best_score = p->points;
-          winner_id = p->id;
-          tie = false;
-        } else if (p->lives == (uint32_t)best_lives) {
-          if (p->points > best_score) {
-            best_score = p->points;
-            winner_id = p->id;
-            tie = false;
-          } else if (p->points == best_score) {
-            tie = true;
-          }
-        }
-      }
-
-      y += 8;
-      const char *winLine;
-      if (tie) {
-        winLine = "Result: Tie";
-      } else {
-        winLine = TextFormat("Winner: Player %d", winner_id + 1);
-      }
-      DrawText(winLine,
-               (int)(shared::SCREEN_WIDTH / 2 - MeasureText(winLine, 24) / 2),
-               y, 24, WHITE);
+      const char *line = TextFormat("Player %d: %u pts | %u lives", p->id,
+                                    p->points, p->lives);
+      Color col = (p->id == 1) ? YELLOW : LIGHTGRAY;
+      DrawText(line, (int)(bx + 24), y, 22, col);
       y += 32;
     }
 

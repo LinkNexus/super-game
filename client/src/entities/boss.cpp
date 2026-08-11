@@ -1,6 +1,7 @@
 #include "entities/boss.h"
 #include "shared/messages.h"
 #include "shared/sim/boss_sim.h"
+#include <algorithm>
 #include <cstddef>
 
 void Boss::loadTexture() { texture_ = LoadTexture("assets/boss.png"); }
@@ -12,9 +13,10 @@ void Boss::draw(const shared::BossState &state, bool draw_health_bar) const {
     return;
 
   float bar_x = (shared::SCREEN_WIDTH - HEALTH_BAR_WIDTH) / 2.0f;
-  float health_ratio = (float)state.health / shared::BossSimState::INITIAL_LP;
-  if (health_ratio < 0.0f)
-    health_ratio = 0.0f;
+  float health_ratio =
+      state.max_health > 0
+          ? std::clamp((float)state.health / state.max_health, 0.0f, 1.0f)
+          : 0.0f;
 
   if (draw_health_bar) {
     DrawRectangle((int)bar_x, (int)HEALTH_BAR_Y, (int)HEALTH_BAR_WIDTH,
