@@ -30,6 +30,7 @@ public:
 
 private:
   void init();
+  void restart();
   void draw();
   void handleInput();
   void getPlayersInputs();
@@ -49,6 +50,9 @@ private:
   void spawnExplosion(const Vector2 &pos, shared::EnemyType type);
   void spawnEnemyExplosions(const shared::GameState &before,
                             const shared::GameState &after);
+
+  void startLocalSession(LocalMode mode, Screen startScreen);
+  void startOnlineSession();
 
   static constexpr int MAX_PARTICLES = 128;
   std::array<Particle, MAX_PARTICLES> particles_{};

@@ -90,6 +90,17 @@ The overall approach: local game first, then server, then multiplayer.
 
 ---
 
+## Stretch ideas (post-deadline, not required for the module)
+
+Things worth continuing after August 12 for fun, not part of the graded scope — no pressure to land these before the presentation.
+
+| # | Idea | Notes |
+|---|------|-------|
+| S1 | **PvP mode (local and online)** | A real competitive mode alongside the current co-op — players fight each other instead of (or in addition to) enemies/boss. Would need: a mode-select alongside `LocalMode`/co-op online, player-vs-player collision/damage in `GameSim` (currently only `BulletType::ENEMY` bullets damage players — player bullets only hit enemies/boss), and a real win condition (last player standing) instead of the shared coop outcome. Big enough to warrant its own design pass, not a small task. |
+| S2 | **Online leaderboard with accounts** | Persistent leaderboard across matches — needs accounts/auth, a backend datastore, way more infra than the rest of this project. Not happening before the module deadline; personal-interest continuation only. |
+
+---
+
 ## Timeline at a glance
 
 ```
