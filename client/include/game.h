@@ -74,6 +74,8 @@ private:
   float music_volume_ = 0.0f;
   float target_music_volume_ = 0.0f;
   static constexpr float MUSIC_FADE_SPEED = 1.0f; // volume units per second
+
+  float score_anim_time_ = 0.0f;
   float status_text_offset_y_ = 10.0f;
   std::string server_url_;
 };
