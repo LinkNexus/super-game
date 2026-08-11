@@ -9,6 +9,7 @@
 #include <cfloat>
 #include <cstddef>
 #include <optional>
+#include <unordered_map>
 
 using namespace shared;
 
@@ -32,7 +33,18 @@ void EnemiesPoolSimState::stepEnemy(EnemySimState &enemy, std::size_t idx) {
       offset_x + (idx % COLS) * (EnemySimState::WIDTH + SPACING_X);
 }
 
-void EnemiesPoolSimState::init() {
+void EnemiesPoolSimState::init(uint8_t playersCount) {
+  if (auto res = std::find_if(ROWS_PER_PLAYERS_COUNT.begin(),
+                              ROWS_PER_PLAYERS_COUNT.end(),
+                              [playersCount](const auto &pair) {
+                                return pair.first == playersCount;
+                              });
+      res != ROWS_PER_PLAYERS_COUNT.end()) {
+    active_rows = res->second;
+  } else {
+    active_rows = MAX_ROWS;
+  }
+
   int pool_size_x = (COLS * EnemySimState::WIDTH) + (SPACING_X * (COLS - 1));
   offset_x = (SCREEN_WIDTH - pool_size_x) / 2.0f;
   offset_y = INITIAL_OFFSET_Y;
@@ -40,6 +52,11 @@ void EnemiesPoolSimState::init() {
 
   for (std::size_t idx = 0; idx < enemies.size(); ++idx) {
     auto &enemy = enemies[idx];
+
+    if (idx / COLS >= active_rows) {
+      enemy.alive = false;
+      continue;
+    }
 
     enemy.alive = true;
     stepEnemy(enemy, idx);

@@ -1,12 +1,33 @@
 #include "shared/sim/boss_sim.h"
 #include "shared/constants.h"
 #include "shared/math_utils.h"
+#include "shared/sim/bullet_sim.h"
 
 using namespace shared;
 
-void BossSimState::init() {
+void BossSimState::init(uint8_t playersCount) {
+  if (auto res = std::find_if(
+          SPREAD_SHOT_BULLETS_COUNT_PER_PLAYERS_COUNT.begin(),
+          SPREAD_SHOT_BULLETS_COUNT_PER_PLAYERS_COUNT.end(),
+          [playersCount](const auto &p) { return p.first == playersCount; });
+      res != SPREAD_SHOT_BULLETS_COUNT_PER_PLAYERS_COUNT.end()) {
+    spread_shot_bullets_count = res->second;
+  } else {
+    spread_shot_bullets_count = MAX_SPREAD_SHOT_BULLETS;
+  }
+
+  if (auto res = std::find_if(
+          SUCCESSIVE_SHOTS_BULLETS_COUNT_PER_PLAYERS_COUNT.begin(),
+          SUCCESSIVE_SHOTS_BULLETS_COUNT_PER_PLAYERS_COUNT.end(),
+          [playersCount](const auto &p) { return p.first == playersCount; });
+      res != SUCCESSIVE_SHOTS_BULLETS_COUNT_PER_PLAYERS_COUNT.end()) {
+    successive_shots_bullets_count = res->second;
+  } else {
+    successive_shots_bullets_count = MAX_SUCCESSIVE_SHOTS_BULLETS;
+  }
+
   position = {(SCREEN_WIDTH - BossSimState::WIDTH) / 2, INITIAL_POSITION_Y};
-  health = INITIAL_LP;
+  health = max_health = INITIAL_LP * playersCount;
   active = true;
   current_phase = 1;
   direction = 1;
@@ -30,16 +51,16 @@ bool BossSimState::isEntranceComplete() {
 }
 
 void BossSimState::spawnBullets(
-    float dt, std::array<shared::BulletSimState, MAX_BULLETS> &bullets,
-    std::array<std::optional<Vec2D>, MAX_PLAYERS> &players_positions) {
+    float dt, std::array<shared::BulletSimState, MAX_BULLETS> &bullets) {
   switch (shooting_pattern) {
   case BossPattern::SPREAD_SHOT: {
-    std::array<shared::BulletSimState *, SPREAD_SHOT_BULLETS_COUNT>
-        reserved_bullets{};
+    std::vector<shared::BulletSimState *> reserved_bullets(
+        spread_shot_bullets_count, nullptr);
+
     int count = 0;
 
     for (auto &b : bullets) {
-      if (count == SPREAD_SHOT_BULLETS_COUNT)
+      if (count == spread_shot_bullets_count)
         break;
 
       if (!b.active) {
@@ -48,36 +69,31 @@ void BossSimState::spawnBullets(
       }
     }
 
-    for (auto b : reserved_bullets) {
-      if (b == nullptr)
+    Vec2D spawnPosition{position.x, position.y + HEIGHT / 2};
+
+    Vec2D bottomLeft{0, SCREEN_HEIGHT};
+    Vec2D bottomRight{SCREEN_WIDTH, SCREEN_HEIGHT};
+
+    auto direction1 = (bottomLeft - spawnPosition);
+    auto direction2 = (bottomRight - spawnPosition);
+    auto angle = direction1.angle_between(direction2);
+
+    Vec2D straightDown{0, 1};
+
+    for (std::size_t i = 0; i < spread_shot_bullets_count; ++i) {
+      auto bullet = reserved_bullets[i];
+      if (bullet == nullptr)
         continue;
-      b->active = true;
-      b->position = {position.x, position.y + HEIGHT / 2};
-      b->type = BulletType::ENEMY;
-    }
 
-    auto it = std::find_if(players_positions.begin(), players_positions.end(),
-                           [](const auto &p) { return p.has_value(); });
-
-    if (reserved_bullets[0] != nullptr) {
-      reserved_bullets[0]->velocity = {0, BULLETS_SPEED};
-    }
-
-    if (reserved_bullets[1] != nullptr) {
-      if (it == players_positions.end())
-        reserved_bullets[1]->velocity = {0, BULLETS_SPEED};
-      else
-        reserved_bullets[1]->velocity =
-            (it->value() - position).normalized() * BULLETS_SPEED;
-    }
-
-    if (reserved_bullets[2] != nullptr) {
-      if (it == players_positions.end())
-        reserved_bullets[2]->velocity = {0, BULLETS_SPEED};
-      else {
-        Vec2D vec = {position.x - it->value().x, it->value().y - position.y};
-        reserved_bullets[2]->velocity = vec.normalized() * BULLETS_SPEED;
+      float angleOffset = 0.0f;
+      if (spread_shot_bullets_count > 1) {
+        angleOffset = -angle / 2 + (angle / (reserved_bullets.size() - 1)) * i;
       }
+
+      bullet->velocity = straightDown.rotated(angleOffset) * BULLETS_SPEED;
+      bullet->active = true;
+      bullet->position = spawnPosition;
+      bullet->type = BulletType::ENEMY;
     }
 
     shooting_pattern = BossPattern::SUCCESSIVE_SHOTS;
@@ -102,7 +118,7 @@ void BossSimState::spawnBullets(
       phase2_bullets_shot++;
       phase2_shooting_cooldown = PHASE2_SHOOTING_COOLDOWN;
 
-      if (phase2_bullets_shot == SUCCESSIVE_SHOTS_BULLETS_COUNT) {
+      if (phase2_bullets_shot == MAX_SUCCESSIVE_SHOTS_BULLETS) {
         shooting_pattern = BossPattern::SPREAD_SHOT;
         phase2_bullets_shot = 0;
         pattern_switching_cooldown =
@@ -115,9 +131,8 @@ void BossSimState::spawnBullets(
   }
 }
 
-void BossSimState::step(
-    float dt, std::array<BulletSimState, MAX_BULLETS> &bullets,
-    std::array<std::optional<Vec2D>, MAX_PLAYERS> &player_positions) {
+void BossSimState::step(float dt,
+                        std::array<BulletSimState, MAX_BULLETS> &bullets) {
   std::optional<float> overflow = std::nullopt;
 
   if (position.x - WIDTH / 2 <= 0.0f) {
@@ -133,7 +148,7 @@ void BossSimState::step(
   };
 
   if (current_phase < PHASES_COUNT &&
-      health <= MIN_LP_PER_SWITCH[current_phase - 1]) {
+      health <= MIN_LP_PER_SWITCH[current_phase - 1] * max_health) {
     current_phase++;
     pattern_switching_cooldown =
         PATTERN_SWITCHING_COOLDOWNS_PER_PHASE[current_phase - 1];
@@ -142,5 +157,5 @@ void BossSimState::step(
   if (pattern_switching_cooldown > 0) {
     pattern_switching_cooldown -= dt;
   } else
-    spawnBullets(dt, bullets, player_positions);
+    spawnBullets(dt, bullets);
 }

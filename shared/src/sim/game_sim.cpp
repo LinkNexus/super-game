@@ -14,9 +14,11 @@ using namespace shared;
 void GameSim::start(
     std::array<std::optional<uint8_t>, MAX_PLAYERS> &player_ids) {
   RndGenerator::seed();
+  players_count_ = 0;
 
   for (std::size_t idx = 0; idx < players_.size(); ++idx) {
     if (player_ids[idx].has_value()) {
+      players_count_++;
       players_[idx].emplace();
       players_[idx]->init(player_ids[idx].value());
     }
@@ -24,7 +26,7 @@ void GameSim::start(
 
   bullets_pool_.fill(BulletSimState());
 
-  enemies_pool_.init();
+  enemies_pool_.init(players_count_);
   boss_ = BossSimState();
   phase_ = GamePhase::ENEMIES_ENTRANCE;
 }
@@ -37,7 +39,6 @@ void GameSim::step(
       phase_ == GamePhase::FIGHT_ENEMIES || phase_ == GamePhase::FIGHT_BOSS;
 
   bool all_players_dead = true;
-  std::array<std::optional<Vec2D>, MAX_PLAYERS> player_positions;
 
   for (std::size_t idx = 0; idx < players_.size(); ++idx) {
     auto &player = players_[idx];
@@ -47,7 +48,6 @@ void GameSim::step(
 
     if (player->lives > 0) {
       all_players_dead = false;
-      player_positions[idx] = player->position;
 
       auto player_input =
           std::find_if(inputs.begin(), inputs.end(), [&](const auto &i) {
@@ -81,7 +81,7 @@ void GameSim::step(
 
     if (enemies_pool_.allEnemiesDefeated()) {
       phase_ = GamePhase::BOSS_ENTRANCE;
-      boss_.init();
+      boss_.init(players_count_);
     }
 
     if (enemies_pool_.reachedPlayer()) {
@@ -98,7 +98,7 @@ void GameSim::step(
     break;
 
   case GamePhase::FIGHT_BOSS:
-    boss_.step(dt, bullets_pool_, player_positions);
+    boss_.step(dt, bullets_pool_);
 
     if (boss_.health <= 0) {
       phase_ = GamePhase::WON;

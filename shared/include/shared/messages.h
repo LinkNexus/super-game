@@ -88,7 +88,7 @@ struct GameState {
   std::array<std::optional<PlayerState>, MAX_PLAYERS> players;
   std::array<BulletState, MAX_BULLETS> bullets;
   std::array<std::array<uint8_t, 2>,
-             EnemiesPoolSimState::COLS * EnemiesPoolSimState::ROWS>
+             EnemiesPoolSimState::COLS * EnemiesPoolSimState::MAX_ROWS>
       enemies;
   float enemies_offset_x, enemies_offset_y;
   BossState boss;
