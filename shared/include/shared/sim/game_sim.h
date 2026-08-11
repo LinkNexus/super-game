@@ -32,5 +32,6 @@ private:
   EnemiesPoolSimState enemies_pool_{};
   BossSimState boss_{};
   GamePhase phase_{};
+  uint8_t players_count_{};
 };
 } // namespace shared

@@ -25,6 +25,10 @@ struct Vec2D {
   Vec2D rotated(float angle) const;
 
   Vec2D lerp(const Vec2D &other, const float t) const;
+
+  float dot_product(const Vec2D &other) const;
+
+  float angle_between(const Vec2D &other) const;
 };
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(Vec2D, x, y)
 

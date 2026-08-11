@@ -2,6 +2,8 @@
 #include <cmath>
 #include <numbers>
 
+using namespace shared;
+
 shared::Vec2D shared::Vec2D::operator+(const Vec2D &other) const {
   return {x + other.x, y + other.y};
 }
@@ -50,6 +52,14 @@ shared::Vec2D shared::Vec2D::rotated(float angle) const {
 
 shared::Vec2D shared::Vec2D::lerp(const Vec2D &other, const float t) const {
   return *this + (other - *this) * t;
+}
+
+float Vec2D::dot_product(const Vec2D &other) const {
+  return x * other.x + y * other.y;
+}
+
+float Vec2D::angle_between(const Vec2D &other) const {
+  return std::acos(dot_product(other) / (length() * other.length()));
 }
 
 bool shared::rectIntersection(shared::Vec2D pos_a, float hw_a, float hh_a,
