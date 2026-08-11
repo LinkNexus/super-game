@@ -16,6 +16,7 @@ enum class BossPattern {
 struct BossSimState {
   Vec2D position;
   int32_t health;
+  int32_t max_health;
   bool active;
   int8_t current_phase;
   float pattern_switching_cooldown;
@@ -23,6 +24,10 @@ struct BossSimState {
 
   float phase2_shooting_cooldown;
   int phase2_bullets_shot;
+
+  int spread_shot_bullets_count;
+  int successive_shots_bullets_count;
+
   int direction;
 
   static constexpr float WIDTH = 100.0f;
@@ -36,24 +41,32 @@ struct BossSimState {
 
   static constexpr float BULLETS_SPEED = BulletSimState::SPEED * 1.5f;
 
-  static constexpr int SPREAD_SHOT_BULLETS_COUNT = 3;
-  static constexpr int SUCCESSIVE_SHOTS_BULLETS_COUNT = 5;
+  static constexpr int MAX_SPREAD_SHOT_BULLETS = 10;
+  static constexpr int MAX_SUCCESSIVE_SHOTS_BULLETS = 8;
 
   static constexpr float PHASE2_SHOOTING_COOLDOWN = 0.3f;
 
   static constexpr int PHASES_COUNT = 3;
-  static constexpr std::array<int, PHASES_COUNT - 1> MIN_LP_PER_SWITCH = {75,
-                                                                          50};
+  static constexpr std::array<float, PHASES_COUNT - 1> MIN_LP_PER_SWITCH = {
+      0.75f, 0.50f};
   static constexpr std::array<float, PHASES_COUNT>
       PATTERN_SWITCHING_COOLDOWNS_PER_PHASE = {1.5f, 0.8f, 0.5f};
 
-  void
-  spawnBullets(float dt, std::array<BulletSimState, MAX_BULLETS> &bullets,
-               std::array<std::optional<Vec2D>, MAX_PLAYERS> &player_positions);
-  void init();
+  static constexpr std::array<std::pair<uint8_t, int>, MAX_PLAYERS>
+      SPREAD_SHOT_BULLETS_COUNT_PER_PLAYERS_COUNT = {{
+          {MAX_PLAYERS, MAX_SPREAD_SHOT_BULLETS},
+          {MAX_PLAYERS - 1, MAX_SPREAD_SHOT_BULLETS - 2},
+      }};
+  static constexpr std::array<std::pair<uint8_t, int>, MAX_PLAYERS>
+      SUCCESSIVE_SHOTS_BULLETS_COUNT_PER_PLAYERS_COUNT = {{
+          {MAX_PLAYERS, MAX_SUCCESSIVE_SHOTS_BULLETS},
+          {MAX_PLAYERS - 1, MAX_SUCCESSIVE_SHOTS_BULLETS - 2},
+      }};
+
+  void spawnBullets(float dt, std::array<BulletSimState, MAX_BULLETS> &bullets);
+  void init(uint8_t playersCount);
   void stepEntrance(float dt);
   bool isEntranceComplete();
-  void step(float dt, std::array<BulletSimState, MAX_BULLETS> &bullets_pool,
-            std::array<std::optional<Vec2D>, MAX_PLAYERS> &player_positions);
+  void step(float dt, std::array<BulletSimState, MAX_BULLETS> &bullets_pool);
 };
 } // namespace shared
