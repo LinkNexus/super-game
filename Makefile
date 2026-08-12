@@ -21,15 +21,16 @@ release:
 run-client: run-client-debug
 
 run-client-debug: debug
-	./build/debug/bin/supergame-client
+	./build/debug/bin/supergame-client ws://localhost:9001
 
 run-server: run-server-debug
 
 run-server-debug: debug
+	-lsof -ti:9001 | xargs kill 2>/dev/null
 	./build/debug/bin/supergame-server
 
 run-client-release: release
-	./build/release/bin/supergame-client
+	./build/release/bin/supergame-client ws://localhost:9001
 
 run-server-release: release
 	./build/release/bin/supergame-server

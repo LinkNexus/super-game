@@ -45,7 +45,8 @@ public:
           drawPlayer(player->position, player->id == player_id);
 
         const std::string playerLabel =
-            "Player " + std::to_string(idx + 1) +
+            (player->name.empty() ? "Player " + std::to_string(idx + 1)
+                                  : player->name) +
             (!is_online_session ? ""
                                 : ((player->id == player_id ? " (You)" : "")));
         DrawText(playerLabel.c_str(),

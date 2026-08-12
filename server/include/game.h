@@ -16,10 +16,12 @@ struct PerSocketData {
 
 struct PlayerConnection {
   uint32_t id;
+  char name[shared::MAX_NAME_LENGTH + 1]{};
   uWS::WebSocket<false, true, PerSocketData> *ws;
   shared::Button pending_movement = shared::Button::BUTTON_NONE;
   uint8_t pending_shots = 0;
   bool prev_shoot_held = false;
+  bool is_ready = false;
 };
 
 class Game {
@@ -33,6 +35,8 @@ public:
   std::size_t getPlayerCount() const;
   const std::array<PlayerConnection *, shared::MAX_PLAYERS> &getPlayers() const;
   bool isOver() const;
+  void setPlayerReady(uint32_t playerId, bool ready);
+  bool allPlayersReady() const;
 
 private:
   bool is_running_ = false;
@@ -40,6 +44,9 @@ private:
   shared::GameSim sim_;
   shared::GameState state_;
   std::array<PlayerConnection *, shared::MAX_PLAYERS> players_{};
+
+private:
+  void tryStart();
 };
 
 class GameManager {

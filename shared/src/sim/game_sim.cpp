@@ -12,7 +12,7 @@
 using namespace shared;
 
 void GameSim::start(
-    std::array<std::optional<uint8_t>, MAX_PLAYERS> &player_ids) {
+    std::array<std::optional<uint32_t>, MAX_PLAYERS> &player_ids) {
   RndGenerator::seed();
   players_count_ = 0;
 
@@ -125,8 +125,6 @@ void GameSim::step(
 }
 
 void GameSim::setGameState(GameState &state) {
-  state.tick++;
-
   for (std::size_t idx = 0; idx < players_.size(); ++idx) {
     auto &player = players_[idx];
 

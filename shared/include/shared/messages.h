@@ -34,68 +34,85 @@ enum Button : uint8_t {
   BUTTON_SHOOT = 1 << 2,
 };
 
-enum class MessageType : uint8_t {
+enum class ServerMessageType : uint8_t {
   WELCOME,
   LOBBY_UPDATE,
   GAME_STATE,
 };
 
+enum class ClientMessageType : uint8_t { PLAYER_INPUT, READY };
+
 struct WelcomeMessage {
-  uint32_t player_id;
+  uint32_t player_id{};
 };
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(WelcomeMessage, player_id);
 
-struct LobbyUpdate {
-  uint8_t player_count;
-  bool game_started;
-  uint8_t max_players;
+constexpr std::size_t MAX_NAME_LENGTH = 9;
+
+struct ReasyMessage {
+  bool is_ready{};
 };
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(LobbyUpdate, player_count, game_started,
-                                   max_players)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(ReasyMessage, is_ready)
+
+struct PlayerInfo {
+  std::uint32_t id{};
+  std::string name{};
+  bool is_ready{};
+};
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(PlayerInfo, name, is_ready, id)
+
+struct LobbyUpdate {
+  std::array<std::optional<PlayerInfo>, MAX_PLAYERS> players{};
+  uint8_t player_count{};
+  bool game_started{};
+  uint8_t max_players{};
+};
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(LobbyUpdate, players, player_count,
+                                   game_started, max_players)
 
 struct PlayerInput {
-  uint32_t tick;
-  uint8_t buttons;
-  uint32_t player_id;
+  uint8_t buttons{};
+  uint32_t player_id{};
 };
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(PlayerInput, tick, buttons, player_id)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(PlayerInput, buttons, player_id)
 
 struct PlayerState {
-  Vec2D position;
-  uint8_t lives;
-  uint32_t points;
-  uint8_t id;
+  Vec2D position{};
+  uint8_t lives{};
+  uint32_t points{};
+  std::string name{};
+  uint8_t id{};
 };
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(PlayerState, position, lives, points, id)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(PlayerState, position, lives, points, id,
+                                   name)
 
 struct BulletState {
-  Vec2D position;
-  uint8_t type;
-  uint8_t active;
+  Vec2D position{};
+  uint8_t type{};
+  uint8_t active{};
 };
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(BulletState, position, type, active)
 
 struct BossState {
-  Vec2D position;
-  uint8_t active;
-  uint32_t health;
-  uint32_t max_health;
+  Vec2D position{};
+  uint8_t active{};
+  uint32_t health{};
+  uint32_t max_health{};
 };
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(BossState, position, active, health)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(BossState, position, active, health,
+                                   max_health)
 
 struct GameState {
-  uint32_t tick;
-  uint8_t phase;
-  std::array<std::optional<PlayerState>, MAX_PLAYERS> players;
-  std::array<BulletState, MAX_BULLETS> bullets;
+  uint8_t phase{};
+  std::array<std::optional<PlayerState>, MAX_PLAYERS> players{};
+  std::array<BulletState, MAX_BULLETS> bullets{};
   std::array<std::array<uint8_t, 2>,
              EnemiesPoolSimState::COLS * EnemiesPoolSimState::MAX_ROWS>
-      enemies;
-  float enemies_offset_x, enemies_offset_y;
-  BossState boss;
+      enemies{};
+  float enemies_offset_x, enemies_offset_y{};
+  BossState boss{};
 };
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(GameState, tick, phase, players, bullets,
-                                   enemies, enemies_offset_x, enemies_offset_y,
-                                   boss)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(GameState, phase, players, bullets, enemies,
+                                   enemies_offset_x, enemies_offset_y, boss)
 
 } // namespace shared

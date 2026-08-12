@@ -26,7 +26,7 @@ template <typename T> std::optional<T> MailBox<T>::take() {
 LocalSession::LocalSession(LocalMode mode) {
   mode_ = mode;
 
-  std::array<std::optional<uint8_t>, shared::MAX_PLAYERS> ids{};
+  std::array<std::optional<uint32_t>, shared::MAX_PLAYERS> ids{};
   ids[0] = 1;
   if (mode_ == LocalMode::DUAL_PLAYER)
     ids[1] = 2;
@@ -53,7 +53,10 @@ shared::GameState OnlineSession::step(
     const std::array<std::optional<shared::PlayerInput>, shared::MAX_PLAYERS>
         &inputs,
     float dt) {
-  client_.send(nlohmann::json(inputs[0]).dump());
+  nlohmann::json inputEnvelope;
+  inputEnvelope["type"] = shared::ClientMessageType::PLAYER_INPUT;
+  inputEnvelope["payload"] = inputs[0];
+  client_.send(inputEnvelope.dump());
 
   if (auto s = state_box_.take()) {
     last_update_time_ = std::chrono::steady_clock::now();
@@ -75,20 +78,32 @@ const uint32_t OnlineSession::getPlayerId() {
   return welcome_message_.player_id;
 }
 
-void OnlineSession::onMessage(const std::string &msg) {
-  auto j = nlohmann::json::parse(msg);
-  auto payload = j.at("payload");
+void OnlineSession::sendReady(bool isReady) {
+  nlohmann::json readyEnvelope;
+  readyEnvelope["type"] = shared::ClientMessageType::READY;
+  readyEnvelope["payload"] = shared::ReasyMessage{.is_ready = isReady};
 
-  switch (j.at("type").get<shared::MessageType>()) {
-  case shared::MessageType::LOBBY_UPDATE:
-    lobby_update_box_.set(payload.get<shared::LobbyUpdate>());
-    break;
-  case shared::MessageType::GAME_STATE:
-    state_box_.set(payload.get<shared::GameState>());
-    break;
-  case shared::MessageType::WELCOME:
-    welcome_message_box_.set(payload.get<shared::WelcomeMessage>());
-    break;
+  client_.send(readyEnvelope.dump());
+}
+
+void OnlineSession::onMessage(const std::string &msg) {
+  try {
+    auto j = nlohmann::json::parse(msg);
+    auto payload = j.at("payload");
+
+    switch (j.at("type").get<shared::ServerMessageType>()) {
+    case shared::ServerMessageType::LOBBY_UPDATE:
+      lobby_update_box_.set(payload.get<shared::LobbyUpdate>());
+      break;
+    case shared::ServerMessageType::GAME_STATE:
+      state_box_.set(payload.get<shared::GameState>());
+      break;
+    case shared::ServerMessageType::WELCOME:
+      welcome_message_box_.set(payload.get<shared::WelcomeMessage>());
+      break;
+    }
+  } catch (const nlohmann::json::exception &e) {
+    return;
   }
 }
 

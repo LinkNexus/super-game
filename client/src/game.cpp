@@ -13,11 +13,15 @@
 #include <cmath>
 #include <cstdlib>
 
+float getCenteredTextX(const char *text, int font_size) {
+  return (shared::SCREEN_WIDTH - MeasureText(text, font_size)) / 2.0f;
+}
+
 Game::Game(std::string server_url) : server_url_(std::move(server_url)) {}
 
 void Game::restart() {
   if (mode_ == GameMode::LOCAL) {
-    startLocalSession(selected_local_mode_.value(), Screen::PLAYING);
+    startLocalSession(selected_local_mode_.value());
   } else {
     startOnlineSession();
   }
@@ -105,6 +109,11 @@ void Game::run() {
   float accumulator = 0.0f;
 
   while (!WindowShouldClose()) {
+    if (CheckCollisionPointRec(GetMousePosition(), name_text_box))
+      mouse_on_name_input_text = true;
+    else
+      mouse_on_name_input_text = false;
+
     handleInput();
 
     float frame_time = GetFrameTime();
@@ -220,7 +229,7 @@ void Game::run() {
   CloseWindow();
 }
 
-void Game::startLocalSession(LocalMode mode, Screen startScreen) {
+void Game::startLocalSession(LocalMode mode) {
   selected_local_mode_ = mode;
   session_ = std::make_unique<LocalSession>(mode);
   screen_ = Screen::PLAYING;
@@ -235,12 +244,16 @@ void Game::startLocalSession(LocalMode mode, Screen startScreen) {
 
   state_ = shared::GameState();
   prev_state_ = state_;
-  screen_ = startScreen;
+}
+
+bool isNameCharValid(char c) {
+  return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_';
 }
 
 void Game::startOnlineSession() {
   inputs_[0].emplace();
-  session_ = std::make_unique<OnlineSession>(server_url_);
+  session_ =
+      std::make_unique<OnlineSession>(server_url_ + "?name=" + player_name_);
   screen_ = Screen::CONNECTING;
 }
 
@@ -253,11 +266,59 @@ void Game::handleInput() {
       mode_ = GameMode::ONLINE;
     } else if (IsKeyPressed(KEY_ENTER)) {
       if (mode_ == GameMode::ONLINE) {
-        startOnlineSession();
+        screen_ = Screen::NAME_ENTRY;
       } else {
-        startLocalSession(LocalMode::SINGLE_PLAYER, Screen::SELECT_LOCAL_MODE);
+        screen_ = Screen::SELECT_LOCAL_MODE;
       }
     }
+    break;
+
+  case Screen::NAME_ENTRY:
+    if (mouse_on_name_input_text) {
+      SetMouseCursor(MOUSE_CURSOR_IBEAM);
+      int key = GetCharPressed();
+
+      while (key > 0) {
+        showPlayerNameError_ = false;
+
+        if (isNameCharValid((char)key) &&
+            name_letters_count_ < shared::MAX_NAME_LENGTH) {
+          player_name_[name_letters_count_] = (char)key;
+          player_name_[name_letters_count_ + 1] = '\0';
+          name_letters_count_++;
+        }
+
+        key = GetCharPressed();
+      }
+
+      if (IsKeyPressed(KEY_BACKSPACE)) {
+        name_letters_count_--;
+        if (name_letters_count_ < 0)
+          name_letters_count_ = 0;
+        player_name_[name_letters_count_] = '\0';
+      }
+
+      frames_counter++;
+    } else {
+      SetMouseCursor(MOUSE_CURSOR_DEFAULT);
+      frames_counter = 0;
+    }
+
+    if (IsKeyPressed(KEY_ENTER)) {
+      if (name_letters_count_ == 0) {
+        showPlayerNameError_ = true;
+        break;
+      }
+      startOnlineSession();
+      screen_ = Screen::CONNECTING;
+    }
+
+    if (IsKeyPressed(KEY_ESCAPE)) {
+      name_letters_count_ = 0;
+      player_name_[name_letters_count_] = '\0';
+      screen_ = Screen::MENU;
+    }
+
     break;
 
   case Screen::CONNECTING:
@@ -268,7 +329,15 @@ void Game::handleInput() {
 
   case Screen::LOBBY:
     if (IsKeyPressed(KEY_ESCAPE)) {
+      session_ = nullptr;
       screen_ = Screen::MENU;
+    }
+
+    if (IsKeyPressed(KEY_SPACE)) {
+      if (OnlineSession *s = dynamic_cast<OnlineSession *>(session_.get())) {
+        lobby_am_i_ready = !lobby_am_i_ready;
+        s->sendReady(lobby_am_i_ready);
+      }
     }
 
     break;
@@ -281,8 +350,7 @@ void Game::handleInput() {
     } else if (IsKeyPressed(KEY_RIGHT)) {
       selected_local_mode_ = LocalMode::DUAL_PLAYER;
     } else if (IsKeyPressed(KEY_ENTER) && selected_local_mode_.has_value()) {
-      session_ = std::make_unique<LocalSession>(selected_local_mode_.value());
-      screen_ = Screen::PLAYING;
+      startLocalSession(selected_local_mode_.value());
 
       inputs_[0]->player_id = 1;
 
@@ -335,6 +403,103 @@ void drawBullet(const shared::BulletState &state) {
                 YELLOW);
 }
 
+void Game::drawInputTextBox() const {
+  const char *text =
+      "Choose a name for the online game. Press Enter to continue";
+  DrawText(text, (shared::SCREEN_WIDTH - MeasureText(text, 20)) / 2,
+           name_text_box.y - 50.0f, 20, WHITE);
+
+  DrawRectangleRec(name_text_box, Fade(LIGHTGRAY, 0.5f));
+  if (mouse_on_name_input_text)
+    DrawRectangleLines((int)name_text_box.x, (int)name_text_box.y,
+                       (int)name_text_box.width, (int)name_text_box.height,
+                       RED);
+  else
+    DrawRectangleLines((int)name_text_box.x, (int)name_text_box.y,
+                       (int)name_text_box.width, (int)name_text_box.height,
+                       DARKGRAY);
+
+  DrawText(player_name_, (int)name_text_box.x + 5, (int)name_text_box.y + 8, 40,
+           WHITE);
+
+  const auto nameLengthText = TextFormat(
+      "INPUT CHARS: %i/%i", name_letters_count_, shared::MAX_NAME_LENGTH);
+  DrawText(nameLengthText,
+           (shared::SCREEN_WIDTH - MeasureText(nameLengthText, 20)) / 2.0f,
+           name_text_box.y + name_text_box.height + 50.0f, 20, WHITE);
+
+  if (mouse_on_name_input_text) {
+    if (name_letters_count_ < shared::MAX_NAME_LENGTH) {
+      if (((frames_counter / 20) % 2) == 0)
+        DrawText("_", (int)name_text_box.x + 8 + MeasureText(player_name_, 40),
+                 (int)name_text_box.y + 12, 40, MAROON);
+    }
+  }
+
+  if (showPlayerNameError_) {
+    const char *errorText = "Please enter a name before continuing!";
+    DrawText(errorText,
+             (shared::SCREEN_WIDTH - MeasureText(errorText, 20)) / 2.0f,
+             name_text_box.y + name_text_box.height + 80.0f, 20, RED);
+  }
+}
+
+void Game::drawLobby() const {
+  if (OnlineSession *s = dynamic_cast<OnlineSession *>(session_.get())) {
+    auto &lobbyUpdate = s->getLobbyUpdate();
+
+    const char *title = "Lobby";
+    float titleY = shared::SCREEN_HEIGHT / 2.0f - 100;
+    DrawText(title, getCenteredTextX(title, 32), titleY, 32, WHITE);
+
+    auto y = titleY + 60;
+    int readyCount = 0;
+
+    for (std::size_t idx = 0; idx < lobbyUpdate.players.size(); ++idx) {
+      const auto &p = lobbyUpdate.players[idx];
+
+      if (!p.has_value()) {
+        const char *waitingText =
+            TextFormat("Waiting for a player...", idx + 1);
+        DrawText(waitingText, getCenteredTextX(waitingText, 20), y, 20,
+                 DARKGRAY);
+        y += 32;
+        continue;
+      }
+
+      if (p->is_ready)
+        ++readyCount;
+
+      const char *status = p->is_ready ? "READY" : "Waiting...";
+      auto statusColor = p->is_ready ? GREEN : LIGHTGRAY;
+
+      std::string label = p->name + (p->id == s->getPlayerId() ? " (You)" : "");
+      auto labelWidth = MeasureText(label.c_str(), 20);
+      auto labelPosX =
+          (shared::SCREEN_WIDTH - labelWidth - MeasureText(status, 20) - 150) /
+          2.0f;
+
+      DrawText(label.c_str(), labelPosX, y, 20, WHITE);
+      DrawText(status, labelPosX + labelWidth + 150, y, 20, statusColor);
+      y += 32;
+    }
+
+    y += 12;
+    const char *progess =
+        TextFormat("Players ready: %d/%d", readyCount, lobbyUpdate.max_players);
+    DrawText(progess, (int)getCenteredTextX(progess, 20), y, 20, LIGHTGRAY);
+    y += 32;
+
+    const char *prompt = lobby_am_i_ready ? "Press SPACE to cancel ready"
+                                          : "Press SPACE tp ready up";
+    DrawText(prompt, (int)getCenteredTextX(prompt, 20), y, 20, LIGHTGRAY);
+
+    const char *leave_prompt = "Press ESC to leave the lobby";
+    DrawText(leave_prompt, (int)getCenteredTextX(leave_prompt, 20), y + 32, 20,
+             LIGHTGRAY);
+  }
+}
+
 void Game::draw() {
   for (const auto &s : stars_)
     s.draw();
@@ -375,6 +540,10 @@ void Game::draw() {
     break;
   }
 
+  case Screen::NAME_ENTRY:
+    drawInputTextBox();
+    break;
+
   case Screen::CONNECTING:
     DrawText("Connecting to server...", shared::SCREEN_WIDTH / 2 - 170,
              shared::SCREEN_HEIGHT / 2, 24, LIGHTGRAY);
@@ -382,18 +551,9 @@ void Game::draw() {
              shared::SCREEN_HEIGHT / 2 + 40, 20, WHITE);
     break;
 
-  case Screen::LOBBY: {
-    if (OnlineSession *s = dynamic_cast<OnlineSession *>(session_.get())) {
-      auto &lobbyUpdate = s->getLobbyUpdate();
-      const auto text = "Waiting for players to join (" +
-                        std::to_string(lobbyUpdate.player_count) + "/" +
-                        std::to_string(lobbyUpdate.max_players) + " players)";
-      DrawText(text.c_str(),
-               (shared::SCREEN_WIDTH - MeasureText(text.c_str(), 20)) / 2,
-               shared::SCREEN_HEIGHT / 2, 20, WHITE);
-    }
+  case Screen::LOBBY:
+    drawLobby();
     break;
-  }
 
   case Screen::SELECT_LOCAL_MODE: {
     const std::string instructions_text =
