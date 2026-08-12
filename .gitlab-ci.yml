@@ -12,9 +12,29 @@ variables:
   GIT_SUBMODULE_STRATEGY: normal
   GIT_SUBMODULE_DEPTH: 1
 
-build:client:
+# Runs Doxygen over shared/client/server and publishes the generated HTML
+# as a job artifact. Not served anywhere (no GitLab Pages, no VPS subdomain,
+# deliberately kept out of the production server image) - just bundled into
+# the client-linux/client-windows job artifacts below so it ships alongside
+# the binaries in the downloadable zip.
+docs:
   stage: build
   image: debian:trixie-slim
+  before_script:
+    - apt-get update -qq
+    - apt-get install -y -qq --no-install-recommends doxygen
+  script:
+    - doxygen Doxyfile
+  artifacts:
+    paths:
+      - docs/doxygen/html
+    expire_in: 30 days
+
+build:client:linux:
+  stage: build
+  image: debian:trixie-slim
+  needs:
+    - docs
   before_script:
     - apt-get update -qq
     # raylib (PLATFORM_DESKTOP/GLFW on Linux) needs the X11/GL/ALSA -dev
@@ -33,6 +53,7 @@ build:client:
     name: supergame-client-linux-$CI_COMMIT_SHORT_SHA
     paths:
       - build/release/bin/
+      - docs/doxygen/html
     expire_in: 30 days
   cache:
     key: client-$CI_COMMIT_REF_SLUG
@@ -43,6 +64,8 @@ build:client:
 build:client:windows:
   stage: build
   image: debian:trixie-slim
+  needs:
+    - docs
   before_script:
     - apt-get update -qq
     # g++-mingw-w64-x86-64 cross-compiles for Windows from this Linux
@@ -67,6 +90,7 @@ build:client:windows:
     name: supergame-client-windows-$CI_COMMIT_SHORT_SHA
     paths:
       - build/windows-client-release/bin/
+      - docs/doxygen/html
     expire_in: 30 days
   cache:
     key: client-windows-$CI_COMMIT_REF_SLUG

@@ -8,6 +8,11 @@
 #include <cstdio>
 #include <cstring>
 
+/// Builds and broadcasts a `LOBBY_UPDATE` to every player in @p data's
+/// game: current roster (name + ready state per slot) and whether the
+/// match has started. Called after any lobby-relevant change - a join, a
+/// disconnect, or a ready toggle - so every client's lobby screen stays in
+/// sync.
 auto sendLobbyUpdate(PerSocketData *data) {
   auto playerCount = data->game->getPlayerCount();
   const auto &players = data->game->getPlayers();
@@ -43,6 +48,9 @@ int main(int argc, char *argv[]) {
   GameManager manager{};
   auto manager_ptr = &manager;
 
+  // Drives every active Game's simulation at a fixed 16ms tick (~60Hz),
+  // independent of how many/few WebSocket messages arrive - the sim must
+  // advance on a wall-clock schedule, not a message-driven one.
   auto *timer =
       us_create_timer((us_loop_t *)uWS::Loop::get(), 0, sizeof(GameManager *));
   memcpy(us_timer_ext(timer), &manager_ptr, sizeof(GameManager *));
@@ -67,7 +75,11 @@ int main(int argc, char *argv[]) {
       .get("/health", [](auto *res, auto *req) { res->end("OK"); })
       .ws<PerSocketData>(
           "/*",
-          {.upgrade =
+          {// The one WebSocket callback that still sees the raw HTTP
+           // upgrade request - used to read the `?name=` query parameter
+           // before the socket exists, since `.open` only gets the
+           // WebSocket itself with no access to the original request.
+           .upgrade =
                [](auto *res, auto *req, auto *context) {
                  PerSocketData data{.player = new PlayerConnection{}};
                  auto reqName = req->getQuery("name");
@@ -80,6 +92,9 @@ int main(int argc, char *argv[]) {
                      req->getHeader("sec-websocket-protocol"),
                      req->getHeader("sec-websocket-extensions"), context);
                },
+           // Connection established: assigns the real player id (the
+           // server never trusts a client-supplied id), joins/creates a
+           // game, and sends the WELCOME + initial LOBBY_UPDATE.
            .open =
                [&manager](auto *ws) {
                  auto *data = ws->getUserData();
@@ -95,6 +110,11 @@ int main(int argc, char *argv[]) {
 
                  sendLobbyUpdate(data);
                },
+           // Dispatches an incoming `{type, payload}` envelope by
+           // `ClientMessageType`. The whole parse+dispatch is wrapped in
+           // try/catch: a malformed or mistyped payload just gets dropped
+           // for this connection rather than crashing the process and
+           // every other in-progress match.
            .message =
                [](auto *ws, std::string_view message, uWS::OpCode opCode) {
                  auto *data = ws->getUserData();
@@ -127,6 +147,9 @@ int main(int argc, char *argv[]) {
                    return;
                  }
                },
+           // Connection closed: frees this player's slot, and either tears
+           // down the whole game (if it was the last player) or lets the
+           // remaining player(s) know via a fresh LOBBY_UPDATE.
            .close =
                [&manager](auto *ws, int code, std::string_view reason) {
                  auto *data = ws->getUserData();
