@@ -22,7 +22,11 @@ docs:
   image: debian:trixie-slim
   before_script:
     - apt-get update -qq
-    - apt-get install -y -qq --no-install-recommends doxygen
+    # graphviz provides `dot`, needed to actually render the include/
+    # dependency graphs Doxygen generates by default (INCLUDE_GRAPH /
+    # INCLUDED_BY_GRAPH) - without it doxygen still runs, just with
+    # broken/missing images wherever those graphs would appear.
+    - apt-get install -y -qq --no-install-recommends doxygen graphviz
   script:
     # Doxygen can create one missing OUTPUT_DIRECTORY level but not two at
     # once - a fresh checkout has neither docs/ nor docs/doxygen/ yet.
