@@ -1,0 +1,24 @@
+# Minimal Doxyfile - unset options fall back to Doxygen's defaults.
+# Generate locally with: doxygen Doxyfile  (output in docs/doxygen/html)
+
+PROJECT_NAME           = "Super Game"
+PROJECT_BRIEF          = "Space Invaders-style C++20/raylib game with a networked client/server multiplayer mode"
+OUTPUT_DIRECTORY       = docs/doxygen
+
+INPUT                  = README.md shared/include shared/src client/include client/src server/include server/src
+RECURSIVE              = YES
+USE_MDFILE_AS_MAINPAGE = README.md
+FILE_PATTERNS          = *.h *.hpp *.cpp
+EXCLUDE_PATTERNS       = */vendor/* */build/*
+
+JAVADOC_AUTOBRIEF      = YES
+EXTRACT_ALL            = YES
+EXTRACT_PRIVATE        = YES
+EXTRACT_STATIC         = YES
+WARN_IF_UNDOCUMENTED   = NO
+
+GENERATE_HTML          = YES
+GENERATE_LATEX         = NO
+GENERATE_TREEVIEW      = YES
+
+QUIET                  = YES

@@ -7,6 +7,10 @@
 #include "shared/messages.h"
 #include <string>
 
+/// Render-only player entity: texture + HUD (name/lives/points), no
+/// simulation logic. Draws from the trimmed wire `PlayerState`, so
+/// rendering is identical regardless of whether the state came from local
+/// sim or a network snapshot.
 struct Player {
   Texture2D texture = {};
 
@@ -22,6 +26,13 @@ private:
   void drawLives(uint8_t lives, float y_offset) const;
 
 public:
+  /// Draws every populated slot in @p states: the ship sprite (only while
+  /// alive) plus a HUD block (name, lives, points). @p current_session is
+  /// used only to tell which player is "this client" in online mode
+  /// (highlighted sprite, " (You)" suffix) - local mode has no such
+  /// distinction. Falls back to "Player N" when a slot has no name set
+  /// (always the case in local mode, since names are an online-only
+  /// concept assigned by the server).
   template <std::size_t N>
   void
   draw(Session *current_session,
