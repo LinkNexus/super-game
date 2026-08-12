@@ -18,18 +18,19 @@ auto sendLobbyUpdate(PerSocketData *data) {
     const auto player = players[i];
     if (player) {
       playerInfos[i].emplace();
-      playerInfos[i] = shared::PlayerInfo{.name = player->name};
+      playerInfos[i] = shared::PlayerInfo{
+          .id = player->id, .name = player->name, .is_ready = player->is_ready};
     }
   }
 
   shared::LobbyUpdate lobbyUpdate{
       .players = playerInfos,
       .player_count = static_cast<uint8_t>(playerCount),
-      .game_started = playerCount == shared::MAX_PLAYERS,
+      .game_started = data->game->allPlayersReady(),
       .max_players = shared::MAX_PLAYERS};
 
   nlohmann::json envelope;
-  envelope["type"] = shared::MessageType::LOBBY_UPDATE;
+  envelope["type"] = shared::ServerMessageType::LOBBY_UPDATE;
   envelope["payload"] = lobbyUpdate;
 
   for (const auto &player : data->game->getPlayers()) {
@@ -87,7 +88,7 @@ int main(int argc, char *argv[]) {
                  data->game = manager.joinOrCreateGame(data->player);
 
                  nlohmann::json welcomeEnvelope;
-                 welcomeEnvelope["type"] = shared::MessageType::WELCOME;
+                 welcomeEnvelope["type"] = shared::ServerMessageType::WELCOME;
                  welcomeEnvelope["payload"] =
                      shared::WelcomeMessage{.player_id = data->player->id};
                  ws->send(welcomeEnvelope.dump());
@@ -97,23 +98,34 @@ int main(int argc, char *argv[]) {
            .message =
                [](auto *ws, std::string_view message, uWS::OpCode opCode) {
                  auto *data = ws->getUserData();
-                 shared::PlayerInput input{};
 
                  try {
-                   input = nlohmann::json::parse(message)
-                               .get<shared::PlayerInput>();
+                   auto j = nlohmann::json::parse(message);
+
+                   switch (j.at("type").get<shared::ClientMessageType>()) {
+                   case shared::ClientMessageType::READY:
+                     data->game->setPlayerReady(
+                         data->player->id,
+                         j.at("payload").get<shared::ReasyMessage>().is_ready);
+                     sendLobbyUpdate(data);
+                     break;
+                   case shared::ClientMessageType::PLAYER_INPUT:
+                     auto input = j.at("payload").get<shared::PlayerInput>();
+                     bool shoot_now =
+                         input.buttons & shared::Button::BUTTON_SHOOT;
+                     if (shoot_now && !data->player->prev_shoot_held)
+                       data->player->pending_shots++;
+
+                     data->player->prev_shoot_held = shoot_now;
+                     data->player->pending_movement =
+                         static_cast<shared::Button>(
+                             input.buttons &
+                             (shared::BUTTON_LEFT | shared::BUTTON_RIGHT));
+                     break;
+                   }
                  } catch (const nlohmann::json::exception &e) {
                    return;
                  }
-
-                 bool shoot_now = input.buttons & shared::Button::BUTTON_SHOOT;
-                 if (shoot_now && !data->player->prev_shoot_held)
-                   data->player->pending_shots++;
-
-                 data->player->prev_shoot_held = shoot_now;
-                 data->player->pending_movement = static_cast<shared::Button>(
-                     input.buttons &
-                     (shared::BUTTON_LEFT | shared::BUTTON_RIGHT));
                },
            .close =
                [&manager](auto *ws, int code, std::string_view reason) {

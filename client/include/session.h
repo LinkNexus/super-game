@@ -52,6 +52,7 @@ public:
                          float dt) override;
   const shared::LobbyUpdate getLobbyUpdate();
   const uint32_t getPlayerId();
+  void sendReady(bool isReady);
 
 private:
   void onMessage(const std::string &msg);

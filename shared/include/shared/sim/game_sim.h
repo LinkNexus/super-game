@@ -18,7 +18,7 @@ enum class GamePhase : uint8_t {
 
 class GameSim {
 public:
-  void start(std::array<std::optional<uint8_t>, MAX_PLAYERS> &player_ids);
+  void start(std::array<std::optional<uint32_t>, MAX_PLAYERS> &player_ids);
   void step(GameState &state,
             const std::array<std::optional<PlayerInput>, MAX_PLAYERS> &inputs,
             float dt);

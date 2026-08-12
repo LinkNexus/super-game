@@ -6,7 +6,6 @@
 #include "shared/sim/enemy_sim.h"
 #include <cstdint>
 #include <optional>
-#include <unordered_map>
 
 namespace nlohmann {
 template <typename T> struct adl_serializer<std::optional<T>> {
@@ -35,11 +34,13 @@ enum Button : uint8_t {
   BUTTON_SHOOT = 1 << 2,
 };
 
-enum class MessageType : uint8_t {
+enum class ServerMessageType : uint8_t {
   WELCOME,
   LOBBY_UPDATE,
   GAME_STATE,
 };
+
+enum class ClientMessageType : uint8_t { PLAYER_INPUT, READY };
 
 struct WelcomeMessage {
   uint32_t player_id{};
@@ -48,10 +49,17 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(WelcomeMessage, player_id);
 
 constexpr std::size_t MAX_NAME_LENGTH = 9;
 
-struct PlayerInfo {
-  std::string name{};
+struct ReasyMessage {
+  bool is_ready{};
 };
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(PlayerInfo, name)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(ReasyMessage, is_ready)
+
+struct PlayerInfo {
+  std::uint32_t id{};
+  std::string name{};
+  bool is_ready{};
+};
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(PlayerInfo, name, is_ready, id)
 
 struct LobbyUpdate {
   std::array<std::optional<PlayerInfo>, MAX_PLAYERS> players{};

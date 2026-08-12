@@ -3,6 +3,7 @@
 #include "shared/constants.h"
 #include "shared/messages.h"
 #include <cstddef>
+#include <optional>
 
 void GameManager::forEachGame(std::function<void(Game *)> fn) {
   for (const auto &game : gamesById) {
@@ -47,6 +48,42 @@ void GameManager::destroyGame(Game *game) {
 
 bool Game::isOver() const { return is_over_; }
 
+bool Game::allPlayersReady() const {
+  if (getPlayerCount() < shared::MAX_PLAYERS)
+    return false;
+
+  for (const auto &player : players_)
+    if (player && !player->is_ready)
+      return false;
+
+  return true;
+}
+
+void Game::tryStart() {
+  if (is_running_ || is_over_ || !allPlayersReady())
+    return;
+
+  std::array<std::optional<uint32_t>, shared::MAX_PLAYERS> playerIds;
+  std::transform(players_.begin(), players_.end(), playerIds.begin(),
+                 [](const auto *p) {
+                   return p ? std::optional<uint32_t>(p->id) : std::nullopt;
+                 });
+
+  sim_.start(playerIds);
+  is_running_ = true;
+}
+
+void Game::setPlayerReady(uint32_t playerId, bool ready) {
+  for (auto player : players_) {
+    if (player && player->id == playerId) {
+      player->is_ready = ready;
+      break;
+    }
+  }
+
+  tryStart();
+}
+
 void Game::update(float dt) {
   if (!is_running_)
     return;
@@ -83,7 +120,7 @@ void Game::update(float dt) {
   }
 
   nlohmann::json envelope;
-  envelope["type"] = shared::MessageType::GAME_STATE;
+  envelope["type"] = shared::ServerMessageType::GAME_STATE;
   envelope["payload"] = state_;
   auto msg = envelope.dump();
 
@@ -126,14 +163,6 @@ void Game::addPlayer(PlayerConnection *player) {
       players_[i] = player;
       break;
     }
-  }
-
-  if (playerCount == shared::MAX_PLAYERS) {
-    std::array<std::optional<uint8_t>, shared::MAX_PLAYERS> playerIds;
-    std::transform(players_.begin(), players_.end(), playerIds.begin(),
-                   [](const auto *p) { return p->id; });
-    sim_.start(playerIds);
-    is_running_ = true;
   }
 }
 

@@ -13,6 +13,10 @@
 #include <cmath>
 #include <cstdlib>
 
+float getCenteredTextX(const char *text, int font_size) {
+  return (shared::SCREEN_WIDTH - MeasureText(text, font_size)) / 2.0f;
+}
+
 Game::Game(std::string server_url) : server_url_(std::move(server_url)) {}
 
 void Game::restart() {
@@ -325,7 +329,15 @@ void Game::handleInput() {
 
   case Screen::LOBBY:
     if (IsKeyPressed(KEY_ESCAPE)) {
+      session_ = nullptr;
       screen_ = Screen::MENU;
+    }
+
+    if (IsKeyPressed(KEY_SPACE)) {
+      if (OnlineSession *s = dynamic_cast<OnlineSession *>(session_.get())) {
+        lobby_am_i_ready = !lobby_am_i_ready;
+        s->sendReady(lobby_am_i_ready);
+      }
     }
 
     break;
@@ -432,6 +444,62 @@ void Game::drawInputTextBox() const {
   }
 }
 
+void Game::drawLobby() const {
+  if (OnlineSession *s = dynamic_cast<OnlineSession *>(session_.get())) {
+    auto &lobbyUpdate = s->getLobbyUpdate();
+
+    const char *title = "Lobby";
+    float titleY = shared::SCREEN_HEIGHT / 2.0f - 100;
+    DrawText(title, getCenteredTextX(title, 32), titleY, 32, WHITE);
+
+    auto y = titleY + 60;
+    int readyCount = 0;
+
+    for (std::size_t idx = 0; idx < lobbyUpdate.players.size(); ++idx) {
+      const auto &p = lobbyUpdate.players[idx];
+
+      if (!p.has_value()) {
+        const char *waitingText =
+            TextFormat("Waiting for a player...", idx + 1);
+        DrawText(waitingText, getCenteredTextX(waitingText, 20), y, 20,
+                 DARKGRAY);
+        y += 32;
+        continue;
+      }
+
+      if (p->is_ready)
+        ++readyCount;
+
+      const char *status = p->is_ready ? "READY" : "Waiting...";
+      auto statusColor = p->is_ready ? GREEN : LIGHTGRAY;
+
+      std::string label = p->name + (p->id == s->getPlayerId() ? " (You)" : "");
+      auto labelWidth = MeasureText(label.c_str(), 20);
+      auto labelPosX =
+          (shared::SCREEN_WIDTH - labelWidth - MeasureText(status, 20) - 150) /
+          2.0f;
+
+      DrawText(label.c_str(), labelPosX, y, 20, WHITE);
+      DrawText(status, labelPosX + labelWidth + 150, y, 20, statusColor);
+      y += 32;
+    }
+
+    y += 12;
+    const char *progess =
+        TextFormat("Players ready: %d/%d", readyCount, lobbyUpdate.max_players);
+    DrawText(progess, (int)getCenteredTextX(progess, 20), y, 20, LIGHTGRAY);
+    y += 32;
+
+    const char *prompt = lobby_am_i_ready ? "Press SPACE to cancel ready"
+                                          : "Press SPACE tp ready up";
+    DrawText(prompt, (int)getCenteredTextX(prompt, 20), y, 20, LIGHTGRAY);
+
+    const char *leave_prompt = "Press ESC to leave the lobby";
+    DrawText(leave_prompt, (int)getCenteredTextX(leave_prompt, 20), y + 32, 20,
+             LIGHTGRAY);
+  }
+}
+
 void Game::draw() {
   for (const auto &s : stars_)
     s.draw();
@@ -483,18 +551,9 @@ void Game::draw() {
              shared::SCREEN_HEIGHT / 2 + 40, 20, WHITE);
     break;
 
-  case Screen::LOBBY: {
-    if (OnlineSession *s = dynamic_cast<OnlineSession *>(session_.get())) {
-      auto &lobbyUpdate = s->getLobbyUpdate();
-      const auto text = "Waiting for players to join (" +
-                        std::to_string(lobbyUpdate.player_count) + "/" +
-                        std::to_string(lobbyUpdate.max_players) + " players)";
-      DrawText(text.c_str(),
-               (shared::SCREEN_WIDTH - MeasureText(text.c_str(), 20)) / 2,
-               shared::SCREEN_HEIGHT / 2, 20, WHITE);
-    }
+  case Screen::LOBBY:
+    drawLobby();
     break;
-  }
 
   case Screen::SELECT_LOCAL_MODE: {
     const std::string instructions_text =

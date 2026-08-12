@@ -36,6 +36,7 @@ private:
   void handleInput();
   void getPlayersInputs();
   void drawInputTextBox() const;
+  void drawLobby() const;
 
   // Particle system for explosion effects (client-side only)
   struct Particle {
@@ -77,6 +78,8 @@ private:
   char player_name_[shared::MAX_NAME_LENGTH + 1]{};
   int name_letters_count_{};
   bool showPlayerNameError_{};
+
+  bool lobby_am_i_ready{};
 
   // audio
   Sound shoot_sfx_;

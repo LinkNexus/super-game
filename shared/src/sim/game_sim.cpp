@@ -12,7 +12,7 @@
 using namespace shared;
 
 void GameSim::start(
-    std::array<std::optional<uint8_t>, MAX_PLAYERS> &player_ids) {
+    std::array<std::optional<uint32_t>, MAX_PLAYERS> &player_ids) {
   RndGenerator::seed();
   players_count_ = 0;
 
