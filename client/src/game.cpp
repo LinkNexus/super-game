@@ -255,6 +255,9 @@ void Game::startOnlineSession() {
   session_ =
       std::make_unique<OnlineSession>(server_url_ + "?name=" + player_name_);
   screen_ = Screen::CONNECTING;
+  state_ = shared::GameState();
+  prev_state_ = state_;
+  lobby_am_i_ready = false;
 }
 
 void Game::handleInput() {
