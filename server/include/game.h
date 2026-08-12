@@ -16,6 +16,7 @@ struct PerSocketData {
 
 struct PlayerConnection {
   uint32_t id;
+  char name[shared::MAX_NAME_LENGTH + 1]{};
   uWS::WebSocket<false, true, PerSocketData> *ws;
   shared::Button pending_movement = shared::Button::BUTTON_NONE;
   uint8_t pending_shots = 0;

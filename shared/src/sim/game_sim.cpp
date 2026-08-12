@@ -125,8 +125,6 @@ void GameSim::step(
 }
 
 void GameSim::setGameState(GameState &state) {
-  state.tick++;
-
   for (std::size_t idx = 0; idx < players_.size(); ++idx) {
     auto &player = players_[idx];
 

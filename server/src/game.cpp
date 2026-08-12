@@ -68,6 +68,20 @@ void Game::update(float dt) {
 
   sim_.step(state_, inputs, dt);
 
+  for (auto &p : state_.players) {
+    if (!p.has_value())
+      continue;
+
+    auto it = std::find_if(players_.begin(), players_.end(),
+                           [&p](const PlayerConnection *player) {
+                             return player && player->id == p->id;
+                           });
+
+    if (it != players_.end()) {
+      p->name = (*it)->name;
+    }
+  }
+
   nlohmann::json envelope;
   envelope["type"] = shared::MessageType::GAME_STATE;
   envelope["payload"] = state_;

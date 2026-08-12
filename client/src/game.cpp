@@ -17,7 +17,7 @@ Game::Game(std::string server_url) : server_url_(std::move(server_url)) {}
 
 void Game::restart() {
   if (mode_ == GameMode::LOCAL) {
-    startLocalSession(selected_local_mode_.value(), Screen::PLAYING);
+    startLocalSession(selected_local_mode_.value());
   } else {
     startOnlineSession();
   }
@@ -105,6 +105,11 @@ void Game::run() {
   float accumulator = 0.0f;
 
   while (!WindowShouldClose()) {
+    if (CheckCollisionPointRec(GetMousePosition(), name_text_box))
+      mouse_on_name_input_text = true;
+    else
+      mouse_on_name_input_text = false;
+
     handleInput();
 
     float frame_time = GetFrameTime();
@@ -220,7 +225,7 @@ void Game::run() {
   CloseWindow();
 }
 
-void Game::startLocalSession(LocalMode mode, Screen startScreen) {
+void Game::startLocalSession(LocalMode mode) {
   selected_local_mode_ = mode;
   session_ = std::make_unique<LocalSession>(mode);
   screen_ = Screen::PLAYING;
@@ -235,12 +240,16 @@ void Game::startLocalSession(LocalMode mode, Screen startScreen) {
 
   state_ = shared::GameState();
   prev_state_ = state_;
-  screen_ = startScreen;
+}
+
+bool isNameCharValid(char c) {
+  return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_';
 }
 
 void Game::startOnlineSession() {
   inputs_[0].emplace();
-  session_ = std::make_unique<OnlineSession>(server_url_);
+  session_ =
+      std::make_unique<OnlineSession>(server_url_ + "?name=" + player_name_);
   screen_ = Screen::CONNECTING;
 }
 
@@ -253,11 +262,59 @@ void Game::handleInput() {
       mode_ = GameMode::ONLINE;
     } else if (IsKeyPressed(KEY_ENTER)) {
       if (mode_ == GameMode::ONLINE) {
-        startOnlineSession();
+        screen_ = Screen::NAME_ENTRY;
       } else {
-        startLocalSession(LocalMode::SINGLE_PLAYER, Screen::SELECT_LOCAL_MODE);
+        screen_ = Screen::SELECT_LOCAL_MODE;
       }
     }
+    break;
+
+  case Screen::NAME_ENTRY:
+    if (mouse_on_name_input_text) {
+      SetMouseCursor(MOUSE_CURSOR_IBEAM);
+      int key = GetCharPressed();
+
+      while (key > 0) {
+        showPlayerNameError_ = false;
+
+        if (isNameCharValid((char)key) &&
+            name_letters_count_ < shared::MAX_NAME_LENGTH) {
+          player_name_[name_letters_count_] = (char)key;
+          player_name_[name_letters_count_ + 1] = '\0';
+          name_letters_count_++;
+        }
+
+        key = GetCharPressed();
+      }
+
+      if (IsKeyPressed(KEY_BACKSPACE)) {
+        name_letters_count_--;
+        if (name_letters_count_ < 0)
+          name_letters_count_ = 0;
+        player_name_[name_letters_count_] = '\0';
+      }
+
+      frames_counter++;
+    } else {
+      SetMouseCursor(MOUSE_CURSOR_DEFAULT);
+      frames_counter = 0;
+    }
+
+    if (IsKeyPressed(KEY_ENTER)) {
+      if (name_letters_count_ == 0) {
+        showPlayerNameError_ = true;
+        break;
+      }
+      startOnlineSession();
+      screen_ = Screen::CONNECTING;
+    }
+
+    if (IsKeyPressed(KEY_ESCAPE)) {
+      name_letters_count_ = 0;
+      player_name_[name_letters_count_] = '\0';
+      screen_ = Screen::MENU;
+    }
+
     break;
 
   case Screen::CONNECTING:
@@ -281,8 +338,7 @@ void Game::handleInput() {
     } else if (IsKeyPressed(KEY_RIGHT)) {
       selected_local_mode_ = LocalMode::DUAL_PLAYER;
     } else if (IsKeyPressed(KEY_ENTER) && selected_local_mode_.has_value()) {
-      session_ = std::make_unique<LocalSession>(selected_local_mode_.value());
-      screen_ = Screen::PLAYING;
+      startLocalSession(selected_local_mode_.value());
 
       inputs_[0]->player_id = 1;
 
@@ -335,6 +391,47 @@ void drawBullet(const shared::BulletState &state) {
                 YELLOW);
 }
 
+void Game::drawInputTextBox() const {
+  const char *text =
+      "Choose a name for the online game. Press Enter to continue";
+  DrawText(text, (shared::SCREEN_WIDTH - MeasureText(text, 20)) / 2,
+           name_text_box.y - 50.0f, 20, WHITE);
+
+  DrawRectangleRec(name_text_box, Fade(LIGHTGRAY, 0.5f));
+  if (mouse_on_name_input_text)
+    DrawRectangleLines((int)name_text_box.x, (int)name_text_box.y,
+                       (int)name_text_box.width, (int)name_text_box.height,
+                       RED);
+  else
+    DrawRectangleLines((int)name_text_box.x, (int)name_text_box.y,
+                       (int)name_text_box.width, (int)name_text_box.height,
+                       DARKGRAY);
+
+  DrawText(player_name_, (int)name_text_box.x + 5, (int)name_text_box.y + 8, 40,
+           WHITE);
+
+  const auto nameLengthText = TextFormat(
+      "INPUT CHARS: %i/%i", name_letters_count_, shared::MAX_NAME_LENGTH);
+  DrawText(nameLengthText,
+           (shared::SCREEN_WIDTH - MeasureText(nameLengthText, 20)) / 2.0f,
+           name_text_box.y + name_text_box.height + 50.0f, 20, WHITE);
+
+  if (mouse_on_name_input_text) {
+    if (name_letters_count_ < shared::MAX_NAME_LENGTH) {
+      if (((frames_counter / 20) % 2) == 0)
+        DrawText("_", (int)name_text_box.x + 8 + MeasureText(player_name_, 40),
+                 (int)name_text_box.y + 12, 40, MAROON);
+    }
+  }
+
+  if (showPlayerNameError_) {
+    const char *errorText = "Please enter a name before continuing!";
+    DrawText(errorText,
+             (shared::SCREEN_WIDTH - MeasureText(errorText, 20)) / 2.0f,
+             name_text_box.y + name_text_box.height + 80.0f, 20, RED);
+  }
+}
+
 void Game::draw() {
   for (const auto &s : stars_)
     s.draw();
@@ -374,6 +471,10 @@ void Game::draw() {
              shared::SCREEN_HEIGHT / 2 + 240, 20, WHITE);
     break;
   }
+
+  case Screen::NAME_ENTRY:
+    drawInputTextBox();
+    break;
 
   case Screen::CONNECTING:
     DrawText("Connecting to server...", shared::SCREEN_WIDTH / 2 - 170,

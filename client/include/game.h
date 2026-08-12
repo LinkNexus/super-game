@@ -12,6 +12,7 @@
 
 enum class Screen {
   MENU,
+  NAME_ENTRY,
   CONNECTING,
   LOBBY,
   SELECT_LOCAL_MODE,
@@ -34,6 +35,7 @@ private:
   void draw();
   void handleInput();
   void getPlayersInputs();
+  void drawInputTextBox() const;
 
   // Particle system for explosion effects (client-side only)
   struct Particle {
@@ -51,7 +53,7 @@ private:
   void spawnEnemyExplosions(const shared::GameState &before,
                             const shared::GameState &after);
 
-  void startLocalSession(LocalMode mode, Screen startScreen);
+  void startLocalSession(LocalMode mode);
   void startOnlineSession();
 
   static constexpr int MAX_PARTICLES = 128;
@@ -68,6 +70,14 @@ private:
   shared::GameState state_;
   shared::GameState prev_state_;
 
+  int frames_counter{};
+  bool mouse_on_name_input_text{false};
+  Rectangle name_text_box{shared::SCREEN_WIDTH / 2.0f - 130.0f,
+                          shared::SCREEN_HEIGHT / 2.0f - 25.0f, 250.0f, 50.0f};
+  char player_name_[shared::MAX_NAME_LENGTH + 1]{};
+  int name_letters_count_{};
+  bool showPlayerNameError_{};
+
   // audio
   Sound shoot_sfx_;
   Sound explosion_sfx_;
@@ -80,6 +90,6 @@ private:
   static constexpr float MUSIC_FADE_SPEED = 1.0f; // volume units per second
 
   float score_anim_time_ = 0.0f;
-  float status_text_offset_y_ = 10.0f;
+
   std::string server_url_;
 };

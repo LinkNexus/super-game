@@ -5,13 +5,25 @@
 #include "libusockets.h"
 #include "shared/constants.h"
 #include "shared/messages.h"
-#include <chrono>
 #include <cstdio>
 #include <cstring>
 
 auto sendLobbyUpdate(PerSocketData *data) {
   auto playerCount = data->game->getPlayerCount();
+  const auto &players = data->game->getPlayers();
+  std::array<std::optional<shared::PlayerInfo>, shared::MAX_PLAYERS>
+      playerInfos{};
+
+  for (std::size_t i = 0; i < players.size(); ++i) {
+    const auto player = players[i];
+    if (player) {
+      playerInfos[i].emplace();
+      playerInfos[i] = shared::PlayerInfo{.name = player->name};
+    }
+  }
+
   shared::LobbyUpdate lobbyUpdate{
+      .players = playerInfos,
       .player_count = static_cast<uint8_t>(playerCount),
       .game_started = playerCount == shared::MAX_PLAYERS,
       .max_players = shared::MAX_PLAYERS};
@@ -54,18 +66,30 @@ int main(int argc, char *argv[]) {
       .get("/health", [](auto *res, auto *req) { res->end("OK"); })
       .ws<PerSocketData>(
           "/*",
-          {.open =
+          {.upgrade =
+               [](auto *res, auto *req, auto *context) {
+                 PerSocketData data{.player = new PlayerConnection{}};
+                 auto reqName = req->getQuery("name");
+
+                 std::memcpy(data.player->name, reqName.data(),
+                             std::min(reqName.size(), shared::MAX_NAME_LENGTH));
+
+                 res->template upgrade<PerSocketData>(
+                     std::move(data), req->getHeader("sec-websocket-key"),
+                     req->getHeader("sec-websocket-protocol"),
+                     req->getHeader("sec-websocket-extensions"), context);
+               },
+           .open =
                [&manager](auto *ws) {
                  auto *data = ws->getUserData();
-                 auto *player =
-                     new PlayerConnection{manager.next_player_id++, ws};
-                 data->player = player;
-                 data->game = manager.joinOrCreateGame(player);
+                 data->player->id = manager.next_player_id++;
+                 data->player->ws = ws;
+                 data->game = manager.joinOrCreateGame(data->player);
 
                  nlohmann::json welcomeEnvelope;
                  welcomeEnvelope["type"] = shared::MessageType::WELCOME;
                  welcomeEnvelope["payload"] =
-                     shared::WelcomeMessage{.player_id = player->id};
+                     shared::WelcomeMessage{.player_id = data->player->id};
                  ws->send(welcomeEnvelope.dump());
 
                  sendLobbyUpdate(data);
