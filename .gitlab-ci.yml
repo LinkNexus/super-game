@@ -24,6 +24,9 @@ docs:
     - apt-get update -qq
     - apt-get install -y -qq --no-install-recommends doxygen
   script:
+    # Doxygen can create one missing OUTPUT_DIRECTORY level but not two at
+    # once - a fresh checkout has neither docs/ nor docs/doxygen/ yet.
+    - mkdir -p docs/doxygen
     - doxygen Doxyfile
   artifacts:
     paths:
