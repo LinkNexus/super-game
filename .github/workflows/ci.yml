@@ -1,0 +1,219 @@
+name: CI
+
+# Only master pushes (post-merge) and PRs targeting master trigger this -
+# not every push on every branch. Keeps runner minutes and artifact storage
+# bounded instead of growing with every WIP push on feature branches.
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+# Superseding a PR/branch with a new push cancels the older, now-stale run
+# instead of letting it finish and waste minutes/storage.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Artifacts (client binaries bundle ~52MB of game audio each, docs are
+# smaller but still add up) are only uploaded for master pushes - the
+# "official" build history. PRs still compile on every job below (so
+# breakage is caught before merge), they just don't persist any output,
+# since a PR build is superseded the moment it merges anyway.
+env:
+  IS_MASTER_PUSH: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
+
+jobs:
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Doxygen + graphviz
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends doxygen graphviz
+
+      - name: Generate docs
+        run: |
+          mkdir -p docs/doxygen
+          doxygen Doxyfile
+
+      - name: Upload docs artifact
+        if: env.IS_MASTER_PUSH == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: docs-html
+          path: docs/doxygen/html
+          retention-days: 14
+
+  build-client-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Non-recursive top-level checkout, matching README.md: uWebSockets
+          # and mbedtls bundle nested submodules (BoringSSL, lsquic, a fuzzing
+          # corpus - 1GB+) this project doesn't use, so those are initialized
+          # selectively below instead.
+          submodules: true
+
+      - name: Init nested submodules
+        run: |
+          git -C vendor/uWebSockets submodule update --init uSockets
+          git -C vendor/mbedtls submodule update --init framework
+
+      - name: Install build deps
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends \
+            cmake ninja-build g++ python3 \
+            libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
+            libgl1-mesa-dev libasound2-dev
+
+      - name: Cache build directories
+        uses: actions/cache@v4
+        with:
+          path: |
+            build/debug
+            build/release
+          key: client-linux-${{ github.ref_name }}
+
+      - name: Build (debug, compile check)
+        run: |
+          cmake --preset debug
+          cmake --build --preset debug --target supergame-client
+
+      - name: Build (release)
+        run: |
+          cmake --preset release
+          cmake --build --preset release --target supergame-client
+
+      - name: Upload client-linux artifact
+        if: env.IS_MASTER_PUSH == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: supergame-client-linux-${{ github.sha }}
+          path: build/release/bin/
+          retention-days: 14
+
+  build-client-windows:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Init nested submodules
+        run: |
+          git -C vendor/uWebSockets submodule update --init uSockets
+          git -C vendor/mbedtls submodule update --init framework
+
+      - name: Install cross-compile toolchain
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends \
+            cmake ninja-build python3 g++-mingw-w64-x86-64
+          # Debian's mingw-w64 package ships both win32 and posix thread-model
+          # variants; win32 doesn't implement std::thread/mutex/condition_variable
+          # at all, which ixwebsocket needs.
+          sudo update-alternatives --set x86_64-w64-mingw32-g++ /usr/bin/x86_64-w64-mingw32-g++-posix
+          sudo update-alternatives --set x86_64-w64-mingw32-gcc /usr/bin/x86_64-w64-mingw32-gcc-posix
+
+      - name: Cache build directory
+        uses: actions/cache@v4
+        with:
+          path: build/windows-client-release
+          key: client-windows-${{ github.ref_name }}
+
+      - name: Build
+        run: |
+          cmake --preset windows-client-release
+          cmake --build --preset windows-client-release
+
+      - name: Upload client-windows artifact
+        if: env.IS_MASTER_PUSH == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: supergame-client-windows-${{ github.sha }}
+          path: build/windows-client-release/bin/
+          retention-days: 14
+
+  build-server:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Server build never touches raylib/ixwebsocket/mbedtls - only
+          # uWebSockets is needed, cloned selectively instead of the full
+          # top-level submodule set.
+          submodules: false
+
+      - name: Init uWebSockets submodule
+        run: |
+          git submodule update --init vendor/uWebSockets
+          git -C vendor/uWebSockets submodule update --init uSockets
+
+      - name: Install build deps
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends cmake ninja-build g++
+
+      - name: Cache build directories
+        uses: actions/cache@v4
+        with:
+          path: |
+            build/server-debug
+            build/server-release
+          key: server-${{ github.ref_name }}
+
+      - name: Build (debug, compile check)
+        run: |
+          cmake -S . -B build/server-debug -G Ninja -DCMAKE_BUILD_TYPE=Debug -DBUILD_CLIENT=OFF
+          cmake --build build/server-debug --target supergame-server
+
+      - name: Build (release)
+        run: |
+          cmake -S . -B build/server-release -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_CLIENT=OFF
+          cmake --build build/server-release --target supergame-server
+
+  docker-server:
+    runs-on: ubuntu-latest
+    needs: build-server
+    # Only push an image once a commit actually lands on master - never
+    # from a PR (which may come from a fork with no registry access anyway).
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      - name: Init uWebSockets submodule
+        run: |
+          git submodule update --init vendor/uWebSockets
+          git -C vendor/uWebSockets submodule update --init uSockets
+
+      - name: Set lowercase image name
+        # ghcr.io requires an all-lowercase path; github.repository preserves
+        # the repo's actual casing (e.g. an uppercase owner name).
+        run: |
+          echo "IMAGE_NAME=$(echo ghcr.io/${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_ENV"
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.IMAGE_NAME }}:${{ github.sha }}
+            ${{ env.IMAGE_NAME }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
