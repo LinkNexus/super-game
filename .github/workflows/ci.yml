@@ -208,6 +208,10 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # The default "docker" buildx driver doesn't support the gha cache
+      # exporter used below - needs the docker-container driver instead.
+      - uses: docker/setup-buildx-action@v3
+
       - uses: docker/build-push-action@v6
         with:
           context: .
