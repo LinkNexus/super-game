@@ -283,6 +283,14 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      # The VPS's Dokploy deployment tracks :latest - once a fresh image
+      # lands (master push or a version tag, both retag :latest above),
+      # this tells it to pull and redeploy. The URL itself is a bearer
+      # credential (anyone with it can trigger a redeploy), so it's a
+      # secret, never a literal in this public repo.
+      - name: Trigger Dokploy redeploy
+        run: curl -fsS "${{ secrets.DOKPLOY_DEPLOY_WEBHOOK_URL }}"
+
   # Only runs on a version-tag push (v*) - bundles the artifacts the build
   # jobs above already produced (per the IS_RELEASE gate on their upload
   # steps) into a permanent GitHub Release, instead of leaving them to
