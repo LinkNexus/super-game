@@ -249,9 +249,20 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Download build artifacts
+      - name: Download docs artifact
         uses: actions/download-artifact@v4
         with:
+          name: docs-html
+          path: artifacts/docs-html
+
+      - name: Download client artifacts
+        # Scoped patterns only - an unfiltered download-artifact also picks
+        # up docker/build-push-action's own internal build-record artifact
+        # (a "*.dockerbuild" one, not a real release asset), which isn't a
+        # normal downloadable artifact and fails the whole step.
+        uses: actions/download-artifact@v4
+        with:
+          pattern: supergame-client-*
           path: artifacts
 
       - name: Zip each artifact for the release
