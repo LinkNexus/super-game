@@ -4,10 +4,11 @@ Guidance for Claude Code when working in this repository.
 
 ## Project
 
-"Super Game" — a Space Invaders-style game in C++20 + raylib, built for a university course at
-HTW Berlin. Deadline: August 12. Two contributors: Levy (gameplay/simulation/networking) and
-Lynce (visuals/audio/UI polish). See `ROADMAP.md` for the full task breakdown and phase status —
-keep it up to date as tasks complete.
+"Super Game" — a Space Invaders-style game in C++20 + raylib, originally built for a university
+course at HTW Berlin (module deadline August 12, met — graded, passed). Sole contributor: Levy,
+owning gameplay/simulation/networking as well as visuals/audio/UI polish (formerly split with a
+second contributor, Lynce, no longer on the project). See `ROADMAP.md` for the full task
+breakdown and phase status — keep it up to date as tasks complete.
 
 The project is moving from a local single-machine game (Phase 1, done) to a networked
 client/server model (Phase 2, in progress): one authoritative simulation shared verbatim between

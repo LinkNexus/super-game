@@ -1,6 +1,10 @@
 # Project Roadmap — The Super Game
 
-**Deadline:** August 12 | **Start:** June 18 | **~8 weeks total**
+**Start:** June 18 | **Course deadline:** August 12 (met — graded, passed)
+
+Phases 1-3 below are the graded module and are done, split between two contributors as
+recorded in each phase's task tables. From Phase 4 onward, Levy is the sole contributor
+(Lynce is no longer on the project) — all tasks, gameplay and visual/audio/UI alike, are his.
 
 The overall approach: local game first, then server, then multiplayer.
 
@@ -92,18 +96,171 @@ The overall approach: local game first, then server, then multiplayer.
 
 ---
 
-## Stretch ideas (post-deadline, not required for the module)
+## Phase 4 — Game modes: Coop (1-4 players) & PvP (1v1 / 2v2) (no deadline)
 
-Things worth continuing after August 12 for fun, not part of the graded scope — no pressure to land these before the presentation.
+**Goal:** An explicit mode choice, both local and online, instead of one fixed coop-vs-boss
+game:
 
-| # | Idea | Notes |
+- **Local:** Coop (1-2 players, already shipped as L20) *or* PvP 1v1 (same machine,
+  arrows vs. WASD, players fight each other instead of the boss).
+- **Online:** Coop (**variable** headcount, 1-4 players — however many connect, no forced
+  even/odd pairing, difficulty scales to whatever the actual count is) *or* PvP, chosen as
+  either 1v1 or 2v2. A 2v2 team can be one machine bringing 2 local players (reusing L20's
+  co-op input handling for a single connection), or two separate solo connections grouped
+  together.
+
+Coop and PvP are two genuinely different rule sets sharing the same sim/session plumbing —
+coop keeps today's boss-fight model (adapted to any count 1-4), PvP replaces it with
+player-vs-player damage and a last-player/last-team-standing win condition. Both need to stay
+selectable, not one replacing the other.
+
+Today `shared::MAX_PLAYERS = 2` is already the single source of truth threaded through the
+wire structs (`GameState.players`, `LobbyUpdate.players`) and `GameSim`'s player array, so
+raising it to 4 is mostly mechanical. The real gaps: (1) a `PlayerConnection` on the server
+currently maps 1:1 to exactly one player slot (`Game::addPlayer` takes a single connection) —
+nothing today lets one WS connection claim two slots the way one local keyboard already
+drives two players in `LocalSession`; (2) `GameSim` has no notion of "mode" at all yet —
+collision is unconditionally coop rules (`BulletType::ENEMY` bullets damage players, player
+bullets only ever hit enemies/boss); and (3) the L21 difficulty tables
+(`ROWS_PER_PLAYERS_COUNT`, boss health/bullet counts) only have entries for 1-2 players, not
+the 3 a variable-count coop game now needs too.
+
+All tasks below are Levy's — no gameplay/visual split anymore.
+
+| # | Task | Notes |
 |---|------|-------|
-| S1 | **PvP mode (local and online)** | A real competitive mode alongside the current co-op — players fight each other instead of (or in addition to) enemies/boss. Would need: a mode-select alongside `LocalMode`/co-op online, player-vs-player collision/damage in `GameSim` (currently only `BulletType::ENEMY` bullets damage players — player bullets only hit enemies/boss), and a real win condition (last player standing) instead of the shared coop outcome. Big enough to warrant its own design pass, not a small task. |
-| S2 | **Online leaderboard with accounts** | Persistent leaderboard across matches — needs accounts/auth, a backend datastore, way more infra than the rest of this project. Not happening before the module deadline; personal-interest continuation only. |
+| L27 | **Mode + size selection UI** | New menu step(s): Coop vs. PvP, and for PvP, 1v1 vs. 2v2 (online only — local PvP is always 1v1, no size choice needed there). Extends `Screen::SELECT_LOCAL_MODE` (L20) for the local case; online needs an equivalent pre-lobby step so the server can route the connection into a matching queue/session instead of one undifferentiated pool. |
+| L28 | **`GameSim` mode flag governing collision + win condition** | A `Coop`/`PvP` flag on `GameSim` (or per-match config) gates: whether player bullets can damage other players (off in coop, on in PvP, never same-team in 2v2), and which win-condition check runs — boss-defeated (coop, unchanged) vs. last-player-standing (PvP 1v1) vs. last-team-standing (PvP 2v2). Built on top of the existing AABB collision system (L4), not a replacement for it. |
+| L29 | **Slot-claim handshake** | Extend the existing `?name=` WS handshake query param (see L24) with something like `?players=1\|2` so a connection declares up front how many local slots it wants, plus a name per claimed slot. Needed both for an online coop group bringing 2 people on one machine, and for a 2v2 PvP team formed the same way. Server-side `GameManager`/`Game::addPlayer` needs to reserve N slots atomically for one connection instead of always 1. |
+| L30 | **Variable-count coop difficulty scaling (1-4)** | Extend `ROWS_PER_PLAYERS_COUNT` (`enemy_sim.h`) and the boss spread/successive-shot tables (`boss_sim.h`) from their current 1-2-player entries (L21) to cover 3 and 4 too — coop accepts whatever headcount shows up, odd or even, no pairing requirement. |
+| L31 | **Team assignment for PvP 2v2** | How two duos/solos pair into Team A vs. Team B — a lobby-side "join team" pick, or auto-balance on connect (first arrival(s) to fill Team A, rest to Team B). |
+| L32 | **Multi-slot `PlayerInput` per tick** | One connection can now speak for up to 2 players each tick (coop group or 2v2 team) — `OnlineSession`'s send path and the server's message handler both currently assume one `PlayerInput` per message per connection (per the L22 hardening note on the missing envelope/dispatch). Needs a `player_id` per input so the server routes each one to the right `GameSim` slot. |
+| L33 | **Lobby UX: mode/size-aware matchmaking + ready gating** | `Screen::LOBBY` (L26) currently assumes one undifferentiated 2-player queue. Needs separate pools per (mode, size) so a coop seeker never lands in a PvP lobby and vice versa, a team-select affordance for 2v2 (from L31), and per-connection ready toggling so a duo readies up once, not twice per slot. |
+| L34 | **Mode-aware player visuals** *(was Ly15, Lynce's territory)* | Two visual schemes depending on mode: coop keeps/extends the existing per-player distinction (Ly7) up to 4 players; PvP needs team-colored ships instead (Team A one color family, Team B another, same-machine duo still distinguishable within their team's palette) plus a HUD that splits into two score/lives clusters in 2v2 rather than one shared readout. |
+
+---
+
+## Phase 5 — Web Client (WASM) (no deadline)
+
+**Goal:** Play the game in a browser. Not a WASM port of the raylib `client/` binary itself —
+raylib's own Emscripten support is fine for rendering, but the client's networking
+(`ixwebsocket`) doesn't map onto a browser sandbox, and its blocking `Game::run()` loop needs
+restructuring around `emscripten_set_main_loop` regardless. Instead: a new `web/` module, a
+sibling of `client/`/`server/`/`shared/`, with two pieces —
+
+- `web/wasm/` — a thin C++ binding layer over `shared/` (already zero-dependency: no threads,
+  no filesystem, no networking, just header-only `nlohmann_json` — a clean Emscripten target
+  as-is, no changes needed to `shared/` itself) compiled via `emcmake`/Emscripten into a
+  `.wasm` + glue `.js`. Used for **local mode only** — this is where `GameSim` actually runs
+  in-browser.
+- `web/frontend/` — a TypeScript app (Canvas2D rendering, keyboard input), mirroring the
+  desktop client's input/render split (`Game::getPlayerInputs()`/`handleInput()` vs. `draw()`).
+
+**Key design decision:** the WASM boundary reuses the *existing* wire format instead of
+inventing a new one. `PlayerInput`/`GameState` already have `to_json`/`from_json` via
+`nlohmann_json` (`shared/include/shared/messages.h`) for the real network protocol — the WASM
+binding shim can serialize/deserialize through those exact same functions, passing JSON
+strings across the boundary. That means the TS side gets one `draw(gameState)` function that
+doesn't care whether the JSON came from a local WASM `step()` call or a real server message —
+the same "draw() is source-agnostic" principle `client/` already follows (see
+[CLAUDE.md](CLAUDE.md)), extended to a second frontend. Online mode on web skips WASM
+entirely: it's a native browser `WebSocket` speaking the same wire protocol directly to
+`supergame-server`, with a TS port of `OnlineSession`'s interpolation lerp (the one piece of
+client logic that isn't in `shared/` and so can't be reused as-is).
+
+All tasks below are Levy's.
+
+| # | Task | Notes |
+|---|------|-------|
+| L35 | **Emscripten toolchain + CMake wiring** | New `cmake/emscripten-toolchain.cmake` + CMake preset (mirrors the existing `windows-client-release`/`cmake/mingw-w64-toolchain.cmake` cross-compile pattern), new `web/wasm/CMakeLists.txt` producing `supergame-web-sim` — links `supergame-shared` unchanged, gated behind a `BUILD_WEB` option so normal desktop/server builds are unaffected. |
+| L36 | **WASM binding shim (JSON in/out over the wire format)** | Thin C++ layer exposing `GameSim::start()`/`step()` to JS (via Embind), taking a `PlayerInput` JSON string in and returning a `GameState` JSON string out — reusing `messages.h`'s existing `to_json`/`from_json`, no second marshaling scheme invented. |
+| L37 | **`web/frontend/` scaffold** | TS project (Vite or similar) with Canvas2D rendering and keyboard→`PlayerInput` JSON input handling, structured to mirror the input/render split already established in `client/`. |
+| L38 | **Unified `draw(gameState)` on the TS side** | One render function for both local (WASM `step()` output) and online (server message) `GameState` JSON — same source-agnostic principle as the desktop client's `draw()`. |
+| L39 | **Online mode via native browser `WebSocket`** | TS client speaking the existing wire protocol directly to `supergame-server` (same `?name=`/`?players=` handshake as desktop, once L28/L29 land), plus a TS port of `OnlineSession`'s client-side interpolation lerp. |
+| L40 | **Web asset pipeline** | Lazy-load audio behind a user-gesture "Play" button (browsers block autoplay pre-interaction anyway, so this is required, not optional), and re-encode `Backgroundsound.wav` (48MB) to a compressed web-friendly format — bundling the raw wav would make first load brutal. |
+| L41 | **CI: build + deploy the web target** | New GitHub Actions job building the `web-sim` WASM preset + frontend bundle, mirroring the existing cross-compile job pattern — artifact upload/deploy gated to master pushes only, consistent with the rest of the pipeline's storage-conscious triggers. |
+
+---
+
+## Phase 6 — 3D Migration: On-Rails Corridor Shooter (no deadline)
+
+**Goal:** Real 3D gameplay, not just a 3D presentation of the current 2D game — a Star
+Fox-style on-rails corridor shooter, third-person camera trailing behind the player's ship.
+The world/enemy formations advance along a fixed Z axis toward the player; the player doesn't
+fly freely, but steers within a bounded 2D plane (X/Y) a fixed distance in front of the
+camera — 2 degrees of freedom, vs. today's 1 (`PlayerSimState::POSITION_Y` is currently a
+fixed constant; only X varies). This is a real redesign of `shared/`'s spatial model, not a
+rendering swap: `Vec2D` positions become `Vec3D` throughout the sim, and collision, movement,
+and the boss's already-angle-based spread-shot fan (`Vec2D::rotated`/`angle_between` — L21)
+all need a 3D equivalent.
+
+**Sequencing note:** this touches nearly every file Phase 4 (PvP collision) and Phase 5
+(WASM/wire format) also touch. Doing the dimensionality migration first — or at least before
+deep investment in Phase 4's collision work — avoids writing 2D collision logic that gets
+thrown away almost immediately after. Phase 5's core design (the WASM shim reusing
+`to_json`/`from_json`) is unaffected either way — it's format-agnostic; 3D coordinates are
+just more fields in the same JSON.
+
+**Open question worth resolving before starting:** does 3D fully replace the 2D game, or
+become an additional selectable mode alongside it (extending Phase 4's mode-select step with
+a dimensionality axis, not just Coop/PvP)? Affects whether `Vec2D` and the current 2D
+collision/rendering path get deleted outright or kept around for a 2D mode.
+
+All tasks below are Levy's.
+
+| # | Task | Notes |
+|---|------|-------|
+| L42 | **`Vec3D` primitives in `shared/`** | Add a 3D vector type alongside the existing `Vec2D` (`math_utils.h`), generalizing the angle/rotation math already built for the boss's spread-shot fan (`Vec2D::rotated`, `angle_between`, `dot_product` — L21) to 3D (e.g. spreading a bullet volley across a cone instead of a 2D arc). |
+| L43 | **Migrate sim positions `Vec2D` → `Vec3D`** | `PlayerSimState`, `BulletSimState`, `EnemySimState`, `BossSimState` (and their wire counterparts in `messages.h`) move to 3D positions, one entity at a time — same "state and logic migrate together" principle already established for the client/server split (see [CLAUDE.md](CLAUDE.md)), applied to a dimensionality change instead. |
+| L44 | **Player steering: 2-DOF movement plane** | Today `PlayerSimState::POSITION_Y` is fixed — the player only ever moves in X. On-rails 3D needs real X/Y steering within a bounded plane a fixed distance in front of the camera (Z stays constant for the player; only the *world* advances in Z). Needs a new `UP`/`DOWN` bit on `PlayerInput.buttons` alongside the existing left/right/fire bits. |
+| L45 | **World/enemy Z-advance ("the rail")** | Reinterpret the existing enemy row/column formation (`enemy_sim.h`) as an (X,Y) formation plane spawned at a far Z that shrinks toward the player over time, replacing the current "step down the 2D grid" logic — keeps the existing grid/wave structure, just adds depth instead of a full rewrite. |
+| L46 | **3D collision (AABB → 3D bounding box)** | Generalize the hitbox constants (currently a single `SIZE` per entity, e.g. `PlayerSimState::SIZE`) to width/height/depth, and extend the AABB collision check used throughout `GameSim` to 3 axes. |
+| L47 | **Boss spread-shot fan in 3D** | The existing angle-fan bullet pattern (L21) generalizes from a 2D arc to a 3D cone using the new `Vec3D` rotation math from L42. |
+| L48 | **Third-person 3D camera + rendering** | Client-side: a `Camera3D` trailing behind/above the player's ship, replacing 2D `DrawTexture` calls with billboards or simple 3D models. Biggest raylib-API learning curve of this phase — raylib's 3D camera/mesh/lighting surface is quite different from the 2D drawing calls used everywhere in `client/` today, which is exactly the point per the stated goal of gaining 3D experience. |
+
+---
+
+## Phase 7 — Online Leaderboard with Accounts (no deadline)
+
+**Goal:** Persistent accounts and a real leaderboard across matches. No longer a stretch idea
+now that there's no deadline pressure — a genuine phase.
+
+Decided: this lives in a **separate backend service**, not bolted onto `supergame-server`.
+The game server's whole design is a fixed-tick authoritative sim loop over WebSockets; a
+stateless CRUD/auth API is a different concern and shouldn't leak into that process. It
+deploys alongside `supergame-server` on the same VPS, reusing the Dokploy/Compose deployment
+pattern already established in L17. Auth is rolled by hand (hashed password + JWT/session),
+not delegated to a third-party provider — deliberate, since writing it is part of the point.
+
+Two things left genuinely open, worth deciding at the start of this phase rather than now:
+**language/framework** for the new service (doesn't have to be C++ — this is a CRUD+auth API,
+a different shape of problem than the sim), and **database** (a lightweight embedded DB like
+SQLite vs. a real Postgres instance — worth checking first whether the VPS's existing Dokploy
+deployment already runs a Postgres instance for its own core services, per the L17 notes, that
+could be reused instead of standing up a new one).
+
+This has a soft dependency on Phase 4: leaderboard entries are more useful once they can be
+filtered by mode (coop/PvP, 1v1/2v2), but that's an additive column, not a blocker — score
+tracking can start against raw matches before Phase 4 lands.
+
+All tasks below are Levy's.
+
+| # | Task | Notes |
+|---|------|-------|
+| L49 | **New backend service scaffold** | A new top-level directory (e.g. `leaderboard-service/`), separate from `client`/`server`/`shared` since it doesn't touch the sim at all. Language/framework choice is open — see above. |
+| L50 | **Accounts: schema + password auth** | User table (id, username, hashed password via bcrypt/argon2), registration/login endpoints, JWT (or session cookie) issuance and validation. |
+| L51 | **Leaderboard: schema + score submission** | Persistent scores table (user_id, score, mode, timestamp), authenticated endpoint for the game client to submit a completed match's score tied to the logged-in account. |
+| L52 | **Client-side account UI** | New `Screen` states for login/register, storing the issued auth token client-side, and submitting the score on `GAME_OVER`/`WIN` when logged in. |
+| L53 | **Leaderboard display screen** | A new screen listing top scores (optionally filtered by mode once Phase 4 lands), fetched from the backend service's API. |
+| L54 | **Deployment** | New Dokploy/Compose service alongside `supergame-server` on the VPS, reusing the L17 deployment pattern; resolve the DB choice (see above) as part of this task. |
+| L55 | **CI: build/test the backend service** | New GitHub Actions job for the new service, gated the same storage-conscious way as the rest of the pipeline (master pushes + PRs, no artifact bloat on every branch push). |
 
 ---
 
 ## Timeline at a glance
+
+Historical record of the graded module's schedule (Phases 1-3). Nothing from Phase 4 onward
+is scheduled — no deadline, no fixed week-by-week plan.
 
 ```
 Week 1-2  (Jun 18 – Jul 1)   L1-L4  + Ly1-Ly3   — Core entities + visuals
