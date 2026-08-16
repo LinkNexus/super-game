@@ -1,11 +1,14 @@
 name: CI
 
-# Only master pushes (post-merge) and PRs targeting master trigger this -
-# not every push on every branch. Keeps runner minutes and artifact storage
-# bounded instead of growing with every WIP push on feature branches.
+# Master pushes (post-merge), PRs targeting master, and version tags (v*)
+# trigger this - not every push on every branch. Keeps runner minutes and
+# artifact storage bounded instead of growing with every WIP push on
+# feature branches. Tag pushes are what cut an actual GitHub Release (see
+# publish-release below) - everyday master-push artifacts stay short-lived.
 on:
   push:
     branches: [master]
+    tags: ['v*']
   pull_request:
     branches: [master]
 
@@ -16,12 +19,13 @@ concurrency:
   cancel-in-progress: true
 
 # Artifacts (client binaries bundle ~52MB of game audio each, docs are
-# smaller but still add up) are only uploaded for master pushes - the
-# "official" build history. PRs still compile on every job below (so
-# breakage is caught before merge), they just don't persist any output,
+# smaller but still add up) are only uploaded for master pushes and version
+# tags - the "official" build history. PRs still compile on every job below
+# (so breakage is caught before merge), they just don't persist any output,
 # since a PR build is superseded the moment it merges anyway.
 env:
   IS_MASTER_PUSH: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
+  IS_RELEASE: ${{ startsWith(github.ref, 'refs/tags/v') }}
 
 jobs:
   docs:
@@ -40,7 +44,7 @@ jobs:
           doxygen Doxyfile
 
       - name: Upload docs artifact
-        if: env.IS_MASTER_PUSH == 'true'
+        if: env.IS_MASTER_PUSH == 'true' || env.IS_RELEASE == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: docs-html
@@ -90,7 +94,7 @@ jobs:
           cmake --build --preset release --target supergame-client
 
       - name: Upload client-linux artifact
-        if: env.IS_MASTER_PUSH == 'true'
+        if: env.IS_MASTER_PUSH == 'true' || env.IS_RELEASE == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: supergame-client-linux-${{ github.sha }}
@@ -132,7 +136,7 @@ jobs:
           cmake --build --preset windows-client-release
 
       - name: Upload client-windows artifact
-        if: env.IS_MASTER_PUSH == 'true'
+        if: env.IS_MASTER_PUSH == 'true' || env.IS_RELEASE == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: supergame-client-windows-${{ github.sha }}
@@ -180,9 +184,9 @@ jobs:
   docker-server:
     runs-on: ubuntu-latest
     needs: build-server
-    # Only push an image once a commit actually lands on master - never
-    # from a PR (which may come from a fork with no registry access anyway).
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    # Push an image on a master push or a version tag - never from a PR
+    # (which may come from a fork with no registry access anyway).
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v'))
     permissions:
       contents: read
       packages: write
@@ -202,6 +206,20 @@ jobs:
         run: |
           echo "IMAGE_NAME=$(echo ghcr.io/${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_ENV"
 
+      - name: Compute image tags
+        # sha + latest always; the version tag itself too (e.g. v1.0.0) when
+        # this run was triggered by pushing a version tag, not a master push.
+        run: |
+          {
+            echo "IMAGE_TAGS<<TAGEOF"
+            echo "${IMAGE_NAME}:${GITHUB_SHA}"
+            echo "${IMAGE_NAME}:latest"
+            if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+              echo "${IMAGE_NAME}:${GITHUB_REF_NAME}"
+            fi
+            echo "TAGEOF"
+          } >> "$GITHUB_ENV"
+
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -216,8 +234,48 @@ jobs:
         with:
           context: .
           push: true
-          tags: |
-            ${{ env.IMAGE_NAME }}:${{ github.sha }}
-            ${{ env.IMAGE_NAME }}:latest
+          tags: ${{ env.IMAGE_TAGS }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  # Only runs on a version-tag push (v*) - bundles the artifacts the build
+  # jobs above already produced (per the IS_RELEASE gate on their upload
+  # steps) into a permanent GitHub Release, instead of leaving them to
+  # expire after 14 days like ordinary master-push artifacts.
+  publish-release:
+    runs-on: ubuntu-latest
+    needs: [docs, build-client-linux, build-client-windows, docker-server]
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    steps:
+      - name: Download docs artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: docs-html
+          path: artifacts/docs-html
+
+      - name: Download client artifacts
+        # Scoped patterns only - an unfiltered download-artifact also picks
+        # up docker/build-push-action's own internal build-record artifact
+        # (a "*.dockerbuild" one, not a real release asset), which isn't a
+        # normal downloadable artifact and fails the whole step.
+        uses: actions/download-artifact@v4
+        with:
+          pattern: supergame-client-*
+          path: artifacts
+
+      - name: Zip each artifact for the release
+        run: |
+          cd artifacts
+          for d in */; do
+            name="${d%/}"
+            zip -rq "../${name}.zip" "$name"
+          done
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: "*.zip"
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
