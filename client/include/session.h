@@ -13,11 +13,21 @@
 /// value - only the latest matters for rendering.
 template <typename T> class MailBox {
 public:
-  void set(T value);
+  void set(T value) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    pending_ = std::move(value);
+    has_pending_ = true;
+  }
 
   /// @return The pending value and clears it, or `std::nullopt` if nothing
   /// new has arrived since the last call.
-  std::optional<T> take();
+  std::optional<T> take() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (!has_pending_)
+      return std::nullopt;
+    has_pending_ = false;
+    return std::move(pending_);
+  }
 
 private:
   std::mutex mutex_;
@@ -41,7 +51,7 @@ public:
 
 /// Whether a local session controls one player (arrows+space) or two on
 /// the same keyboard (P2 on WASD, W to shoot).
-enum class LocalMode { SINGLE_PLAYER, DUAL_PLAYER };
+enum class LocalMode { SINGLE_PLAYER, DUAL_PLAYER, PvP };
 
 /// Runs a `GameSim` in-process, with no networking - the same simulation
 /// code path the server uses, just fed local input directly.
@@ -58,6 +68,8 @@ private:
   shared::GameSim sim_{};
   shared::GameState state_{};
 };
+
+enum class OnlineMode { COOP, _1V1, _2V2 };
 
 /// Talks to the authoritative server over WebSocket: sends this client's
 /// input/ready state each tick and applies received `GameState`/
