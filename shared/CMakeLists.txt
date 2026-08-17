@@ -6,6 +6,7 @@ add_library(supergame-shared STATIC
     src/sim/game_sim.cpp
     src/math_utils.cpp
     src/rnd_generator.cpp
+    src/modes.cpp
 )
 
 target_include_directories(supergame-shared PUBLIC

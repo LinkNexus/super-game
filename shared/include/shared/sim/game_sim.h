@@ -2,6 +2,7 @@
 
 #include "shared/constants.h"
 #include "shared/messages.h"
+#include "shared/modes.h"
 #include "shared/sim/boss_sim.h"
 #include "shared/sim/enemy_sim.h"
 #include "shared/sim/player_sim.h"

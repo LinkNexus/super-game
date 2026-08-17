@@ -16,7 +16,7 @@ static constexpr float FIXED_DT = 1.0f / 60.0f;
 static constexpr int MAX_BULLETS = 64;
 /// Score awarded to a player for each enemy or boss hit they land.
 static constexpr int POINTS_PER_HIT = 10;
-/// Maximum simultaneous players in one match, online or local co-op.
+/// Maximum simultaneous players in one match, online or local co-op/pvp.
 static constexpr uint8_t MAX_PLAYERS = 2;
 /// Default WebSocket URL the client connects to when none is given on the
 /// command line.

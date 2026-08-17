@@ -17,6 +17,7 @@
 /// session while `PAUSED` and keeps drawing the last known state.
 enum class Screen {
   MENU,
+  SELECT_ONLINE_MODE,
   NAME_ENTRY,
   CONNECTING,
   LOBBY,
@@ -52,15 +53,20 @@ private:
   /// fresh `OnlineSession`, depending on `mode_`.
   void restart();
 
-  void draw();
+  void draw() const;
+  void drawMainMenu() const;
+  void drawInputTextBox() const;
+  void drawLobby() const;
+  void drawLocalModeSelection() const;
+  void drawOnlineModeSelection() const;
+  void drawGame() const;
+  void drawEndScreen() const;
+
   void handleInput();
 
   /// Polls raylib input and writes the resulting buttons into `inputs_`
   /// for whichever local player(s) are active this tick.
   void getPlayersInputs();
-
-  void drawInputTextBox() const;
-  void drawLobby() const;
 
   /// Particle system for explosion effects (client-side only).
   struct Particle {
@@ -84,12 +90,17 @@ private:
 
   /// Creates a fresh `LocalSession` for @p mode and resets `inputs_`
   /// (player ids, dual-player slot) to match it.
-  void startLocalSession(LocalMode mode);
+  void startLocalSession();
 
   /// Creates a fresh `OnlineSession` against `server_url_` (with the
   /// chosen `player_name_` as a query parameter) and moves to
   /// `Screen::CONNECTING`.
   void startOnlineSession();
+
+  constexpr static std::array<LocalMode, 3> local_modes_order_ = {
+      LocalMode::SINGLE_PLAYER, LocalMode::DUAL_PLAYER, LocalMode::PvP};
+  constexpr static std::array<OnlineMode, 3> online_modes_order = {
+      OnlineMode::COOP, OnlineMode::_1V1, OnlineMode::_2V2};
 
   static constexpr int MAX_PARTICLES = 128;
   std::array<Particle, MAX_PARTICLES> particles_{};
@@ -103,7 +114,10 @@ private:
   /// necessarily the sim's player id) and sent to the active `Session`
   /// each tick.
   std::array<std::optional<shared::PlayerInput>, shared::MAX_PLAYERS> inputs_{};
-  std::optional<LocalMode> selected_local_mode_{};
+
+  int selected_local_mode_idx{};
+  int selected_online_mode_idx{};
+
   std::unique_ptr<Session> session_ = nullptr;
   shared::GameState state_;
   /// Previous tick's state, kept for edge-detection (enemy deaths, boss

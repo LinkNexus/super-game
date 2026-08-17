@@ -4,31 +4,16 @@
 #include "shared/messages.h"
 #include <algorithm>
 #include <cstdint>
-#include <mutex>
 #include <optional>
 #include <string>
 #include <utility>
-
-template <typename T> void MailBox<T>::set(T value) {
-  std::lock_guard<std::mutex> lock(mutex_);
-  pending_ = std::move(value);
-  has_pending_ = true;
-}
-
-template <typename T> std::optional<T> MailBox<T>::take() {
-  std::lock_guard<std::mutex> lock(mutex_);
-  if (!has_pending_)
-    return std::nullopt;
-  has_pending_ = false;
-  return std::move(pending_);
-}
 
 LocalSession::LocalSession(LocalMode mode) {
   mode_ = mode;
 
   std::array<std::optional<uint32_t>, shared::MAX_PLAYERS> ids{};
   ids[0] = 1;
-  if (mode_ == LocalMode::DUAL_PLAYER)
+  if (mode_ != LocalMode::SINGLE_PLAYER)
     ids[1] = 2;
 
   sim_.start(ids);
