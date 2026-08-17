@@ -89,9 +89,9 @@ void Game::run() {
   if (IsAudioDeviceReady()) {
     audio_ready_ = true;
     shoot_sfx_ = LoadSound("assets/shoot.wav");
-    explosion_sfx_ = LoadSound("assets/explosion.wav");
-    boss_hit_sfx_ = LoadSound("assets/boss_hit.wav");
-    background_music_ = LoadMusicStream("assets/backgroundsound.wav");
+    explosion_sfx_ = LoadSound("assets/explosion.ogg");
+    boss_hit_sfx_ = LoadSound("assets/boss_hit.ogg");
+    background_music_ = LoadMusicStream("assets/backgroundsound.ogg");
     if (IsMusicValid(background_music_)) {
       music_loaded_ = true;
       target_music_volume_ = 0.0f;
