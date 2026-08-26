@@ -24,8 +24,7 @@ enum class Screen {
   SELECT_LOCAL_MODE,
   PLAYING,
   PAUSED,
-  GAME_OVER,
-  WIN
+  END
 };
 
 /// Which kind of `Session` the player picked from the main menu.
@@ -85,8 +84,8 @@ private:
   /// Diffs @p before and @p after to spawn explosion particles for enemies
   /// that died this tick, since the wire `GameState` doesn't carry death
   /// events itself.
-  void spawnEnemyExplosions(const shared::GameState &before,
-                            const shared::GameState &after);
+  void spawnEnemyExplosions(const shared::CoopGameState &before,
+                            const shared::CoopGameState &after);
 
   /// Creates a fresh `LocalSession` for @p mode and resets `inputs_`
   /// (player ids, dual-player slot) to match it.
@@ -97,11 +96,6 @@ private:
   /// `Screen::CONNECTING`.
   void startOnlineSession();
 
-  constexpr static std::array<LocalMode, 3> local_modes_order_ = {
-      LocalMode::SINGLE_PLAYER, LocalMode::DUAL_PLAYER, LocalMode::PvP};
-  constexpr static std::array<OnlineMode, 3> online_modes_order = {
-      OnlineMode::COOP, OnlineMode::_1V1, OnlineMode::_2V2};
-
   static constexpr int MAX_PARTICLES = 128;
   std::array<Particle, MAX_PARTICLES> particles_{};
 
@@ -110,13 +104,14 @@ private:
   std::array<Star, STAR_COUNT> stars_;
   Screen screen_;
   GameMode mode_ = GameMode::LOCAL;
+
   /// Per-slot local input state, indexed by local player slot (not
   /// necessarily the sim's player id) and sent to the active `Session`
   /// each tick.
-  std::array<std::optional<shared::PlayerInput>, shared::MAX_PLAYERS> inputs_{};
+  shared::PlayerInputs inputs_{};
 
-  int selected_local_mode_idx{};
-  int selected_online_mode_idx{};
+  OnlineSession::Config online_config_{};
+  LocalSession::Config local_config_{};
 
   std::unique_ptr<Session> session_ = nullptr;
   shared::GameState state_;
@@ -124,17 +119,10 @@ private:
   /// hits) that the current `GameState` snapshot alone can't reveal.
   shared::GameState prev_state_;
 
-  int frames_counter{};
-  bool mouse_on_name_input_text{false};
   Rectangle name_text_box{shared::SCREEN_WIDTH / 2.0f - 130.0f,
                           shared::SCREEN_HEIGHT / 2.0f - 25.0f, 250.0f, 50.0f};
-  char player_name_[shared::MAX_NAME_LENGTH + 1]{};
   int name_letters_count_{};
   bool showPlayerNameError_{};
-
-  /// Local mirror of this client's own ready state, toggled by SPACE on
-  /// `Screen::LOBBY` and sent to the server via `OnlineSession::sendReady`.
-  bool lobby_am_i_ready{};
 
   // audio
   Sound shoot_sfx_;
@@ -148,6 +136,4 @@ private:
   static constexpr float MUSIC_FADE_SPEED = 1.0f; // volume units per second
 
   float score_anim_time_ = 0.0f;
-
-  std::string server_url_;
 };

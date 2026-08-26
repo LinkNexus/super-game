@@ -12,6 +12,8 @@
 /// rendering is identical regardless of whether the state came from local
 /// sim or a network snapshot.
 struct Player {
+  enum class Type { MYSELF, PARTNER, ENEMY };
+
   Texture2D texture = {};
 
   void loadTexture();
@@ -22,10 +24,16 @@ struct Player {
   static constexpr float HEART_SPACING = 4.0f;
 
 private:
-  void drawPlayer(const shared::Vec2D position, bool main) const;
-  void drawLives(uint8_t lives, float y_offset) const;
+  void drawPlayerAndStats(const shared::PlayerState &player, Type type,
+                          bool isOnline, std::size_t idx, float &yOffset) const;
+  void drawPlayer(const shared::Vec2D position, Type type) const;
+  void drawLives(uint8_t lives, float yOffset) const;
 
 public:
+  void draw(Session *currentSession,
+            const std::array<shared::TeamState, 2> &state,
+            uint8_t teamSize) const;
+
   /// Draws every populated slot in @p states: the ship sprite (only while
   /// alive) plus a HUD block (name, lives, points). @p current_session is
   /// used only to tell which player is "this client" in online mode
@@ -33,56 +41,7 @@ public:
   /// distinction. Falls back to "Player N" when a slot has no name set
   /// (always the case in local mode, since names are an online-only
   /// concept assigned by the server).
-  template <std::size_t N>
-  void
-  draw(Session *current_session,
-       const std::array<std::optional<shared::PlayerState>, N> &states) const {
-    float y_offset = 10.0f;
-
-    for (std::size_t idx = 0; idx < states.size(); ++idx) {
-      const auto &player = states[idx];
-
-      bool is_online_session = false;
-      uint32_t player_id = 1;
-
-      if (OnlineSession *session =
-              dynamic_cast<OnlineSession *>(current_session)) {
-        is_online_session = true;
-        player_id = session->getPlayerId();
-      }
-
-      if (player.has_value()) {
-        if (player->lives > 0)
-          drawPlayer(player->position, player->id == player_id);
-
-        const std::string playerLabel =
-            (player->name.empty() ? "Player " + std::to_string(idx + 1)
-                                  : player->name) +
-            (!is_online_session ? ""
-                                : ((player->id == player_id ? " (You)" : "")));
-        DrawText(playerLabel.c_str(),
-                 shared::SCREEN_WIDTH - 10 -
-                     MeasureText(playerLabel.c_str(), STATUS_FONT_SIZE),
-                 y_offset, STATUS_FONT_SIZE, WHITE);
-        y_offset += STATUS_FONT_SIZE;
-
-        drawLives(player->lives, y_offset);
-        y_offset += HEART_SIZE;
-
-        const char *points_text = TextFormat("Points: %d", player->points);
-        DrawText(points_text,
-                 shared::SCREEN_WIDTH - 10 -
-                     MeasureText(points_text, STATUS_FONT_SIZE),
-                 y_offset, STATUS_FONT_SIZE, WHITE);
-
-        y_offset += STATUS_FONT_SIZE + 5;
-
-        DrawLine(shared::SCREEN_WIDTH -
-                     MeasureText(points_text, STATUS_FONT_SIZE) - 10,
-                 y_offset, shared::SCREEN_WIDTH, y_offset, WHITE);
-
-        y_offset += 25;
-      }
-    }
-  }
+  void draw(Session *currentSession,
+            const shared::OptionalTypeInPlayerSlots<shared::PlayerState>
+                &states) const;
 };

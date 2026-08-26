@@ -2,54 +2,83 @@
 
 #include "shared/constants.h"
 #include "shared/messages.h"
-#include "shared/modes.h"
 #include "shared/sim/boss_sim.h"
 #include "shared/sim/enemy_sim.h"
 #include "shared/sim/player_sim.h"
 
 namespace shared {
-/// Top-level progression state for a match, independent of client-only
-/// screen/menu state (see `Screen` in the client, which governs *whether*
-/// GameSim is stepped at all - GamePhase only tracks sim-relevant
-/// progression and rides along in GameState::phase for the wire).
-enum class GamePhase : uint8_t {
-  ENEMIES_ENTRANCE,
-  FIGHT_ENEMIES,
-  BOSS_ENTRANCE,
-  FIGHT_BOSS,
-  WON,
-  GAME_OVER
-};
-
-/// Headless, engine-agnostic authoritative game loop. Runs identically in
-/// the server process (one instance per match) and in the client's local
-/// mode (in-process, no networking) - this is the single source of truth
-/// for all gameplay logic, with no raylib or networking dependency.
-class GameSim {
+class CoopGameSim {
 public:
-  /// Starts a new match for the given players. Each non-empty slot in
-  /// @p player_ids becomes one active player; the resulting count scales
-  /// enemy row count and boss health/attack patterns for the rest of the
-  /// match.
-  void start(std::array<std::optional<uint32_t>, MAX_PLAYERS> &player_ids);
+  enum class Phase : uint8_t {
+    ENEMIES_ENTRANCE,
+    FIGHT_ENEMIES,
+    BOSS_ENTRANCE,
+    FIGHT_BOSS,
+    WON,
+    GAME_OVER
+  };
 
-  /// Advances the simulation by one fixed tick: applies @p inputs (matched
-  /// to players by id, not array slot), steps whichever phase is currently
-  /// active, resolves collisions, and writes the resulting snapshot into
-  /// @p state for the wire/local rendering.
-  void step(GameState &state,
-            const std::array<std::optional<PlayerInput>, MAX_PLAYERS> &inputs,
-            float dt);
+  void start(PlayerIds &player_ids);
+  void step(CoopGameState &state, const PlayerInputs &inputs, float dt);
 
 private:
-  void checkCollisions();
-  void setGameState(GameState &state);
-
-  std::array<std::optional<PlayerSimState>, MAX_PLAYERS> players_{};
-  std::array<BulletSimState, MAX_BULLETS> bullets_pool_{};
+  Phase phase_{Phase::ENEMIES_ENTRANCE};
   EnemiesPoolSimState enemies_pool_{};
   BossSimState boss_{};
-  GamePhase phase_{};
-  uint8_t players_count_{};
+  OptionalTypeInPlayerSlots<PlayerSimState> players_{};
+  uint8_t players_count_{0};
+  BulletsPool bullets_pool_;
+
+private:
+  void setGameState(CoopGameState &state);
+  void checkCollisions();
 };
+
+class PvPGameSim {
+public:
+  enum class TeamOutcome { PLAYING, WON, LOST, DREW };
+
+  using TeamId = uint8_t;
+
+  struct Team {
+    TeamId id{};
+    TeamOutcome outcome{TeamOutcome::PLAYING};
+    std::array<std::optional<PlayerSimState>, MAX_PLAYERS / 2> players{};
+    bool is_on_top{};
+    float initial_position_y{};
+
+    void init(TeamId id, bool isOnTop);
+    void stepEntrance(float dt);
+    bool isEntranceComplete() const;
+
+    static constexpr float INITIAL_OFFSET_Y = 20.0f;
+    static constexpr float ENTRANCE_SPEED = 70.0f;
+  };
+
+  enum class Phase : uint8_t { PLAYERS_ENTRANCE, PLAYERS_FIGHT, END };
+
+  using Teams = std::array<Team, 2>;
+  using PerTeamPlayerIds =
+      std::array<std::array<std::optional<PlayerId>, MAX_PLAYERS / 2>, 2>;
+
+  PvPGameSim(std::size_t team_size);
+  void start(PerTeamPlayerIds &team_players_ids);
+  void step(PvPGameState &state, const PlayerInputs &inputs, float dt);
+
+  static constexpr float PLAYERS_SPACING = 30.0f;
+  static constexpr int POINTS_PER_HIT = 50;
+  static constexpr int INITIAL_LIVES = 10;
+
+private:
+  std::size_t team_size_{};
+  Teams teams_{};
+  Phase phase_{Phase::PLAYERS_ENTRANCE};
+  BulletsPool bullets_pool_;
+
+private:
+  void setGameState(PvPGameState &state);
+  void checkCollisions();
+};
+
+using GameSim = std::variant<CoopGameSim, PvPGameSim>;
 } // namespace shared

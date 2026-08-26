@@ -1,6 +1,7 @@
 #pragma once
 
 #include "nlohmann/json.hpp"
+#include "shared/aliases.h"
 #include "shared/constants.h"
 #include "shared/math_utils.h"
 #include "shared/sim/enemy_sim.h"
@@ -43,8 +44,10 @@ enum Button : uint8_t {
 /// key in the `{type, payload}` JSON envelope sent by the server).
 enum class ServerMessageType : uint8_t {
   WELCOME,
-  LOBBY_UPDATE,
-  GAME_STATE,
+  COOP_GAME_LOBBY_UPDATE,
+  PVP_GAME_LOBBY_UPDATE,
+  PVP_GAME_STATE,
+  COOP_GAME_STATE,
 };
 
 /// Envelope discriminator for client-to-server messages.
@@ -77,18 +80,23 @@ struct PlayerInfo {
 };
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(PlayerInfo, name, is_ready, id)
 
-/// Broadcast by the server whenever the lobby state changes (a player
-/// joins, leaves, or toggles ready). `game_started` becomes true only once
-/// every slot is filled and ready, at which point the client transitions
-/// from `Screen::LOBBY` to `Screen::PLAYING`.
-struct LobbyUpdate {
+struct CoopGameLobbyUpdate {
   std::array<std::optional<PlayerInfo>, MAX_PLAYERS> players{};
-  uint8_t player_count{};
-  bool game_started{};
   uint8_t max_players{};
+  bool game_started{};
 };
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(LobbyUpdate, players, player_count,
-                                   game_started, max_players)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(CoopGameLobbyUpdate, players, game_started,
+                                   max_players)
+
+struct PvPGameLobbyUpdate {
+  shared::OptionalTypeInTeamSlots<PlayerInfo> teams{};
+  uint8_t team_size{};
+  bool game_started{};
+};
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(PvPGameLobbyUpdate, teams, game_started,
+                                   team_size)
+
+using LobbyUpdate = std::variant<CoopGameLobbyUpdate, PvPGameLobbyUpdate>;
 
 /// Per-tick movement/shoot input, sent by the client during `PLAYING` and
 /// consumed by GameSim::step(). `player_id` is only trusted for local
@@ -97,7 +105,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(LobbyUpdate, players, player_count,
 /// connection it arrived on, never to this field.
 struct PlayerInput {
   uint8_t buttons{};
-  uint32_t player_id{};
+  PlayerId player_id{};
 };
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(PlayerInput, buttons, player_id)
 
@@ -123,6 +131,8 @@ struct BulletState {
 };
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(BulletState, position, type, active)
 
+using BulletsPoolState = std::array<BulletState, MAX_BULLETS>;
+
 /// Trimmed boss state for rendering, including `max_health` so the client
 /// can compute the health bar's fill ratio without hardcoding a constant
 /// that would be wrong once boss health scales with player count.
@@ -135,23 +145,35 @@ struct BossState {
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(BossState, position, active, health,
                                    max_health)
 
-/// The full per-tick snapshot GameSim::step() produces and the server
-/// broadcasts to every connected client; the client's local mode consumes
-/// the same struct produced in-process. `enemies` packs
-/// `{alive, type}` per grid slot rather than sending full per-enemy
-/// transforms, since enemy positions are cheaply reconstructed client-side
-/// from `enemies_offset_x/y` plus the slot index.
-struct GameState {
+struct CoopGameState {
   uint8_t phase{};
-  std::array<std::optional<PlayerState>, MAX_PLAYERS> players{};
-  std::array<BulletState, MAX_BULLETS> bullets{};
+  OptionalTypeInPlayerSlots<PlayerState> players{};
   std::array<std::array<uint8_t, 2>,
              EnemiesPoolSimState::COLS * EnemiesPoolSimState::MAX_ROWS>
       enemies{};
   float enemies_offset_x, enemies_offset_y{};
   BossState boss{};
+  BulletsPoolState bullets{};
 };
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(GameState, phase, players, bullets, enemies,
-                                   enemies_offset_x, enemies_offset_y, boss)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(CoopGameState, phase, players, bullets,
+                                   enemies, enemies_offset_x, enemies_offset_y,
+                                   boss)
+
+struct TeamState {
+  uint8_t id{};
+  uint8_t outcome{};
+  std::array<std::optional<PlayerState>, MAX_PLAYERS / 2> players{};
+};
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(TeamState, id, outcome, players)
+
+struct PvPGameState {
+  uint8_t phase{};
+  std::array<TeamState, 2> teams{};
+  BulletsPoolState bullets{};
+  uint8_t team_size{};
+};
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(PvPGameState, phase, teams, bullets)
+
+using GameState = std::variant<CoopGameState, PvPGameState>;
 
 } // namespace shared

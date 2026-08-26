@@ -6,6 +6,7 @@
 #include "raylib.h"
 #include "session.h"
 #include "shared/constants.h"
+#include "shared/helpers.h"
 #include "shared/messages.h"
 #include "shared/sim/enemy_sim.h"
 #include "shared/sim/game_sim.h"
@@ -18,7 +19,9 @@ float getCenteredTextX(const char *text, int font_size) {
   return (shared::SCREEN_WIDTH - MeasureText(text, font_size)) / 2.0f;
 }
 
-Game::Game(std::string server_url) : server_url_(std::move(server_url)) {}
+Game::Game(std::string server_url) {
+  online_config_.server_url = std::move(server_url);
+}
 
 void Game::restart() {
   if (mode_ == GameMode::LOCAL) {
@@ -58,7 +61,7 @@ void Game::getPlayersInputs() {
   inputs_[0]->buttons = mainPlayerButtons;
 
   if (LocalSession *s = dynamic_cast<LocalSession *>(session_.get())) {
-    if (s->getMode() != LocalMode::SINGLE_PLAYER) {
+    if (s->getMode() != LocalSession::Mode::SINGLE_PLAYER) {
       auto secondPlayerButtons = shared::BUTTON_NONE;
 
       if (IsKeyDown(KEY_A))
@@ -110,11 +113,6 @@ void Game::run() {
   float accumulator = 0.0f;
 
   while (!WindowShouldClose()) {
-    if (CheckCollisionPointRec(GetMousePosition(), name_text_box))
-      mouse_on_name_input_text = true;
-    else
-      mouse_on_name_input_text = false;
-
     handleInput();
 
     float frame_time = GetFrameTime();
@@ -154,9 +152,11 @@ void Game::run() {
 
       if (screen_ == Screen::LOBBY) {
         if (OnlineSession *s = dynamic_cast<OnlineSession *>(session_.get())) {
-          if (s->getLobbyUpdate().game_started) {
-            screen_ = Screen::PLAYING;
-          }
+          std::visit(shared::overloaded{[this](const auto &u) {
+                       if (u.game_started)
+                         screen_ = Screen::PLAYING;
+                     }},
+                     s->getLobbyUpdate());
         }
       }
 
@@ -167,34 +167,55 @@ void Game::run() {
 
         // play sounds for events (enemy death, boss hit)
         if (audio_ready_) {
-          for (std::size_t idx = 0; idx < state_.enemies.size(); ++idx) {
-            if (prev_state_.enemies[idx][0] == 1 &&
-                state_.enemies[idx][0] == 0) {
-              PlaySound(explosion_sfx_);
-            }
-          }
+          std::visit(
+              shared::overloaded{
+                  [&](shared::CoopGameState &s, shared::CoopGameState &prev_s) {
+                    for (std::size_t idx = 0; idx < s.enemies.size(); ++idx) {
+                      if (prev_s.enemies[idx][0] == 1 &&
+                          s.enemies[idx][0] == 0) {
+                        PlaySound(explosion_sfx_);
+                      }
+                    }
 
-          if (prev_state_.boss.active && state_.boss.active &&
-              prev_state_.boss.health > state_.boss.health) {
-            PlaySound(boss_hit_sfx_);
-          }
+                    if (prev_s.boss.active && s.boss.active &&
+                        prev_s.boss.health > s.boss.health) {
+                      PlaySound(boss_hit_sfx_);
+                    }
+
+                    spawnEnemyExplosions(prev_s, s);
+                  },
+                  [](shared::PvPGameState &s, shared::PvPGameState &prev_s) {
+
+                  },
+                  [](auto &, auto &) {}},
+              state_, prev_state_);
         }
 
-        spawnEnemyExplosions(prev_state_, state_);
         prev_state_ = state_;
       }
 
-      if (screen_ != Screen::GAME_OVER && screen_ != Screen::WIN) {
-        auto phase = static_cast<shared::GamePhase>(state_.phase);
+      if (screen_ != Screen::END) {
+        std::visit(
+            shared::overloaded{[&](shared::CoopGameState &s) {
+                                 using GamePhase = shared::CoopGameSim::Phase;
+                                 auto phase = static_cast<GamePhase>(s.phase);
 
-        if (phase == shared::GamePhase::GAME_OVER ||
-            phase == shared::GamePhase::WON) {
-          session_ = nullptr;
-          if (phase == shared::GamePhase::GAME_OVER)
-            screen_ = Screen::GAME_OVER;
-          if (phase == shared::GamePhase::WON)
-            screen_ = Screen::WIN;
-        }
+                                 if (phase == GamePhase::GAME_OVER ||
+                                     phase == GamePhase::WON) {
+                                   session_ = nullptr;
+                                   screen_ = Screen::END;
+                                 }
+                               },
+                               [&](shared::PvPGameState &s) {
+                                 using GamePhase = shared::PvPGameSim::Phase;
+                                 auto phase = static_cast<GamePhase>(s.phase);
+
+                                 if (phase == GamePhase::END) {
+                                   session_ = nullptr;
+                                   screen_ = Screen::END;
+                                 }
+                               }},
+            state_);
       } else {
         // animate score screen border while showing final results
         score_anim_time_ += shared::FIXED_DT;
@@ -231,14 +252,14 @@ void Game::run() {
 }
 
 void Game::startLocalSession() {
-  auto selectedMode = local_modes_order_[selected_local_mode_idx];
+  auto selectedMode = local_config_.modes[local_config_.mode_idx];
   session_ = std::make_unique<LocalSession>(selectedMode);
   screen_ = Screen::PLAYING;
 
   inputs_[0].emplace();
   inputs_[0]->player_id = 1;
 
-  if (selectedMode != LocalMode::SINGLE_PLAYER) {
+  if (selectedMode != LocalSession::Mode::SINGLE_PLAYER) {
     inputs_[1].emplace();
     inputs_[1]->player_id = 2;
   }
@@ -254,8 +275,9 @@ bool isNameCharValid(char c) {
 void Game::startOnlineSession() {
   inputs_[0].emplace();
 
-  std::string url = server_url_ + "?name=" + player_name_;
-  auto selectedOnlineMode = online_modes_order[selected_online_mode_idx];
+  std::string url =
+      online_config_.server_url + "?name=" + online_config_.player_name;
+  auto selectedOnlineMode = online_config_.modes[online_config_.mode_idx];
 
   if (selectedOnlineMode != OnlineMode::COOP) {
     url += "&players=" +
@@ -266,7 +288,7 @@ void Game::startOnlineSession() {
   screen_ = Screen::CONNECTING;
   state_ = shared::GameState();
   prev_state_ = state_;
-  lobby_am_i_ready = false;
+  online_config_.is_ready = false;
 }
 
 void Game::handleInput() {
@@ -289,49 +311,42 @@ void Game::handleInput() {
     if (IsKeyPressed(KEY_ESCAPE)) {
       screen_ = Screen::MENU;
     } else if (IsKeyPressed(KEY_LEFT)) {
-      if (selected_online_mode_idx > 0)
-        selected_online_mode_idx--;
+      if (online_config_.mode_idx > 0)
+        online_config_.mode_idx--;
       else
-        selected_online_mode_idx = online_modes_order.size() - 1;
+        online_config_.mode_idx = online_config_.modes.size() - 1;
     } else if (IsKeyPressed(KEY_RIGHT)) {
-      if (selected_online_mode_idx < online_modes_order.size() - 1)
-        selected_online_mode_idx++;
+      if (online_config_.mode_idx < online_config_.modes.size() - 1)
+        online_config_.mode_idx++;
       else
-        selected_online_mode_idx = 0;
+        online_config_.mode_idx = 0;
     } else if (IsKeyPressed(KEY_ENTER))
       screen_ = Screen::NAME_ENTRY;
 
     break;
 
-  case Screen::NAME_ENTRY:
-    if (mouse_on_name_input_text) {
-      SetMouseCursor(MOUSE_CURSOR_IBEAM);
-      int key = GetCharPressed();
+  case Screen::NAME_ENTRY: {
+    SetMouseCursor(MOUSE_CURSOR_IBEAM);
+    int key = GetCharPressed();
 
-      while (key > 0) {
-        showPlayerNameError_ = false;
+    while (key > 0) {
+      showPlayerNameError_ = false;
 
-        if (isNameCharValid((char)key) &&
-            name_letters_count_ < shared::MAX_NAME_LENGTH) {
-          player_name_[name_letters_count_] = (char)key;
-          player_name_[name_letters_count_ + 1] = '\0';
-          name_letters_count_++;
-        }
-
-        key = GetCharPressed();
+      if (isNameCharValid((char)key) &&
+          name_letters_count_ < shared::MAX_NAME_LENGTH) {
+        online_config_.player_name[name_letters_count_] = (char)key;
+        online_config_.player_name[name_letters_count_ + 1] = '\0';
+        name_letters_count_++;
       }
 
-      if (IsKeyPressed(KEY_BACKSPACE)) {
-        name_letters_count_--;
-        if (name_letters_count_ < 0)
-          name_letters_count_ = 0;
-        player_name_[name_letters_count_] = '\0';
-      }
+      key = GetCharPressed();
+    }
 
-      frames_counter++;
-    } else {
-      SetMouseCursor(MOUSE_CURSOR_DEFAULT);
-      frames_counter = 0;
+    if (IsKeyPressed(KEY_BACKSPACE)) {
+      name_letters_count_--;
+      if (name_letters_count_ < 0)
+        name_letters_count_ = 0;
+      online_config_.player_name[name_letters_count_] = '\0';
     }
 
     if (IsKeyPressed(KEY_ENTER)) {
@@ -344,11 +359,12 @@ void Game::handleInput() {
 
     if (IsKeyPressed(KEY_ESCAPE)) {
       name_letters_count_ = 0;
-      player_name_[name_letters_count_] = '\0';
+      online_config_.player_name[name_letters_count_] = '\0';
       screen_ = Screen::MENU;
     }
 
     break;
+  }
 
   case Screen::CONNECTING:
     if (IsKeyPressed(KEY_ESCAPE)) {
@@ -364,8 +380,8 @@ void Game::handleInput() {
 
     if (IsKeyPressed(KEY_SPACE)) {
       if (OnlineSession *s = dynamic_cast<OnlineSession *>(session_.get())) {
-        lobby_am_i_ready = !lobby_am_i_ready;
-        s->sendReady(lobby_am_i_ready);
+        online_config_.is_ready = !online_config_.is_ready;
+        s->sendReady(online_config_.is_ready);
       }
     }
 
@@ -375,15 +391,15 @@ void Game::handleInput() {
     if (IsKeyPressed(KEY_ESCAPE)) {
       screen_ = Screen::MENU;
     } else if (IsKeyPressed(KEY_LEFT)) {
-      if (selected_local_mode_idx > 0)
-        selected_local_mode_idx--;
+      if (local_config_.mode_idx > 0)
+        local_config_.mode_idx--;
       else
-        selected_local_mode_idx = local_modes_order_.size() - 1;
+        local_config_.mode_idx = local_config_.modes.size() - 1;
     } else if (IsKeyPressed(KEY_RIGHT)) {
-      if (selected_local_mode_idx < local_modes_order_.size() - 1)
-        selected_local_mode_idx++;
+      if (local_config_.mode_idx < local_config_.modes.size() - 1)
+        local_config_.mode_idx++;
       else
-        selected_local_mode_idx = 0;
+        local_config_.mode_idx = 0;
     } else if (IsKeyPressed(KEY_ENTER))
       startLocalSession();
 
@@ -404,15 +420,7 @@ void Game::handleInput() {
 
     break;
 
-  case Screen::GAME_OVER:
-    if (IsKeyPressed(KEY_ENTER))
-      init();
-    if (IsKeyPressed(KEY_R))
-      restart();
-
-    break;
-
-  case Screen::WIN:
+  case Screen::END:
     if (IsKeyPressed(KEY_ENTER))
       init();
     if (IsKeyPressed(KEY_R))
@@ -459,8 +467,7 @@ void Game::draw() const {
     drawGame();
     break;
 
-  case Screen::GAME_OVER:
-  case Screen::WIN:
+  case Screen::END:
     drawEndScreen();
     break;
   }
@@ -556,8 +563,8 @@ void Game::spawnExplosion(const Vector2 &pos, shared::EnemyType type) {
   }
 }
 
-void Game::spawnEnemyExplosions(const shared::GameState &before,
-                                const shared::GameState &after) {
+void Game::spawnEnemyExplosions(const shared::CoopGameState &before,
+                                const shared::CoopGameState &after) {
   for (std::size_t idx = 0; idx < after.enemies.size(); ++idx) {
     bool was_alive = before.enemies[idx][0] != 0;
     bool is_alive = after.enemies[idx][0] != 0;
@@ -632,19 +639,19 @@ void Game::drawLocalModeSelection() const {
   const std::string pvp_text = "PvP";
   DrawText(single_player_text.c_str(), confirm_text_offset_x,
            shared::SCREEN_HEIGHT / 2 + 40, 24,
-           selected_local_mode_idx == 0 ? YELLOW : WHITE);
+           local_config_.mode_idx == 0 ? YELLOW : WHITE);
 
   DrawText(dual_player_text.c_str(),
            confirm_text_offset_x + confirm_text_width / 2 -
                MeasureText(dual_player_text.c_str(), 24) / 2,
            shared::SCREEN_HEIGHT / 2 + 40, 24,
-           selected_local_mode_idx == 1 ? YELLOW : WHITE);
+           local_config_.mode_idx == 1 ? YELLOW : WHITE);
 
   DrawText(pvp_text.c_str(),
            confirm_text_offset_x + confirm_text_width -
                MeasureText(pvp_text.c_str(), 24),
            shared::SCREEN_HEIGHT / 2 + 40, 24,
-           selected_local_mode_idx == 2 ? YELLOW : WHITE);
+           local_config_.mode_idx == 2 ? YELLOW : WHITE);
 }
 
 void Game::drawOnlineModeSelection() const {
@@ -668,19 +675,19 @@ void Game::drawOnlineModeSelection() const {
   const std::string _2v2Text = "2 Vs 2";
   DrawText(coopText.c_str(), confirm_text_offset_x,
            shared::SCREEN_HEIGHT / 2 + 40, 24,
-           selected_online_mode_idx == 0 ? YELLOW : WHITE);
+           online_config_.mode_idx == 0 ? YELLOW : WHITE);
 
   DrawText(_1v1Text.c_str(),
            confirm_text_offset_x + confirm_text_width / 2 -
                MeasureText(_1v1Text.c_str(), 24) / 2,
            shared::SCREEN_HEIGHT / 2 + 40, 24,
-           selected_online_mode_idx == 1 ? YELLOW : WHITE);
+           online_config_.mode_idx == 1 ? YELLOW : WHITE);
 
   DrawText(_2v2Text.c_str(),
            confirm_text_offset_x + confirm_text_width -
                MeasureText(_2v2Text.c_str(), 24),
            shared::SCREEN_HEIGHT / 2 + 40, 24,
-           selected_online_mode_idx == 2 ? YELLOW : WHITE);
+           online_config_.mode_idx == 2 ? YELLOW : WHITE);
 }
 
 void Game::drawInputTextBox() const {
@@ -690,31 +697,17 @@ void Game::drawInputTextBox() const {
            name_text_box.y - 50.0f, 20, WHITE);
 
   DrawRectangleRec(name_text_box, Fade(LIGHTGRAY, 0.5f));
-  if (mouse_on_name_input_text)
-    DrawRectangleLines((int)name_text_box.x, (int)name_text_box.y,
-                       (int)name_text_box.width, (int)name_text_box.height,
-                       RED);
-  else
-    DrawRectangleLines((int)name_text_box.x, (int)name_text_box.y,
-                       (int)name_text_box.width, (int)name_text_box.height,
-                       DARKGRAY);
+  DrawRectangleLines((int)name_text_box.x, (int)name_text_box.y,
+                     (int)name_text_box.width, (int)name_text_box.height, RED);
 
-  DrawText(player_name_, (int)name_text_box.x + 5, (int)name_text_box.y + 8, 40,
-           WHITE);
+  DrawText(online_config_.player_name, (int)name_text_box.x + 5,
+           (int)name_text_box.y + 8, 40, WHITE);
 
   const auto nameLengthText = TextFormat(
       "INPUT CHARS: %i/%i", name_letters_count_, shared::MAX_NAME_LENGTH);
   DrawText(nameLengthText,
            (shared::SCREEN_WIDTH - MeasureText(nameLengthText, 20)) / 2.0f,
            name_text_box.y + name_text_box.height + 50.0f, 20, WHITE);
-
-  if (mouse_on_name_input_text) {
-    if (name_letters_count_ < shared::MAX_NAME_LENGTH) {
-      if (((frames_counter / 20) % 2) == 0)
-        DrawText("_", (int)name_text_box.x + 8 + MeasureText(player_name_, 40),
-                 (int)name_text_box.y + 12, 40, MAROON);
-    }
-  }
 
   if (showPlayerNameError_) {
     const char *errorText = "Please enter a name before continuing!";
@@ -733,45 +726,57 @@ void Game::drawLobby() const {
     DrawText(title, getCenteredTextX(title, 32), titleY, 32, WHITE);
 
     auto y = titleY + 60;
-    int readyCount = 0;
 
-    for (std::size_t idx = 0; idx < lobbyUpdate.players.size(); ++idx) {
-      const auto &p = lobbyUpdate.players[idx];
+    std::visit(
+        shared::overloaded{
+            [&y, &s](const shared::CoopGameLobbyUpdate &u) {
+              int readyCount = 0;
 
-      if (!p.has_value()) {
-        const char *waitingText =
-            TextFormat("Waiting for a player...", idx + 1);
-        DrawText(waitingText, getCenteredTextX(waitingText, 20), y, 20,
-                 DARKGRAY);
-        y += 32;
-        continue;
-      }
+              for (std::size_t idx = 0; idx < u.players.size(); ++idx) {
+                const auto &p = u.players[idx];
 
-      if (p->is_ready)
-        ++readyCount;
+                if (!p.has_value()) {
+                  const char *waitingText =
+                      TextFormat("Waiting for a player...", idx + 1);
+                  DrawText(waitingText, getCenteredTextX(waitingText, 20), y,
+                           20, DARKGRAY);
+                  y += 32;
+                  continue;
+                }
 
-      const char *status = p->is_ready ? "READY" : "Waiting...";
-      auto statusColor = p->is_ready ? GREEN : LIGHTGRAY;
+                if (p->is_ready)
+                  ++readyCount;
 
-      std::string label = p->name + (p->id == s->getPlayerId() ? " (You)" : "");
-      auto labelWidth = MeasureText(label.c_str(), 20);
-      auto labelPosX =
-          (shared::SCREEN_WIDTH - labelWidth - MeasureText(status, 20) - 150) /
-          2.0f;
+                const char *status = p->is_ready ? "READY" : "Waiting...";
+                auto statusColor = p->is_ready ? GREEN : LIGHTGRAY;
 
-      DrawText(label.c_str(), labelPosX, y, 20, WHITE);
-      DrawText(status, labelPosX + labelWidth + 150, y, 20, statusColor);
-      y += 32;
-    }
+                std::string label =
+                    p->name + (p->id == s->getPlayerId() ? " (You)" : "");
+                auto labelWidth = MeasureText(label.c_str(), 20);
+                auto labelPosX = (shared::SCREEN_WIDTH - labelWidth -
+                                  MeasureText(status, 20) - 150) /
+                                 2.0f;
 
-    y += 12;
-    const char *progess =
-        TextFormat("Players ready: %d/%d", readyCount, lobbyUpdate.max_players);
-    DrawText(progess, (int)getCenteredTextX(progess, 20), y, 20, LIGHTGRAY);
-    y += 32;
+                DrawText(label.c_str(), labelPosX, y, 20, WHITE);
+                DrawText(status, labelPosX + labelWidth + 150, y, 20,
+                         statusColor);
+                y += 32;
+              }
 
-    const char *prompt = lobby_am_i_ready ? "Press SPACE to cancel ready"
-                                          : "Press SPACE tp ready up";
+              y += 12;
+              const char *progess =
+                  TextFormat("Players ready: %d/%d", readyCount, u.max_players);
+              DrawText(progess, (int)getCenteredTextX(progess, 20), y, 20,
+                       LIGHTGRAY);
+              y += 32;
+            },
+            [](const shared::PvPGameLobbyUpdate &u) {
+
+            }},
+        lobbyUpdate);
+
+    const char *prompt = online_config_.is_ready ? "Press SPACE to cancel ready"
+                                                 : "Press SPACE tp ready up";
     DrawText(prompt, (int)getCenteredTextX(prompt, 20), y, 20, LIGHTGRAY);
 
     const char *leave_prompt = "Press ESC to leave the lobby";
@@ -781,31 +786,44 @@ void Game::drawLobby() const {
 }
 
 void Game::drawGame() const {
-  player_.draw(session_.get(), state_.players);
+  std::visit(
+      shared::overloaded{
+          [&](const shared::CoopGameState &s) {
+            player_.draw(session_.get(), s.players);
 
-  for (const auto &b : state_.bullets)
-    drawBullet(b);
+            for (const auto &b : s.bullets)
+              drawBullet(b);
 
-  // draw particle explosions (spawned when enemies die)
-  drawParticles();
+            drawParticles();
 
-  for (std::size_t idx = 0; idx < state_.enemies.size(); ++idx) {
-    if (state_.enemies[idx][0] == 1) {
-      float pos_x = state_.enemies_offset_x +
-                    (idx % shared::EnemiesPoolSimState::COLS) *
-                        (shared::EnemySimState::WIDTH +
-                         shared::EnemiesPoolSimState::SPACING_X);
-      float pos_y = state_.enemies_offset_y +
-                    (idx / shared::EnemiesPoolSimState::COLS) *
-                        (shared::EnemySimState::HEIGHT +
-                         shared::EnemiesPoolSimState::SPACING_Y);
-      Enemy::draw(pos_x, pos_y,
-                  static_cast<shared::EnemyType>(state_.enemies[idx][1]));
-    }
-  }
+            for (std::size_t idx = 0; idx < s.enemies.size(); ++idx) {
+              if (s.enemies[idx][0] == 1) {
+                float pos_x = s.enemies_offset_x +
+                              (idx % shared::EnemiesPoolSimState::COLS) *
+                                  (shared::EnemySimState::WIDTH +
+                                   shared::EnemiesPoolSimState::SPACING_X);
+                float pos_y = s.enemies_offset_y +
+                              (idx / shared::EnemiesPoolSimState::COLS) *
+                                  (shared::EnemySimState::HEIGHT +
+                                   shared::EnemiesPoolSimState::SPACING_Y);
+                Enemy::draw(pos_x, pos_y,
+                            static_cast<shared::EnemyType>(s.enemies[idx][1]));
+              }
+            }
 
-  boss_.draw(state_.boss, static_cast<shared::GamePhase>(state_.phase) ==
-                              shared::GamePhase::FIGHT_BOSS);
+            {
+              using GamePhase = shared::CoopGameSim::Phase;
+              boss_.draw(s.boss, static_cast<GamePhase>(s.phase) ==
+                                     GamePhase::FIGHT_BOSS);
+            }
+          },
+          [&](const shared::PvPGameState &s) {
+            player_.draw(session_.get(), s.teams, s.team_size);
+
+            for (const auto &b : s.bullets)
+              drawBullet(b);
+          }},
+      state_);
 
   if (screen_ == Screen::PAUSED) {
     DrawRectangle(0, 0, shared::SCREEN_WIDTH, shared::SCREEN_HEIGHT,
@@ -831,22 +849,30 @@ void Game::drawEndScreen() const {
   Color borderCol = Fade(YELLOW, 0.4f + 0.6f * pulse);
   DrawRectangleLinesEx(rec, 4, borderCol);
 
-  const char *title = (screen_ == Screen::WIN) ? "Victory!" : "Game Over";
+  std::string title{};
+  std::visit(shared::overloaded{[&](const shared::CoopGameState &s) {
+                                  using GamePhase = shared::CoopGameSim::Phase;
+                                  auto phase = static_cast<GamePhase>(s.phase);
+                                  if (phase == GamePhase::GAME_OVER)
+                                    title = "Game Over";
+                                  else if (phase == GamePhase::WON)
+                                    title = "Victory!";
+                                },
+                                [&](const shared::PvPGameState &s) {
+                                  using GamePhase = shared::PvPGameSim::Phase;
+                                  auto phase = static_cast<GamePhase>(s.phase);
 
-  DrawText(title, (int)(shared::SCREEN_WIDTH / 2 - MeasureText(title, 32) / 2),
+                                  if (phase == GamePhase::END) {
+                                    title = "RESULTS";
+                                  }
+                                }},
+             state_);
+
+  DrawText(title.c_str(),
+           (int)(shared::SCREEN_WIDTH / 2 - MeasureText(title.c_str(), 32) / 2),
            (int)(by + 12), 32, WHITE);
 
   int y = (int)(by + 60);
-
-  auto maxScoreIt =
-      std::max_element(state_.players.begin(), state_.players.end(),
-                       [](const auto &a, const auto &b) {
-                         if (!a.has_value())
-                           return true;
-                         if (!b.has_value())
-                           return false;
-                         return a->points < b->points;
-                       });
 
   bool isOnlineSession = false;
   uint32_t playerId = 1;
@@ -855,40 +881,57 @@ void Game::drawEndScreen() const {
     playerId = session->getPlayerId();
   }
 
-  for (std::size_t idx = 0; idx < state_.players.size(); ++idx) {
-    const auto &p = state_.players[idx];
-    if (!p.has_value())
-      continue;
+  std::visit(shared::overloaded{
+                 [&](const shared::CoopGameState &s) {
+                   auto maxScoreIt =
+                       std::max_element(s.players.begin(), s.players.end(),
+                                        [](const auto &a, const auto &b) {
+                                          if (!a.has_value())
+                                            return true;
+                                          if (!b.has_value())
+                                            return false;
+                                          return a->points < b->points;
+                                        });
 
-    auto hasHighestScore =
-        (maxScoreIt != state_.players.end() && maxScoreIt->has_value() &&
-         maxScoreIt->value().id == p->id);
+                   for (std::size_t idx = 0; idx < s.players.size(); ++idx) {
+                     const auto &p = s.players[idx];
+                     if (!p.has_value())
+                       continue;
 
-    std::string playerLabel;
+                     auto hasHighestScore = (maxScoreIt != s.players.end() &&
+                                             maxScoreIt->has_value() &&
+                                             maxScoreIt->value().id == p->id);
 
-    if (p->name.empty())
-      playerLabel = "Player " + std::to_string(idx + 1);
-    else
-      playerLabel = p->name;
+                     std::string playerLabel;
 
-    if (isOnlineSession) {
-      if (playerId == p->id) {
-        playerLabel = playerLabel + " (You" +
-                      (hasHighestScore ? " | Best Player" : "") + ")";
-      } else if (hasHighestScore) {
-        playerLabel += " (Best Player)";
-      }
-    } else if (hasHighestScore) {
-      playerLabel += " (Best Player)";
-    }
+                     if (p->name.empty())
+                       playerLabel = "Player " + std::to_string(idx + 1);
+                     else
+                       playerLabel = p->name;
 
-    const auto line =
-        playerLabel + TextFormat(": %u pts | %u lives", p->points, p->lives);
+                     if (isOnlineSession) {
+                       if (playerId == p->id) {
+                         playerLabel =
+                             playerLabel + " (You" +
+                             (hasHighestScore ? " | Best Player" : "") + ")";
+                       } else if (hasHighestScore) {
+                         playerLabel += " (Best Player)";
+                       }
+                     } else if (hasHighestScore) {
+                       playerLabel += " (Best Player)";
+                     }
 
-    Color col = (hasHighestScore) ? YELLOW : LIGHTGRAY;
-    DrawText(line.c_str(), (int)(bx + 24), y, 22, col);
-    y += 32;
-  }
+                     const auto line =
+                         playerLabel +
+                         TextFormat(": %u pts | %u lives", p->points, p->lives);
+
+                     Color col = (hasHighestScore) ? YELLOW : LIGHTGRAY;
+                     DrawText(line.c_str(), (int)(bx + 24), y, 22, col);
+                     y += 32;
+                   }
+                 },
+                 [](const shared::PvPGameState &state) {}},
+             state_);
 
   const char *controls = "Press R to restart or ENTER to return to menu";
   DrawText(controls,

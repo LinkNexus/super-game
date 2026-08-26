@@ -49,34 +49,43 @@ public:
        float dt) = 0;
 };
 
-/// Whether a local session controls one player (arrows+space) or two on
-/// the same keyboard (P2 on WASD, W to shoot).
-enum class LocalMode { SINGLE_PLAYER, DUAL_PLAYER, PvP };
-
 /// Runs a `GameSim` in-process, with no networking - the same simulation
 /// code path the server uses, just fed local input directly.
 class LocalSession : public Session {
 public:
-  LocalSession(LocalMode mode = LocalMode::SINGLE_PLAYER);
+  enum class Mode { SINGLE_PLAYER, DUAL_PLAYER, PvP };
+  struct Config {
+    int mode_idx{};
+    static constexpr std::array<Mode, 3> modes = {Mode::SINGLE_PLAYER,
+                                                  Mode::DUAL_PLAYER, Mode::PvP};
+  };
+
+  LocalSession(Mode mode);
+  Mode getMode() const;
   shared::GameState step(const std::array<std::optional<shared::PlayerInput>,
                                           shared::MAX_PLAYERS> &inputs,
                          float dt) override;
-  LocalMode getMode() const;
 
 private:
-  LocalMode mode_{LocalMode::SINGLE_PLAYER};
+  Mode mode_{Mode::SINGLE_PLAYER};
   shared::GameSim sim_{};
   shared::GameState state_{};
 };
 
 enum class OnlineMode { COOP, _1V1, _2V2 };
 
-/// Talks to the authoritative server over WebSocket: sends this client's
-/// input/ready state each tick and applies received `GameState`/
-/// `LobbyUpdate`/`WelcomeMessage` snapshots, interpolating rendered
-/// positions between ticks to hide network jitter.
 class OnlineSession : public Session {
 public:
+  struct Config {
+    char player_name[shared::MAX_NAME_LENGTH + 1]{};
+    bool is_ready{};
+    std::string server_url;
+
+    int mode_idx;
+    constexpr static std::array<OnlineMode, 3> modes = {
+        OnlineMode::COOP, OnlineMode::_1V1, OnlineMode::_2V2};
+  };
+
   explicit OnlineSession(const std::string &url);
   shared::GameState step(const std::array<std::optional<shared::PlayerInput>,
                                           shared::MAX_PLAYERS> &inputs,

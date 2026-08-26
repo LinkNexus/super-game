@@ -17,7 +17,7 @@ static constexpr int MAX_BULLETS = 64;
 /// Score awarded to a player for each enemy or boss hit they land.
 static constexpr int POINTS_PER_HIT = 10;
 /// Maximum simultaneous players in one match, online or local co-op/pvp.
-static constexpr uint8_t MAX_PLAYERS = 2;
+static constexpr uint8_t MAX_PLAYERS = 4;
 /// Default WebSocket URL the client connects to when none is given on the
 /// command line.
 static std::string default_server_url = "wss://supergame.levynkeneng.dev";

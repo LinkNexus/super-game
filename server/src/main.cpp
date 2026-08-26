@@ -4,7 +4,9 @@
 #include "internal/eventing/epoll_kqueue.h"
 #include "libusockets.h"
 #include "shared/constants.h"
+#include "shared/helpers.h"
 #include "shared/messages.h"
+#include "shared/rnd_generator.h"
 #include <cstdio>
 #include <cstring>
 
@@ -14,29 +16,61 @@
 /// disconnect, or a ready toggle - so every client's lobby screen stays in
 /// sync.
 auto sendLobbyUpdate(PerSocketData *data) {
-  auto playerCount = data->game->getPlayerCount();
-  const auto &players = data->game->getPlayers();
-  std::array<std::optional<shared::PlayerInfo>, shared::MAX_PLAYERS>
-      playerInfos{};
-
-  for (std::size_t i = 0; i < players.size(); ++i) {
-    const auto player = players[i];
-    if (player) {
-      playerInfos[i].emplace();
-      playerInfos[i] = shared::PlayerInfo{
-          .id = player->id, .name = player->name, .is_ready = player->is_ready};
-    }
-  }
-
-  shared::LobbyUpdate lobbyUpdate{
-      .players = playerInfos,
-      .player_count = static_cast<uint8_t>(playerCount),
-      .game_started = data->game->allPlayersReady(),
-      .max_players = shared::MAX_PLAYERS};
-
   nlohmann::json envelope;
-  envelope["type"] = shared::ServerMessageType::LOBBY_UPDATE;
-  envelope["payload"] = lobbyUpdate;
+
+  std::visit(
+      shared::overloaded{
+          [&data, &envelope](const CoopGameType &t) {
+            const auto &players = data->game->getPlayers();
+            shared::OptionalTypeInPlayerSlots<shared::PlayerInfo> playerInfos{};
+
+            for (std::size_t i = 0; i < players.size(); ++i) {
+              const auto player = players[i];
+              if (player) {
+                playerInfos[i].emplace();
+                playerInfos[i] =
+                    shared::PlayerInfo{.id = player->id,
+                                       .name = player->name,
+                                       .is_ready = player->is_ready};
+              }
+            }
+
+            envelope["type"] =
+                shared::ServerMessageType::COOP_GAME_LOBBY_UPDATE;
+            envelope["payload"] = shared::CoopGameLobbyUpdate{
+                .players = playerInfos,
+                .max_players = shared::MAX_PLAYERS,
+                .game_started = data->game->canStart()};
+          },
+          [&data, &envelope](const PvPGameType &t) {
+            if (PvPGame *game = dynamic_cast<PvPGame *>(data->game)) {
+              const auto &teams = game->getTeams();
+              shared::OptionalTypeInTeamSlots<shared::PlayerInfo> teamsInfo;
+
+              for (const auto &team : teams) {
+                auto &teamInfo = teamsInfo[&team - &teams[0]];
+
+                for (const auto &player : team) {
+                  if (player) {
+                    auto &playerInfo = teamInfo[&player - &team[0]];
+                    playerInfo.emplace();
+                    playerInfo =
+                        shared::PlayerInfo{.id = player->id,
+                                           .name = player->name,
+                                           .is_ready = player->is_ready};
+                  }
+                }
+              }
+
+              envelope["type"] =
+                  shared::ServerMessageType::PVP_GAME_LOBBY_UPDATE;
+              envelope["payload"] = shared::PvPGameLobbyUpdate{
+                  .teams = teamsInfo,
+                  .team_size = static_cast<uint8_t>(t.team_size),
+                  .game_started = data->game->canStart()};
+            }
+          }},
+      data->game_type);
 
   for (const auto &player : data->game->getPlayers()) {
     if (player)
@@ -45,6 +79,8 @@ auto sendLobbyUpdate(PerSocketData *data) {
 }
 
 int main(int argc, char *argv[]) {
+  RndGenerator::seed();
+
   GameManager manager{};
   auto manager_ptr = &manager;
 
@@ -82,6 +118,24 @@ int main(int argc, char *argv[]) {
            .upgrade =
                [](auto *res, auto *req, auto *context) {
                  PerSocketData data{.player = new PlayerConnection{}};
+
+                 auto playersCountStr = req->getQuery("players");
+
+                 if (playersCountStr.empty()) {
+                   data.game_type = CoopGameType{};
+                 } else {
+                   auto playersCount = shared::toInt(playersCountStr);
+
+                   if (playersCount &&
+                       playersCount <= shared::MAX_PLAYERS / 2) {
+                     data.game_type = PvPGameType{
+                         .team_size = static_cast<uint8_t>(*playersCount)};
+                   } else {
+                     delete data.player;
+                     return;
+                   }
+                 }
+
                  auto reqName = req->getQuery("name");
 
                  std::memcpy(data.player->name, reqName.data(),
@@ -100,7 +154,17 @@ int main(int argc, char *argv[]) {
                  auto *data = ws->getUserData();
                  data->player->id = manager.next_player_id++;
                  data->player->ws = ws;
-                 data->game = manager.joinOrCreateGame(data->player);
+
+                 std::visit(shared::overloaded{
+                                [&data, &manager](CoopGameType) {
+                                  data->game = manager.joinOrCreateCoopGame(
+                                      data->player);
+                                },
+                                [&data, &manager](PvPGameType pvp) {
+                                  data->game = manager.joinOrCreatePvPGame(
+                                      data->player, pvp.team_size);
+                                }},
+                            data->game_type);
 
                  nlohmann::json welcomeEnvelope;
                  welcomeEnvelope["type"] = shared::ServerMessageType::WELCOME;
@@ -155,7 +219,7 @@ int main(int argc, char *argv[]) {
                  auto *data = ws->getUserData();
                  data->game->removePlayer(data->player->id);
 
-                 auto playerCount = data->game->getPlayerCount();
+                 auto playerCount = data->game->getPlayersCount();
 
                  if (playerCount == 0)
                    manager.destroyGame(data->game);
