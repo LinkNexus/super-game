@@ -5,10 +5,12 @@
 
 using namespace shared;
 
-void PlayerSimState::init(uint8_t id) {
-  position = {INITIAL_POSITION_X, POSITION_Y};
+void PlayerSimState::init(PlayerId id, Vec2D position, int lives,
+                          float orientation) {
+  this->position = position;
   fire_cooldown = 0.0f;
-  lives = INITIAL_LIVES;
+  this->lives = lives;
+  this->orientation = orientation;
   points = 0;
   this->id = id;
 }
@@ -18,8 +20,12 @@ void PlayerSimState::spawnBullet(
   for (auto &bullet : bullets) {
     if (!bullet.active) {
       bullet.active = true;
-      bullet.position = {position.x, position.y - SIZE};
-      bullet.velocity = {0.0f, -BulletSimState::SPEED};
+      Vec2D offset = {0, SIZE};
+      bullet.position = position + offset.rotated(orientation);
+
+      Vec2D velocity{0.0f, BulletSimState::SPEED};
+      bullet.velocity = velocity.rotated(orientation);
+
       bullet.owner_id = id;
       bullet.type = BulletType::PLAYER;
       return;

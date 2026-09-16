@@ -53,5 +53,7 @@ bool rectIntersection(Vec2D pos_a, float hw_a, float hh_a, Vec2D pos_b,
                       float hw_b, float hh_b);
 
 /// @return @p degrees converted to radians.
-float to_rads(float degrees);
+float toRads(float degrees);
+
+float toDegrees(float radians);
 } // namespace shared

@@ -7,6 +7,7 @@ add_executable(supergame-client
     src/entities/star.cpp
     src/network_client.cpp
     src/session.cpp
+    src/utils.cpp
 )
 
 target_link_libraries(supergame-client PRIVATE raylib supergame-shared ixwebsocket)

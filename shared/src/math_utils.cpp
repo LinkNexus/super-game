@@ -68,6 +68,10 @@ bool shared::rectIntersection(shared::Vec2D pos_a, float hw_a, float hh_a,
          std::abs(pos_a.y - pos_b.y) <= (hh_a + hh_b);
 }
 
-float shared::to_rads(float degrees) {
+float shared::toRads(float degrees) {
   return degrees * std::numbers::pi / 180.0f;
+}
+
+float shared::toDegrees(float radians) {
+  return radians * 180.0f / std::numbers::pi;
 }

@@ -40,14 +40,14 @@ void BossSimState::init(uint8_t playersCount) {
 }
 
 void BossSimState::stepEntrance(float dt) {
-  if (position.y < FINAL_POSITION_Y) {
+  if (position.y > FINAL_POSITION_Y) {
     position.y =
-        std::min(position.y + INITIAL_DESCENT_SPEED * dt, FINAL_POSITION_Y);
+        std::max(position.y - INITIAL_DESCENT_SPEED * dt, FINAL_POSITION_Y);
   }
 }
 
 bool BossSimState::isEntranceComplete() {
-  return position.y >= FINAL_POSITION_Y;
+  return position.y <= FINAL_POSITION_Y;
 }
 
 void BossSimState::spawnBullets(
@@ -69,16 +69,16 @@ void BossSimState::spawnBullets(
       }
     }
 
-    Vec2D spawnPosition{position.x, position.y + HEIGHT / 2};
+    Vec2D spawnPosition{position.x, position.y - HEIGHT / 2};
 
-    Vec2D bottomLeft{0, SCREEN_HEIGHT};
-    Vec2D bottomRight{SCREEN_WIDTH, SCREEN_HEIGHT};
+    Vec2D bottomLeft{0, 0};
+    Vec2D bottomRight{SCREEN_WIDTH, 0};
 
     auto direction1 = (bottomLeft - spawnPosition);
     auto direction2 = (bottomRight - spawnPosition);
     auto angle = direction1.angle_between(direction2);
 
-    Vec2D straightDown{0, 1};
+    Vec2D straightDown{0, -1};
 
     for (std::size_t i = 0; i < spread_shot_bullets_count; ++i) {
       auto bullet = reserved_bullets[i];
@@ -109,8 +109,8 @@ void BossSimState::spawnBullets(
       for (auto &b : bullets) {
         if (!b.active) {
           b.active = true;
-          b.position = {position.x, position.y + HEIGHT / 2};
-          b.velocity = {0, BULLETS_SPEED};
+          b.position = {position.x, position.y - HEIGHT / 2};
+          b.velocity = {0, -BULLETS_SPEED};
           break;
         }
       }

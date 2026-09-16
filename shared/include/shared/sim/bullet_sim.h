@@ -1,5 +1,6 @@
 #pragma once
 
+#include "shared/constants.h"
 #include "shared/math_utils.h"
 #include <cstdint>
 
@@ -28,4 +29,5 @@ struct BulletSimState {
   void step(float dt);
 };
 
+using BulletsPool = std::array<BulletSimState, MAX_BULLETS>;
 } // namespace shared
