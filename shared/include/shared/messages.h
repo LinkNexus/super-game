@@ -7,6 +7,7 @@
 #include "shared/sim/enemy_sim.h"
 #include <cstdint>
 #include <optional>
+#include <variant>
 
 /// nlohmann::json glue so `std::optional<T>` fields serialize as either the
 /// wrapped value or JSON `null`, used throughout the wire structs below for
