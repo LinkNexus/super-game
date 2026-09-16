@@ -130,11 +130,10 @@ void Game::removePlayer(shared::PlayerId playerId) {
     if (players_[i] && players_[i]->id == playerId) {
       delete players_[i];
       players_[i] = nullptr;
+      std::visit([playerId](auto &s) { s.removePlayer(playerId); }, sim_);
       return;
     }
   }
-
-  std::visit([playerId](auto &s) { s.removePlayer(playerId); }, sim_);
 }
 
 void CoopGame::tryStart() {
