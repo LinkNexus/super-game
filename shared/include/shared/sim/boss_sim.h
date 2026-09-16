@@ -48,15 +48,15 @@ struct BossSimState {
 
   /// Base health for a single player; scaled by player count in init().
   static constexpr int INITIAL_LP = 100;
-  static constexpr float INITIAL_POSITION_Y = -30.0f;
-  static constexpr float FINAL_POSITION_Y = 80.0f;
+  static constexpr float INITIAL_POSITION_Y = SCREEN_HEIGHT + 30.0f;
+  static constexpr float FINAL_POSITION_Y = SCREEN_HEIGHT - 80.0f;
   static constexpr float INITIAL_DESCENT_SPEED = 70.0f;
   static constexpr float CYCLE_SPEED = 400.0f;
 
   static constexpr float BULLETS_SPEED = BulletSimState::SPEED * 1.5f;
 
-  static constexpr int MAX_SPREAD_SHOT_BULLETS = 10;
-  static constexpr int MAX_SUCCESSIVE_SHOTS_BULLETS = 8;
+  static constexpr int MAX_SPREAD_SHOT_BULLETS = 16;
+  static constexpr int MAX_SUCCESSIVE_SHOTS_BULLETS = 12;
 
   static constexpr float PHASE2_SHOOTING_COOLDOWN = 0.3f;
 
@@ -75,6 +75,8 @@ struct BossSimState {
       SPREAD_SHOT_BULLETS_COUNT_PER_PLAYERS_COUNT = {{
           {MAX_PLAYERS, MAX_SPREAD_SHOT_BULLETS},
           {MAX_PLAYERS - 1, MAX_SPREAD_SHOT_BULLETS - 2},
+          {MAX_PLAYERS - 2, MAX_SPREAD_SHOT_BULLETS - 4},
+          {MAX_PLAYERS - 3, MAX_SPREAD_SHOT_BULLETS - 6},
       }};
   /// Maps active player count to how many bullets a SUCCESSIVE_SHOTS burst
   /// fires. Falls back to MAX_SUCCESSIVE_SHOTS_BULLETS otherwise.
@@ -82,6 +84,8 @@ struct BossSimState {
       SUCCESSIVE_SHOTS_BULLETS_COUNT_PER_PLAYERS_COUNT = {{
           {MAX_PLAYERS, MAX_SUCCESSIVE_SHOTS_BULLETS},
           {MAX_PLAYERS - 1, MAX_SUCCESSIVE_SHOTS_BULLETS - 2},
+          {MAX_PLAYERS - 2, MAX_SUCCESSIVE_SHOTS_BULLETS - 4},
+          {MAX_PLAYERS - 3, MAX_SUCCESSIVE_SHOTS_BULLETS - 6},
       }};
 
   /// Fires the current `shooting_pattern` into @p bullets once

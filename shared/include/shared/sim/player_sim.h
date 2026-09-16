@@ -27,7 +27,7 @@ struct PlayerSimState {
   static constexpr float HITBOX_SCALE = 0.80f;
   static constexpr float FIRE_COOLDOWN = 0.15f;
   static constexpr int INITIAL_LIVES = 3;
-  static constexpr float POSITION_Y = SCREEN_HEIGHT - 60.0f;
+  static constexpr float POSITION_Y = 60.0f;
   static constexpr float INITIAL_POSITION_X = SCREEN_WIDTH / 2.0f;
 
   /// Resets this player to their starting position/lives/points and

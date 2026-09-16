@@ -1,3 +1,5 @@
+#pragma once
+
 #include "shared/constants.h"
 
 namespace shared {

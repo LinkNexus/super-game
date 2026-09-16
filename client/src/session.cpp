@@ -95,7 +95,7 @@ const uint32_t OnlineSession::getPlayerId() {
 void OnlineSession::sendReady(bool isReady) {
   nlohmann::json readyEnvelope;
   readyEnvelope["type"] = shared::ClientMessageType::READY;
-  readyEnvelope["payload"] = shared::ReasyMessage{.is_ready = isReady};
+  readyEnvelope["payload"] = shared::ReadyMessage{.is_ready = isReady};
 
   client_.send(readyEnvelope.dump());
 }

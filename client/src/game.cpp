@@ -10,6 +10,7 @@
 #include "shared/messages.h"
 #include "shared/sim/enemy_sim.h"
 #include "shared/sim/game_sim.h"
+#include "utils.h"
 #include <cfloat>
 #include <cmath>
 #include <cstdlib>
@@ -281,7 +282,7 @@ void Game::startOnlineSession() {
 
   if (selectedOnlineMode != OnlineMode::COOP) {
     url += "&players=" +
-           std::to_string(selectedOnlineMode == OnlineMode::_1V1 ? 2 : 4);
+           std::to_string(selectedOnlineMode == OnlineMode::_1V1 ? 1 : 2);
   }
 
   session_ = std::make_unique<OnlineSession>(url);
@@ -326,7 +327,6 @@ void Game::handleInput() {
     break;
 
   case Screen::NAME_ENTRY: {
-    SetMouseCursor(MOUSE_CURSOR_IBEAM);
     int key = GetCharPressed();
 
     while (key > 0) {
@@ -497,8 +497,11 @@ void Game::updateParticles(float dt) {
 void drawBullet(const shared::BulletState &state) {
   if (!state.active)
     return;
-  DrawRectangle((int)state.position.x - shared::BulletSimState::WIDTH / 2,
-                (int)state.position.y - shared::BulletSimState::HEIGHT / 2,
+
+  auto screenPosition = toScreen(state.position);
+
+  DrawRectangle((int)screenPosition.x - shared::BulletSimState::WIDTH / 2,
+                (int)screenPosition.y - shared::BulletSimState::HEIGHT / 2,
                 shared::BulletSimState::WIDTH, shared::BulletSimState::HEIGHT,
                 YELLOW);
 }
@@ -575,11 +578,11 @@ void Game::spawnEnemyExplosions(const shared::CoopGameState &before,
                                        (shared::EnemySimState::WIDTH +
                                         shared::EnemiesPoolSimState::SPACING_X);
       float pos_y =
-          after.enemies_offset_y + (idx / shared::EnemiesPoolSimState::COLS) *
+          after.enemies_offset_y - (idx / shared::EnemiesPoolSimState::COLS) *
                                        (shared::EnemySimState::HEIGHT +
                                         shared::EnemiesPoolSimState::SPACING_Y);
 
-      spawnExplosion({pos_x, pos_y},
+      spawnExplosion(toRaylibVec({pos_x, pos_y}),
                      static_cast<shared::EnemyType>(after.enemies[idx][1]));
     }
   }
@@ -770,8 +773,70 @@ void Game::drawLobby() const {
                        LIGHTGRAY);
               y += 32;
             },
-            [](const shared::PvPGameLobbyUpdate &u) {
+            [&y, &s](const shared::PvPGameLobbyUpdate &u) {
+              const char *subtitle =
+                  TextFormat("%dv%d", u.team_size, u.team_size);
 
+              DrawText(subtitle, (int)getCenteredTextX(subtitle, 18), (int)y,
+                       18, DARKGRAY);
+              y += 36;
+
+              float leftX = shared::SCREEN_WIDTH / 2.0f - 260.0f;
+              float rightX = shared::SCREEN_WIDTH / 2.0f + 40.0f;
+              float headerY = y;
+              int totalReady = 0;
+              float colBottom = y;
+
+              for (std::size_t team_idx = 0; team_idx < u.teams.size();
+                   ++team_idx) {
+                const auto &team = u.teams[team_idx];
+                Color teamColor = team_idx == 0 ? SKYBLUE : PINK;
+                float colX = team_idx == 0 ? leftX : rightX;
+                float rowY = headerY;
+
+                const char *header = team_idx == 0 ? "Team 1" : "Team 2";
+                DrawText(header, (int)colX, (int)rowY, 22, teamColor);
+                rowY += 34;
+
+                for (std::size_t p_idx = 0;
+                     p_idx < u.team_size && p_idx < team.size(); ++p_idx) {
+                  const auto &p = team[p_idx];
+
+                  if (!p.has_value()) {
+                    DrawText("Waiting for a player...", (int)colX, (int)rowY,
+                             18, DARKGRAY);
+                    rowY += 28;
+                    continue;
+                  }
+
+                  if (p->is_ready)
+                    ++totalReady;
+
+                  const char *status = p->is_ready ? "READY" : "Waiting...";
+                  auto statusColor = p->is_ready ? GREEN : LIGHTGRAY;
+
+                  std::string label =
+                      p->name + (p->id == s->getPlayerId() ? " (You)" : "");
+
+                  DrawText(label.c_str(), (int)colX, (int)rowY, 18, WHITE);
+                  DrawText(status, (int)(colX + 200), (int)rowY, 18,
+                           statusColor);
+                  rowY += 28;
+                }
+
+                colBottom = std::max(colBottom, rowY);
+              }
+
+              DrawLine(shared::SCREEN_WIDTH / 2, (int)headerY,
+                       shared::SCREEN_WIDTH / 2, (int)colBottom,
+                       Fade(WHITE, 0.15f));
+
+              y = colBottom + 12;
+              const char *progress = TextFormat("Players ready: %d/%d",
+                                                totalReady, u.team_size * 2);
+              DrawText(progress, (int)getCenteredTextX(progress, 20), (int)y,
+                       20, LIGHTGRAY);
+              y += 32;
             }},
         lobbyUpdate);
 
@@ -802,11 +867,11 @@ void Game::drawGame() const {
                               (idx % shared::EnemiesPoolSimState::COLS) *
                                   (shared::EnemySimState::WIDTH +
                                    shared::EnemiesPoolSimState::SPACING_X);
-                float pos_y = s.enemies_offset_y +
+                float pos_y = s.enemies_offset_y -
                               (idx / shared::EnemiesPoolSimState::COLS) *
                                   (shared::EnemySimState::HEIGHT +
                                    shared::EnemiesPoolSimState::SPACING_Y);
-                Enemy::draw(pos_x, pos_y,
+                Enemy::draw(pos_x, shared::SCREEN_HEIGHT - pos_y,
                             static_cast<shared::EnemyType>(s.enemies[idx][1]));
               }
             }
@@ -837,8 +902,9 @@ void Game::drawGame() const {
 
 void Game::drawEndScreen() const {
   // Draw a centered panel with final scores and animated border
-  const int boxW = 500;
-  const int boxH = 220;
+  bool isPvP = std::holds_alternative<shared::PvPGameState>(state_);
+  const int boxW = isPvP ? 640 : 500;
+  const int boxH = isPvP ? 280 : 220;
   const float bx = shared::SCREEN_WIDTH / 2.0f - boxW / 2.0f;
   const float by = shared::SCREEN_HEIGHT / 2.0f - boxH / 2.0f;
   Rectangle rec{bx, by, (float)boxW, (float)boxH};
@@ -872,8 +938,6 @@ void Game::drawEndScreen() const {
            (int)(shared::SCREEN_WIDTH / 2 - MeasureText(title.c_str(), 32) / 2),
            (int)(by + 12), 32, WHITE);
 
-  int y = (int)(by + 60);
-
   bool isOnlineSession = false;
   uint32_t playerId = 1;
   if (OnlineSession *session = dynamic_cast<OnlineSession *>(session_.get())) {
@@ -883,6 +947,7 @@ void Game::drawEndScreen() const {
 
   std::visit(shared::overloaded{
                  [&](const shared::CoopGameState &s) {
+                   int y = (int)(by + 60);
                    auto maxScoreIt =
                        std::max_element(s.players.begin(), s.players.end(),
                                         [](const auto &a, const auto &b) {
@@ -930,7 +995,91 @@ void Game::drawEndScreen() const {
                      y += 32;
                    }
                  },
-                 [](const shared::PvPGameState &state) {}},
+                 [&](const shared::PvPGameState &state) {
+                   const shared::PlayerState *playerWithTheMaxScore = nullptr;
+
+                   for (const auto &team : state.teams) {
+                     for (const auto &player : team.players) {
+                       if (!player.has_value())
+                         continue;
+
+                       if (!playerWithTheMaxScore ||
+                           player->points > playerWithTheMaxScore->points) {
+                         playerWithTheMaxScore = &player.value();
+                       }
+                     }
+                   }
+
+                   float leftX = bx + 28.0f;
+                   float rightX = bx + boxW / 2.0f + 20.0f;
+                   int headerY = (int)(by + 60);
+
+                   for (std::size_t team_idx = 0; team_idx < state.teams.size();
+                        ++team_idx) {
+                     const auto &team = state.teams[team_idx];
+                     Color teamColor = team_idx == 0 ? SKYBLUE : PINK;
+                     float colX = team_idx == 0 ? leftX : rightX;
+                     int y = headerY;
+
+                     using TeamOutcome = shared::PvPGameSim::TeamOutcome;
+                     auto outcome = static_cast<TeamOutcome>(team.outcome);
+                     const char *outcomeText = "";
+                     Color outcomeColor = LIGHTGRAY;
+                     switch (outcome) {
+                     case TeamOutcome::WON:
+                       outcomeText = "WON";
+                       outcomeColor = GOLD;
+                       break;
+                     case TeamOutcome::LOST:
+                       outcomeText = "LOST";
+                       outcomeColor = DARKGRAY;
+                       break;
+                     case TeamOutcome::DREW:
+                       outcomeText = "DREW";
+                       outcomeColor = SKYBLUE;
+                       break;
+                     case TeamOutcome::PLAYING:
+                       break;
+                     }
+
+                     if (outcomeText[0]) {
+                       DrawText(outcomeText, (int)colX, y, 14, outcomeColor);
+                       y += 20;
+                     }
+
+                     const char *header = team_idx == 0 ? "Team 1" : "Team 2";
+                     DrawText(header, (int)colX, y, 18, teamColor);
+                     y += 30;
+
+                     for (std::size_t p_idx = 0; p_idx < team.players.size();
+                          ++p_idx) {
+                       const auto &player = team.players[p_idx];
+                       if (!player.has_value())
+                         continue;
+
+                       bool isMvp = playerWithTheMaxScore == &player.value();
+
+                       std::string label;
+                       if (player->name.empty())
+                         label = "Player " + std::to_string(p_idx + 1);
+                       else
+                         label = player->name;
+
+                       if (isOnlineSession && playerId == player->id)
+                         label += " (You)";
+                       if (isMvp)
+                         label += " (MVP)";
+
+                       const auto line =
+                           label + TextFormat(": %u pts | %u lives",
+                                              player->points, player->lives);
+
+                       Color col = isMvp ? YELLOW : WHITE;
+                       DrawText(line.c_str(), (int)colX, y, 16, col);
+                       y += 24;
+                     }
+                   }
+                 }},
              state_);
 
   const char *controls = "Press R to restart or ENTER to return to menu";

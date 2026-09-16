@@ -117,23 +117,23 @@ int main(int argc, char *argv[]) {
            // WebSocket itself with no access to the original request.
            .upgrade =
                [](auto *res, auto *req, auto *context) {
-                 PerSocketData data{.player = new PlayerConnection{}};
+                 PerSocketData data{};
 
                  auto playersCountStr = req->getQuery("players");
 
                  if (playersCountStr.empty()) {
+                   data.player = new PlayerConnection{};
                    data.game_type = CoopGameType{};
                  } else {
                    auto playersCount = shared::toInt(playersCountStr);
 
-                   if (playersCount &&
+                   if (playersCount && playersCount > 0 &&
                        playersCount <= shared::MAX_PLAYERS / 2) {
+                     data.player = new PlayerConnection{};
                      data.game_type = PvPGameType{
                          .team_size = static_cast<uint8_t>(*playersCount)};
-                   } else {
-                     delete data.player;
+                   } else
                      return;
-                   }
                  }
 
                  auto reqName = req->getQuery("name");
@@ -190,7 +190,7 @@ int main(int argc, char *argv[]) {
                    case shared::ClientMessageType::READY:
                      data->game->setPlayerReady(
                          data->player->id,
-                         j.at("payload").get<shared::ReasyMessage>().is_ready);
+                         j.at("payload").get<shared::ReadyMessage>().is_ready);
                      sendLobbyUpdate(data);
                      break;
                    case shared::ClientMessageType::PLAYER_INPUT:

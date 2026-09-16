@@ -26,8 +26,9 @@ struct Player {
 private:
   void drawPlayerAndStats(const shared::PlayerState &player, Type type,
                           bool isOnline, std::size_t idx, float &yOffset) const;
-  void drawPlayer(const shared::Vec2D position, Type type) const;
   void drawLives(uint8_t lives, float yOffset) const;
+  void drawPlayer(const shared::Vec2D position, float orientation,
+                  Type type) const;
 
 public:
   void draw(Session *currentSession,

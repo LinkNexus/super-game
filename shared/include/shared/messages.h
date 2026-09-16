@@ -66,10 +66,10 @@ constexpr std::size_t MAX_NAME_LENGTH = 9;
 
 /// Client-to-server message toggling the sender's ready state while waiting
 /// in the lobby. A match only starts once every connected player is ready.
-struct ReasyMessage {
+struct ReadyMessage {
   bool is_ready{};
 };
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(ReasyMessage, is_ready)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(ReadyMessage, is_ready)
 
 /// Per-player identity/lobby-state snapshot broadcast as part of
 /// LobbyUpdate - name and ready status only, no gameplay state.
@@ -116,11 +116,12 @@ struct PlayerState {
   Vec2D position{};
   uint8_t lives{};
   uint32_t points{};
+  float orientation{};
   std::string name{};
   uint8_t id{};
 };
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(PlayerState, position, lives, points, id,
-                                   name)
+                                   name, orientation)
 
 /// Trimmed bullet state for rendering; `type` mirrors `BulletType` and
 /// `active` marks pool slots currently in flight.
@@ -172,7 +173,8 @@ struct PvPGameState {
   BulletsPoolState bullets{};
   uint8_t team_size{};
 };
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(PvPGameState, phase, teams, bullets)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(PvPGameState, phase, teams, bullets,
+                                   team_size)
 
 using GameState = std::variant<CoopGameState, PvPGameState>;
 

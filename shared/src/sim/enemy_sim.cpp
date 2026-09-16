@@ -9,7 +9,6 @@
 #include <cfloat>
 #include <cstddef>
 #include <optional>
-#include <unordered_map>
 
 using namespace shared;
 
@@ -18,8 +17,8 @@ void EnemySimState::spawnBullet(
   for (auto &bullet : bullets) {
     if (!bullet.active) {
       bullet.active = true;
-      bullet.velocity = {0, BulletSimState::SPEED};
-      bullet.position = {position.x, position.y + HEIGHT / 2};
+      bullet.velocity = {0, -BulletSimState::SPEED};
+      bullet.position = position + Vec2D{0, -HEIGHT / 2};
       bullet.type = shared::BulletType::ENEMY;
       break;
     }
@@ -28,7 +27,7 @@ void EnemySimState::spawnBullet(
 
 void EnemiesPoolSimState::stepEnemy(EnemySimState &enemy, std::size_t idx) {
   enemy.position.y =
-      offset_y + (idx / COLS) * (EnemySimState::HEIGHT + SPACING_Y);
+      offset_y - (idx / COLS) * (EnemySimState::HEIGHT + SPACING_Y);
   enemy.position.x =
       offset_x + (idx % COLS) * (EnemySimState::WIDTH + SPACING_X);
 }
@@ -47,8 +46,9 @@ void EnemiesPoolSimState::init(uint8_t playersCount) {
 
   int pool_size_x = (COLS * EnemySimState::WIDTH) + (SPACING_X * (COLS - 1));
   offset_x = (SCREEN_WIDTH - pool_size_x) / 2.0f;
-  offset_y = INITIAL_OFFSET_Y;
+  offset_y = MIN_INITIAL_OFFSET_Y + (active_rows - 1) * ROW_PITCH;
   direction = 1;
+  alive_enemies_count = 0;
 
   for (std::size_t idx = 0; idx < enemies.size(); ++idx) {
     auto &enemy = enemies[idx];
@@ -69,8 +69,8 @@ void EnemiesPoolSimState::init(uint8_t playersCount) {
 }
 
 void EnemiesPoolSimState::stepEntrance(float dt) {
-  if (offset_y < FINAL_OFFSET_Y) {
-    offset_y = std::min(offset_y + INITIAL_DESCENT_SPEED * dt, FINAL_OFFSET_Y);
+  if (offset_y > FINAL_OFFSET_Y) {
+    offset_y = std::max(offset_y - INITIAL_DESCENT_SPEED * dt, FINAL_OFFSET_Y);
 
     for (std::size_t idx = 0; idx < enemies.size(); ++idx) {
       stepEnemy(enemies[idx], idx);
@@ -79,7 +79,7 @@ void EnemiesPoolSimState::stepEntrance(float dt) {
 }
 
 bool EnemiesPoolSimState::isEntranceComplete() {
-  return offset_y >= FINAL_OFFSET_Y;
+  return offset_y <= FINAL_OFFSET_Y;
 }
 
 bool EnemiesPoolSimState::allEnemiesDefeated() {
@@ -119,7 +119,7 @@ void EnemiesPoolSimState::step(
   offset_x =
       offset_x + direction * (overflow ? (overflow.value() + 1)
                                        : (EnemySimState::CYCLE_SPEED * dt));
-  offset_y = offset_y + (overflow ? EnemySimState::DESCENT_SPEED : 0);
+  offset_y = offset_y - (overflow ? EnemySimState::DESCENT_SPEED : 0);
 
   for (std::size_t idx = 0; idx < enemies.size(); ++idx) {
     auto &enemy = enemies[idx];
@@ -153,8 +153,8 @@ void EnemiesPoolSimState::step(
 
 bool EnemiesPoolSimState::reachedPlayer() {
   for (const auto &enemy : enemies) {
-    if (enemy.position.y + EnemySimState::HEIGHT / 2 >=
-        PlayerSimState::POSITION_Y - PlayerSimState::SIZE) {
+    if (enemy.alive && enemy.position.y - EnemySimState::HEIGHT / 2 <=
+                           PlayerSimState::POSITION_Y + PlayerSimState::SIZE) {
       return true;
     }
   }

@@ -1,6 +1,5 @@
 #include "shared/sim/game_sim.h"
 #include "shared/constants.h"
-#include "shared/helpers.h"
 #include "shared/math_utils.h"
 #include "shared/messages.h"
 #include "shared/rnd_generator.h"
@@ -37,7 +36,6 @@ void PvPGameSim::start(PerTeamPlayerIds &team_players_ids) {
   for (std::size_t team_idx = 0; team_idx < teams_.size(); ++team_idx) {
     auto &team = teams_[team_idx];
     team.init(id, isOnTop);
-    isOnTop = !isOnTop;
 
     auto position_x = (SCREEN_WIDTH - (PlayerSimState::SIZE * team_size_) -
                        ((team_size_ - 1) * PLAYERS_SPACING)) /
@@ -50,10 +48,14 @@ void PvPGameSim::start(PerTeamPlayerIds &team_players_ids) {
         player.emplace();
 
         player->init(team_players_ids[team_idx][player_idx].value(),
-                     {position_x, team.initial_position_y}, INITIAL_LIVES);
+                     {position_x, team.initial_position_y}, INITIAL_LIVES,
+                     isOnTop ? toRads(180) : 0);
         position_x += PlayerSimState::SIZE + PLAYERS_SPACING;
       }
     }
+
+    isOnTop = !isOnTop;
+    id++;
   }
 
   phase_ = Phase::PLAYERS_ENTRANCE;
@@ -158,15 +160,6 @@ void CoopGameSim::step(CoopGameState &state, const PlayerInputs &inputs,
 
 void PvPGameSim::step(PvPGameState &state, const PlayerInputs &inputs,
                       float dt) {
-  auto canFire = phase_ == Phase::PLAYERS_FIGHT;
-
-  for (auto &team : teams_) {
-    for (auto &player : team.players) {
-      if (player.has_value() && player->lives > 0) {
-        stepPlayer(inputs, player.value(), bullets_pool_, dt, canFire);
-      }
-    }
-  }
 
   switch (phase_) {
   case Phase::PLAYERS_ENTRANCE:
@@ -182,6 +175,16 @@ void PvPGameSim::step(PvPGameState &state, const PlayerInputs &inputs,
 
     break;
   case Phase::PLAYERS_FIGHT: {
+    auto canFire = phase_ == Phase::PLAYERS_FIGHT;
+
+    for (auto &team : teams_) {
+      for (auto &player : team.players) {
+        if (player.has_value() && player->lives > 0) {
+          stepPlayer(inputs, player.value(), bullets_pool_, dt, canFire);
+        }
+      }
+    }
+
     for (auto &bullet : bullets_pool_) {
       if (bullet.active) {
         bullet.step(dt);
@@ -269,6 +272,8 @@ void CoopGameSim::setGameState(CoopGameState &state) {
 }
 
 void PvPGameSim::setGameState(PvPGameState &state) {
+  state.team_size = team_size_;
+
   for (std::size_t team_idx = 0; team_idx < teams_.size(); ++team_idx) {
     auto &team = teams_[team_idx];
     state.teams[team_idx].id = team.id;
@@ -288,6 +293,8 @@ void PvPGameSim::setGameState(PvPGameState &state) {
       state.teams[team_idx].players[player_idx]->lives = player->lives;
       state.teams[team_idx].players[player_idx]->points = player->points;
       state.teams[team_idx].players[player_idx]->id = player->id;
+      state.teams[team_idx].players[player_idx]->orientation =
+          player->orientation;
     }
   }
 
@@ -417,21 +424,20 @@ void PvPGameSim::Team::init(TeamId id, bool isOnTop) {
   this->id = id;
   is_on_top = isOnTop;
   initial_position_y =
-      isOnTop ? -INITIAL_OFFSET_Y : (SCREEN_HEIGHT + INITIAL_OFFSET_Y);
+      isOnTop ? (SCREEN_HEIGHT + INITIAL_OFFSET_Y) : -INITIAL_OFFSET_Y;
 }
 
 void PvPGameSim::Team::stepEntrance(float dt) {
   for (auto &p : players) {
     if (p) {
       if (is_on_top) {
-        if (p->position.y < (SCREEN_HEIGHT - PlayerSimState::POSITION_Y)) {
-          p->position.y =
-              std::min(p->position.y + ENTRANCE_SPEED * dt,
-                       (SCREEN_HEIGHT - PlayerSimState::POSITION_Y));
+        if (p->position.y > (SCREEN_HEIGHT - PlayerSimState::POSITION_Y)) {
+          p->position.y = std::max(p->position.y - ENTRANCE_SPEED * dt,
+                                   SCREEN_HEIGHT - PlayerSimState::POSITION_Y);
         }
       } else {
-        if (p->position.y > PlayerSimState::POSITION_Y) {
-          p->position.y = std::max(p->position.y - ENTRANCE_SPEED * dt,
+        if (p->position.y < PlayerSimState::POSITION_Y) {
+          p->position.y = std::min(p->position.y + ENTRANCE_SPEED * dt,
                                    PlayerSimState::POSITION_Y);
         }
       }
@@ -445,9 +451,37 @@ bool shared::PvPGameSim::Team::isEntranceComplete() const {
       return true;
 
     if (is_on_top) {
-      return p->position.y >= (SCREEN_HEIGHT - PlayerSimState::POSITION_Y);
+      return p->position.y <= (SCREEN_HEIGHT - PlayerSimState::POSITION_Y);
     } else {
-      return p->position.y <= PlayerSimState::POSITION_Y;
+      return p->position.y >= PlayerSimState::POSITION_Y;
     }
   });
+}
+
+void shared::PvPGameSim::removePlayer(PlayerId player_id) {
+  for (auto &team : teams_) {
+    for (auto &player : team.players) {
+      if (player.has_value() && player->id == player_id) {
+        player.reset();
+        return;
+      }
+    }
+  }
+}
+
+void shared::CoopGameSim::removePlayer(PlayerId player_id) {
+  for (auto &player : players_) {
+    if (player.has_value() && player->id == player_id) {
+      player.reset();
+
+      if (phase_ != Phase::WON && phase_ != Phase::GAME_OVER) {
+        players_count_--;
+
+        if (players_count_ == 0)
+          phase_ = Phase::GAME_OVER;
+      }
+
+      break;
+    }
+  }
 }

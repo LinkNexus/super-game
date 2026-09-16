@@ -1,6 +1,6 @@
 #include "entities/boss.h"
 #include "shared/messages.h"
-#include "shared/sim/boss_sim.h"
+#include "utils.h"
 #include <algorithm>
 #include <cstddef>
 
@@ -28,13 +28,15 @@ void Boss::draw(const shared::BossState &state, bool draw_health_bar) const {
                        (int)HEALTH_BAR_HEIGHT, WHITE);
   }
 
+  auto screenPosition = toScreen(state.position);
+
   if (texture_.id != 0) {
     float scale = 80.0f / texture_.width;
-    Vector2 draw_pos = {state.position.x - (texture_.width * scale) / 2.0f,
-                        state.position.y - (texture_.height * scale) / 2.0f};
+    Vector2 draw_pos = {screenPosition.x - (texture_.width * scale) / 2.0f,
+                        screenPosition.y - (texture_.height * scale) / 2.0f};
     DrawTextureEx(texture_, draw_pos, 0.0f, scale, WHITE);
   } else {
-    DrawRectangle((int)state.position.x - 40, (int)state.position.y - 20, 80,
+    DrawRectangle((int)screenPosition.x - 40, (int)screenPosition.y + 20, 80,
                   40, RED);
   }
 }

@@ -101,6 +101,8 @@ public:
 
   bool isFull() const override;
 
+  bool isRunning() const;
+
 private:
   void tryStart() override;
 };
@@ -125,8 +127,8 @@ public:
   const Teams &getTeams() const;
 
 private:
-  std::size_t team_size_;
-  Teams teams;
+  std::size_t team_size_{};
+  Teams teams{};
 
 private:
   /// Starts `sim_` once `allPlayersReady()` is true; a no-op otherwise, or

@@ -5,7 +5,6 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
-#include <unordered_map>
 
 namespace shared {
 enum class EnemyType : uint8_t {
@@ -39,19 +38,22 @@ struct EnemySimState {
 /// movement, per-enemy shooting, and win/loss condition checks
 /// (allEnemiesDefeated / reachedPlayer).
 struct EnemiesPoolSimState {
-  static constexpr float INITIAL_OFFSET_Y = -270.0f;
-  static constexpr float FINAL_OFFSET_Y = 50.0f;
-  static constexpr float INITIAL_DESCENT_SPEED = 70.0f;
-  static constexpr int MAX_ROWS = 5;
-  static constexpr int COLS = 10;
   static constexpr float SPACING_X = 40.0f;
   static constexpr float SPACING_Y = 40.0f;
+  static constexpr int MAX_ROWS = 8;
+  static constexpr int COLS = 10;
+  static constexpr float ROW_PITCH = EnemySimState::HEIGHT + SPACING_Y;
+  static constexpr float MIN_INITIAL_OFFSET_Y = SCREEN_HEIGHT + 30.0f;
+  static constexpr float FINAL_OFFSET_Y = SCREEN_HEIGHT - 50.0f;
+  static constexpr float INITIAL_DESCENT_SPEED = 70.0f;
   /// Maps active player count to how many of `MAX_ROWS` rows start alive,
   /// so difficulty scales with player count. Falls back to `MAX_ROWS` for
   /// any player count not listed here.
   static constexpr std::array<std::pair<uint8_t, int>, MAX_PLAYERS>
-      ROWS_PER_PLAYERS_COUNT = {
-          {{MAX_PLAYERS, MAX_ROWS}, {MAX_PLAYERS - 1, MAX_ROWS - 2}}};
+      ROWS_PER_PLAYERS_COUNT = {{{MAX_PLAYERS, MAX_ROWS},
+                                 {MAX_PLAYERS - 1, MAX_ROWS - 2},
+                                 {MAX_PLAYERS - 2, MAX_ROWS - 3},
+                                 {MAX_PLAYERS - 3, MAX_ROWS - 5}}};
 
   int active_rows;
   std::array<EnemySimState, MAX_ROWS * COLS> enemies;

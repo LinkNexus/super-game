@@ -24,7 +24,7 @@ CoopGame *GameManager::createCoopGame() {
 
 CoopGame *GameManager::joinOrCreateCoopGame(PlayerConnection *player) {
   if (open_coop_game_ && !open_coop_game_->isFull() &&
-      !open_coop_game_->isOver()) {
+      !open_coop_game_->isRunning() && !open_coop_game_->isOver()) {
     open_coop_game_->addPlayer(player);
     return open_coop_game_;
   } else {
@@ -113,17 +113,16 @@ Game::getPlayers() const {
 }
 
 bool Game::addPlayer(PlayerConnection *player) {
-  if (isFull())
-    return false;
-
-  for (size_t i = 0; i < players_.size(); ++i) {
-    if (!players_[i]) {
-      players_[i] = player;
-      break;
+  if (!isFull()) {
+    for (size_t i = 0; i < players_.size(); ++i) {
+      if (!players_[i]) {
+        players_[i] = player;
+        return true;
+      }
     }
   }
 
-  return true;
+  return false;
 }
 
 void Game::removePlayer(shared::PlayerId playerId) {
@@ -134,6 +133,8 @@ void Game::removePlayer(shared::PlayerId playerId) {
       return;
     }
   }
+
+  std::visit([playerId](auto &s) { s.removePlayer(playerId); }, sim_);
 }
 
 void CoopGame::tryStart() {
@@ -160,7 +161,7 @@ void CoopGame::tryStart() {
 }
 
 void PvPGame::tryStart() {
-  if (is_running_ || is_over_ || !allPlayersReady())
+  if (is_running_ || is_over_ || !canStart())
     return;
 
   std::visit(shared::overloaded{
@@ -214,6 +215,9 @@ void Game::update(float dt) {
 void CoopGame::update(float dt) {
   Game::update(dt);
 
+  if (!is_running_)
+    return;
+
   std::visit(
       shared::overloaded{
           [this, &dt](shared::CoopGameSim &sim, shared::CoopGameState &state) {
@@ -246,6 +250,9 @@ void CoopGame::update(float dt) {
 void PvPGame::update(float dt) {
   Game::update(dt);
 
+  if (!is_running_)
+    return;
+
   std::visit(
       shared::overloaded{
           [this, &dt](shared::PvPGameSim &sim, shared::PvPGameState &state) {
@@ -275,7 +282,7 @@ void PvPGame::update(float dt) {
 }
 
 bool Game::allPlayersReady() const {
-  for (const auto &player : players_) {
+  for (const auto player : players_) {
     if (player && !player->is_ready)
       return false;
   }
@@ -318,8 +325,8 @@ PvPGame::PvPGame(std::size_t team_size) {
   state_ = shared::PvPGameState();
 
   for (auto &team : teams) {
-    for (std::size_t i = 0; i < team_size; ++i) {
-      team[i] = nullptr;
+    for (auto &player : team) {
+      player = nullptr;
     }
   }
 }
@@ -361,12 +368,11 @@ void PvPGame::removePlayer(shared::PlayerId playerId) {
     for (auto &p : team) {
       if (p && p->id == playerId) {
         p = nullptr;
+        Game::removePlayer(playerId);
         return;
       }
     }
   }
-
-  Game::removePlayer(playerId);
 }
 
 bool CoopGame::isFull() const {
@@ -384,3 +390,5 @@ bool PvPGame::isFull() const {
 }
 
 const PvPGame::Teams &PvPGame::getTeams() const { return teams; }
+
+bool CoopGame::isRunning() const { return is_running_; }

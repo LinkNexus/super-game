@@ -20,8 +20,12 @@ void PlayerSimState::spawnBullet(
   for (auto &bullet : bullets) {
     if (!bullet.active) {
       bullet.active = true;
-      bullet.position = {position.x, position.y - SIZE};
-      bullet.velocity = {0.0f, -BulletSimState::SPEED};
+      Vec2D offset = {0, SIZE};
+      bullet.position = position + offset.rotated(orientation);
+
+      Vec2D velocity{0.0f, BulletSimState::SPEED};
+      bullet.velocity = velocity.rotated(orientation);
+
       bullet.owner_id = id;
       bullet.type = BulletType::PLAYER;
       return;

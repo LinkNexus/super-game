@@ -20,6 +20,7 @@ public:
 
   void start(PlayerIds &player_ids);
   void step(CoopGameState &state, const PlayerInputs &inputs, float dt);
+  void removePlayer(PlayerId player_id);
 
 private:
   Phase phase_{Phase::ENEMIES_ENTRANCE};
@@ -52,7 +53,7 @@ public:
     bool isEntranceComplete() const;
 
     static constexpr float INITIAL_OFFSET_Y = 20.0f;
-    static constexpr float ENTRANCE_SPEED = 70.0f;
+    static constexpr float ENTRANCE_SPEED = 50.0f;
   };
 
   enum class Phase : uint8_t { PLAYERS_ENTRANCE, PLAYERS_FIGHT, END };
@@ -64,6 +65,7 @@ public:
   PvPGameSim(std::size_t team_size);
   void start(PerTeamPlayerIds &team_players_ids);
   void step(PvPGameState &state, const PlayerInputs &inputs, float dt);
+  void removePlayer(PlayerId player_id);
 
   static constexpr float PLAYERS_SPACING = 30.0f;
   static constexpr int POINTS_PER_HIT = 50;
