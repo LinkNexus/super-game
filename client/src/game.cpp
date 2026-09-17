@@ -871,7 +871,7 @@ void Game::drawGame() const {
                               (idx / shared::EnemiesPoolSimState::COLS) *
                                   (shared::EnemySimState::HEIGHT +
                                    shared::EnemiesPoolSimState::SPACING_Y);
-                Enemy::draw(pos_x, shared::SCREEN_HEIGHT - pos_y,
+                Enemy::draw(toRaylibVec({pos_x, pos_y}),
                             static_cast<shared::EnemyType>(s.enemies[idx][1]));
               }
             }

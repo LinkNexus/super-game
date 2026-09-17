@@ -7,7 +7,7 @@
 /// the wire `GameState`, so drawing is just a static function taking a
 /// position and type rather than an instance per enemy.
 struct Enemy {
-  static void draw(float pos_x, float pos_y, shared::EnemyType type);
+  static void draw(Vector2 pos, shared::EnemyType type);
 
   static void loadTextures();
   static void unloadTextures();
