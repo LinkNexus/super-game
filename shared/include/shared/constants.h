@@ -1,7 +1,6 @@
 #pragma once
 
 #include <cstdint>
-#include <string>
 
 /// Engine-agnostic core shared verbatim between the client's local mode and
 /// the headless server's authoritative simulation.
@@ -16,9 +15,12 @@ static constexpr float FIXED_DT = 1.0f / 60.0f;
 static constexpr int MAX_BULLETS = 64;
 /// Score awarded to a player for each enemy or boss hit they land.
 static constexpr int POINTS_PER_HIT = 10;
-/// Maximum simultaneous players in one match, online or local co-op/pvp.
-static constexpr uint8_t MAX_PLAYERS = 4;
-/// Default WebSocket URL the client connects to when none is given on the
-/// command line.
-static std::string default_server_url = "wss://supergame.levynkeneng.dev";
+
+static constexpr uint8_t MAX_PLAYERS_COOP = 4;
+
+static constexpr uint8_t MAX_TEAMS = 2;
+
+static constexpr uint8_t MAX_PLAYERS_PER_TEAM = 2;
+
+static constexpr uint8_t MAX_PLAYERS_PER_CLIENT = 2;
 } // namespace shared

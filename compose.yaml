@@ -4,12 +4,36 @@
 # deployments hit on this Proxmox LXC-hosted VPS. See ROADMAP.md L17.
 #
 # No `build:` here on purpose - Compose mode doesn't support it, and it's
-# not needed anyway since the image is already built + pushed by the
-# docker:server CI job. Domain/TLS/Traefik routing is configured through
-# Dokploy's own Domains tab (Method 1), not hardcoded here - Dokploy injects
-# the necessary Traefik labels and network attachment itself at deploy time.
+# not needed anyway since the image is already built + pushed by CI.
+# Domain/TLS/Traefik routing is configured through Dokploy's own Domains tab
+# (Method 1), not hardcoded here - Dokploy injects the necessary Traefik
+# labels and network attachment itself at deploy time.
+#
+# IMAGE SOURCE: ghcr.io, pushed by the `docker-server` job in
+# .github/workflows/ci.yml - which is also the job that fires the Dokploy
+# redeploy webhook. Keeping those two in the same pipeline is the point: a
+# redeploy now always pulls the image that same run just published.
+#
+# ONE-TIME SETUP: ghcr packages default to *private* even for a public repo,
+# so the VPS cannot pull this until either
+#   - the package is made public (GitHub -> Packages -> supergame-server ->
+#     Package settings -> Change visibility -> Public), or
+#   - Dokploy is given a registry credential (a PAT with `read:packages`)
+# Without one of those, `docker compose up` fails with "denied".
+#
+# NOTE: .gitlab-ci.yml still pushes a Docker Hub copy
+# (levynkenenghtw/supergame-server). Nothing consumes it any more - it's a
+# mirror only. Retire that job, or repoint this file, if that changes.
 
 services:
   server:
-    image: levynkenenghtw/supergame-server:latest
+    image: ghcr.io/linknexus/super-game:latest
     restart: unless-stopped
+    # The server logs bind success/failure to stdout unbuffered, so container
+    # logs are the first place to look if a redeploy comes up unreachable.
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:9001/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s

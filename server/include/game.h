@@ -1,5 +1,9 @@
+#pragma once
+
 #include "WebSocket.h"
+#include "shared/aliases.h"
 #include "shared/constants.h"
+#include "shared/helpers.h"
 #include "shared/messages.h"
 #include "shared/sim/game_sim.h"
 #include <array>
@@ -8,36 +12,47 @@
 
 class Game;
 struct PlayerConnection;
+struct PerSocketData;
 
 struct CoopGameType {};
 struct PvPGameType {
-  std::size_t team_size;
+  shared::PlayerCount team_size{};
+  shared::PlayerCount team_count{};
 };
 using GameType = std::variant<CoopGameType, PvPGameType>;
+
+using WsPtr = uWS::WebSocket<false, true, PerSocketData> *;
 
 /// Per-WebSocket-connection user data (uWebSockets' `ws<PerSocketData>`
 /// template parameter). Populated in the `.upgrade` handler before the
 /// socket exists, then filled in further in `.open`.
+struct PerSocketPlayers {
+  std::array<PlayerConnection *, shared::MAX_PLAYERS_PER_CLIENT> players{};
+  uint8_t count{};
+  WsPtr ws{};
+};
+
 struct PerSocketData {
   GameType game_type{};
   Game *game = nullptr;
-  PlayerConnection *player = nullptr;
+  PerSocketPlayers players_data{};
 };
 
 /// One connected player: identity, name, and the per-tick input state the
 /// `.message` handler accumulates between `Game::update()` calls.
 struct PlayerConnection {
-  uint32_t id;
+  uint32_t id{};
+  shared::PlayerId id_in_game{};
+  WsPtr ws{};
   char name[shared::MAX_NAME_LENGTH + 1]{};
-  uWS::WebSocket<false, true, PerSocketData> *ws;
-  shared::Button pending_movement = shared::Button::BUTTON_NONE;
+  shared::Button pending_movement{shared::Button::BUTTON_NONE};
   /// Shot count accumulated since the last `Game::update()` tick, so a
   /// shoot press isn't missed even if it happens between ticks.
-  uint8_t pending_shots = 0;
+  uint8_t pending_shots{};
   /// Tracks whether SHOOT was already held last message, so held-down fire
   /// only counts as one shot per press rather than one per message.
-  bool prev_shoot_held = false;
-  bool is_ready = false;
+  bool prev_shoot_held{false};
+  bool is_ready{false};
 };
 
 class Game {
@@ -55,102 +70,128 @@ public:
 
   /// Assigns @p player to the first free slot, if the match isn't already
   /// full.
-  virtual bool addPlayer(PlayerConnection *player);
+  // virtual bool addPlayer(PlayerConnection *player);
+  virtual bool addPlayers(const PerSocketPlayers &players_data) = 0;
 
-  /// Frees the slot belonging to @p playerId, if present.
-  virtual void removePlayer(shared::PlayerId playerId);
+  /// Frees the slot belonging to @p playerId, if presen.
+  virtual void removePlayers(const WsPtr ws) = 0;
 
   bool isOver() const;
 
   /// Updates @p playerId's ready flag and attempts to start the match
   /// (see `tryStart()`).
-  void setPlayerReady(shared::PlayerId playerId, bool ready);
-
-  bool allPlayersReady() const;
-
-  const std::array<PlayerConnection *, shared::MAX_PLAYERS> &getPlayers() const;
-
-  virtual bool canStart() const = 0;
+  virtual void setPlayersReady(WsPtr ws, bool ready) = 0;
 
   virtual bool isFull() const = 0;
 
-  void setPlayerName(std::optional<shared::PlayerState> &state);
+  bool isRunning() const;
 
-  virtual void tryStart() = 0;
+  virtual void setPlayerName(shared::PlayerState &state) = 0;
 
-  std::size_t getPlayersCount() const;
+  const std::vector<WsPtr> &getPlayerSockets() const;
 
 protected:
-  bool is_running_ = false;
-  bool is_over_ = false;
+  bool is_running_{false};
+  bool is_over_{false};
 
-  shared::GameSim sim_;
-  shared::GameState state_;
-
-  std::array<PlayerConnection *, shared::MAX_PLAYERS> players_{};
-  shared::PlayerInputs inputs_{};
+  std::vector<WsPtr> player_sockets_{};
 };
 
 class CoopGame : public Game {
+private:
+  void tryStart();
+
 public:
-  CoopGame();
-
   void update(float dt) override;
-
-  bool canStart() const override;
 
   bool isFull() const override;
 
-  bool isRunning() const;
+  const std::array<PlayerConnection *, shared::MAX_PLAYERS_COOP> &
+  getPlayers() const;
+
+  bool addPlayers(const PerSocketPlayers &players_data) override;
+
+  void removePlayers(const WsPtr ws) override;
+
+  bool allPlayersReady() const;
+
+  void setPlayerName(shared::PlayerState &state) override;
+
+  void setPlayersReady(WsPtr ws, bool ready) override;
+
+  shared::PlayerCount getPlayersCount() const;
+
+  bool canStart() const;
 
 private:
-  void tryStart() override;
+  std::array<PlayerConnection *, shared::MAX_PLAYERS_COOP> players_{};
+  std::array<shared::PlayerInput, shared::MAX_PLAYERS_COOP> inputs_{};
+  shared::PlayerCount players_count_{};
+
+  shared::CoopGameSim sim_;
+  shared::CoopGameState state_;
 };
 
 class PvPGame : public Game {
-  using Teams =
-      std::array<std::array<PlayerConnection *, shared::MAX_PLAYERS / 2>, 2>;
+  struct Team {
+    std::array<PlayerConnection *, shared::MAX_PLAYERS_PER_TEAM> players{};
+    shared::PlayerCount players_count{};
+  };
+  using Teams = std::array<Team, shared::MAX_TEAMS>;
+
+private:
+  void tryStart();
 
 public:
-  PvPGame(std::size_t team_size);
+  PvPGame(shared::PlayerCount team_size, shared::PlayerCount team_count);
 
   void update(float dt) override;
 
-  bool addPlayer(PlayerConnection *player) override;
+  bool addPlayers(const PerSocketPlayers &players_data) override;
 
-  void removePlayer(uint32_t playerId) override;
-
-  bool canStart() const override;
+  void removePlayers(WsPtr ws) override;
 
   bool isFull() const override;
 
   const Teams &getTeams() const;
 
-private:
-  std::size_t team_size_{};
-  Teams teams{};
+  void setPlayerName(shared::PlayerState &state) override;
+
+  void setPlayersReady(WsPtr ws, bool ready) override;
+
+  bool canStart() const;
 
 private:
-  /// Starts `sim_` once `allPlayersReady()` is true; a no-op otherwise, or
-  /// if the match is already running/over.
-  void tryStart() override;
+  bool allPlayersReady() const;
 
-  std::size_t getPlayersCountInTeam(std::size_t team_index) const;
+private:
+  shared::PlayerCount team_size_{};
+  shared::PlayerCount team_count_{};
+  Teams teams_{};
+  std::array<shared::PlayerInput,
+             shared::MAX_PLAYERS_PER_TEAM * shared::MAX_TEAMS>
+      inputs_{};
+
+  shared::PvPGameSim sim_;
+  shared::PvPGameState state_;
 };
 
 /// Matchmaking: assigns newly-connected players to an open game (creating
 /// one if needed) and owns every `Game`'s lifetime.
 class GameManager {
 public:
-  uint32_t next_player_id = 1;
-  uint32_t next_game_id = 1;
+  uint32_t next_player_id{1};
+  uint32_t next_game_id{1};
 
 public:
-  CoopGame *joinOrCreateCoopGame(PlayerConnection *player);
+  CoopGame *joinOrCreateCoopGame(const PerSocketPlayers &players_data);
   CoopGame *createCoopGame();
 
-  PvPGame *joinOrCreatePvPGame(PlayerConnection *player, std::size_t team_size);
-  PvPGame *createPvPGame(std::size_t team_size);
+  PvPGame *joinOrCreatePvPGame(const PerSocketPlayers &players_data,
+                               shared::PlayerCount team_size,
+                               shared::PlayerCount team_count);
+  PvPGame *createPvPGame(shared::PlayerCount team_size,
+                         shared::PlayerCount team_count);
 
   Game *findGameById(uint32_t id);
   void destroyGame(Game *game);
@@ -158,6 +199,8 @@ public:
 
 private:
   std::unordered_map<uint32_t, std::unique_ptr<Game>> gamesById{};
-  CoopGame *open_coop_game_ = nullptr;
-  std::unordered_map<std::size_t, PvPGame *> open_pvp_games_{};
+  std::vector<CoopGame *> open_coop_games_{};
+  std::unordered_map<std::pair<shared::PlayerCount, shared::PlayerCount>,
+                     std::vector<PvPGame *>, shared::PairHash>
+      open_pvp_games_{};
 };

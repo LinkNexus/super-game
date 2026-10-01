@@ -1,16 +1,17 @@
 add_executable(supergame-client
     src/main.cpp
     src/game.cpp
-    src/entities/player.cpp
-    src/entities/enemy.cpp
-    src/entities/boss.cpp
-    src/entities/star.cpp
     src/network_client.cpp
     src/session.cpp
     src/utils.cpp
+    src/elements/text_input.cpp
+    src/types.cpp
+    src/audio_manager.cpp
+    src/entity_designer.cpp
+    src/game_designer.cpp
 )
 
-target_link_libraries(supergame-client PRIVATE raylib supergame-shared ixwebsocket)
+target_link_libraries(supergame-client PRIVATE raylib supergame-shared ixwebsocket supergame-warnings)
 
 target_include_directories(supergame-client PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src

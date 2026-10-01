@@ -57,9 +57,9 @@ enum class ClientMessageType : uint8_t { PLAYER_INPUT, READY };
 /// Sent once by the server right after a WebSocket connection completes,
 /// telling the client which player id it has been assigned.
 struct WelcomeMessage {
-  uint32_t player_id{};
+  std::array<PlayerId, MAX_PLAYERS_PER_CLIENT> players_ids{};
 };
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(WelcomeMessage, player_id);
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(WelcomeMessage, players_ids);
 
 /// Maximum length of a player-chosen display name, in characters (excludes
 /// the null terminator on the server's fixed-size storage buffer).
@@ -82,20 +82,29 @@ struct PlayerInfo {
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(PlayerInfo, name, is_ready, id)
 
 struct CoopGameLobbyUpdate {
-  std::array<std::optional<PlayerInfo>, MAX_PLAYERS> players{};
-  uint8_t max_players{};
+  std::array<PlayerInfo, MAX_PLAYERS_COOP> players{};
+  shared::PlayerCount players_count{};
+  shared::PlayerCount max_players_count{};
   bool game_started{};
 };
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(CoopGameLobbyUpdate, players, game_started,
-                                   max_players)
+                                   max_players_count, players_count)
 
 struct PvPGameLobbyUpdate {
-  shared::OptionalTypeInTeamSlots<PlayerInfo> teams{};
+  struct Team {
+    std::array<PlayerInfo, MAX_PLAYERS_PER_TEAM> players{};
+    shared::PlayerCount players_count{};
+  };
+
+  std::array<Team, MAX_TEAMS> teams{};
+  uint8_t team_count{};
   uint8_t team_size{};
   bool game_started{};
 };
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(PvPGameLobbyUpdate::Team, players,
+                                   players_count)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(PvPGameLobbyUpdate, teams, game_started,
-                                   team_size)
+                                   team_size, team_count)
 
 using LobbyUpdate = std::variant<CoopGameLobbyUpdate, PvPGameLobbyUpdate>;
 
@@ -119,7 +128,7 @@ struct PlayerState {
   uint32_t points{};
   float orientation{};
   std::string name{};
-  uint8_t id{};
+  PlayerId id{};
 };
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(PlayerState, position, lives, points, id,
                                    name, orientation)
@@ -147,35 +156,41 @@ struct BossState {
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(BossState, position, active, health,
                                    max_health)
 
-struct CoopGameState {
+using EnemiesPoolState =
+    std::array<std::array<uint8_t, 2>,
+               EnemiesPoolSimState::COLS * EnemiesPoolSimState::MAX_ROWS>;
+
+struct BaseState {
   uint8_t phase{};
-  OptionalTypeInPlayerSlots<PlayerState> players{};
-  std::array<std::array<uint8_t, 2>,
-             EnemiesPoolSimState::COLS * EnemiesPoolSimState::MAX_ROWS>
-      enemies{};
+  BulletsPoolState bullets{};
+};
+
+struct CoopGameState : BaseState {
+  std::array<PlayerState, MAX_PLAYERS_COOP> players{};
+  uint8_t player_count{};
+  EnemiesPoolState enemies{};
   float enemies_offset_x, enemies_offset_y{};
   BossState boss{};
-  BulletsPoolState bullets{};
 };
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(CoopGameState, phase, players, bullets,
                                    enemies, enemies_offset_x, enemies_offset_y,
-                                   boss)
+                                   boss, player_count)
 
 struct TeamState {
   uint8_t id{};
   uint8_t outcome{};
-  std::array<std::optional<PlayerState>, MAX_PLAYERS / 2> players{};
+  std::array<PlayerState, MAX_PLAYERS_PER_TEAM> players{};
+  uint8_t size{};
 };
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(TeamState, id, outcome, players)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(TeamState, id, outcome, players, size)
 
-struct PvPGameState {
-  uint8_t phase{};
-  std::array<TeamState, 2> teams{};
-  BulletsPoolState bullets{};
+struct PvPGameState : BaseState {
+  std::array<TeamState, MAX_TEAMS> teams{};
+  uint8_t teams_count{};
   uint8_t team_size{};
 };
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(PvPGameState, phase, teams, bullets,
-                                   team_size)
+                                   teams_count, team_size)
 
 using GameState = std::variant<CoopGameState, PvPGameState>;
 

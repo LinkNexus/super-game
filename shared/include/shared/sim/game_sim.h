@@ -1,10 +1,12 @@
 #pragma once
 
+#include "shared/aliases.h"
 #include "shared/constants.h"
 #include "shared/messages.h"
 #include "shared/sim/boss_sim.h"
 #include "shared/sim/enemy_sim.h"
 #include "shared/sim/player_sim.h"
+#include <cstdint>
 
 namespace shared {
 class CoopGameSim {
@@ -18,16 +20,22 @@ public:
     GAME_OVER
   };
 
-  void start(PlayerIds &player_ids);
-  void step(CoopGameState &state, const PlayerInputs &inputs, float dt);
+  void init(PlayerCount playerCount);
+
+  std::array<shared::PlayerId, MAX_PLAYERS_COOP> start();
+
+  void step(CoopGameState &state,
+            const std::array<shared::PlayerInput, MAX_PLAYERS_COOP> &inputs,
+            float dt);
+
   void removePlayer(PlayerId player_id);
 
 private:
   Phase phase_{Phase::ENEMIES_ENTRANCE};
   EnemiesPoolSimState enemies_pool_{};
   BossSimState boss_{};
-  OptionalTypeInPlayerSlots<PlayerSimState> players_{};
-  uint8_t players_count_{0};
+  std::array<PlayerSimState, MAX_PLAYERS_COOP> players_{};
+  PlayerCount player_count_{0};
   BulletsPool bullets_pool_;
 
 private:
@@ -44,11 +52,12 @@ public:
   struct Team {
     TeamId id{};
     TeamOutcome outcome{TeamOutcome::PLAYING};
-    std::array<std::optional<PlayerSimState>, MAX_PLAYERS / 2> players{};
+    std::array<PlayerSimState, MAX_PLAYERS_PER_TEAM> players{};
+    uint8_t size{};
     bool is_on_top{};
     float initial_position_y{};
 
-    void init(TeamId id, bool isOnTop);
+    void init(TeamId id, PlayerCount size, bool isOnTop);
     void stepEntrance(float dt);
     bool isEntranceComplete() const;
 
@@ -58,13 +67,15 @@ public:
 
   enum class Phase : uint8_t { PLAYERS_ENTRANCE, PLAYERS_FIGHT, END };
 
-  using Teams = std::array<Team, 2>;
-  using PerTeamPlayerIds =
-      std::array<std::array<std::optional<PlayerId>, MAX_PLAYERS / 2>, 2>;
+  void init(PlayerCount teamSize, PlayerCount teamsCount);
 
-  PvPGameSim(std::size_t team_size);
-  void start(PerTeamPlayerIds &team_players_ids);
-  void step(PvPGameState &state, const PlayerInputs &inputs, float dt);
+  std::array<std::array<PlayerId, MAX_PLAYERS_PER_TEAM>, MAX_TEAMS> start();
+
+  void
+  step(PvPGameState &state,
+       const std::array<PlayerInput, MAX_TEAMS * MAX_PLAYERS_PER_TEAM> &inputs,
+       float dt);
+
   void removePlayer(PlayerId player_id);
 
   static constexpr float PLAYERS_SPACING = 30.0f;
@@ -72,8 +83,9 @@ public:
   static constexpr int INITIAL_LIVES = 10;
 
 private:
-  std::size_t team_size_{};
-  Teams teams_{};
+  uint8_t team_count_{};
+  uint8_t team_size_{};
+  std::array<Team, MAX_TEAMS> teams_{};
   Phase phase_{Phase::PLAYERS_ENTRANCE};
   BulletsPool bullets_pool_;
 

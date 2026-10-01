@@ -12,4 +12,7 @@ target_include_directories(supergame-shared PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
-target_link_libraries(supergame-shared PUBLIC nlohmann_json)
+target_link_libraries(supergame-shared
+    PUBLIC nlohmann_json
+    PRIVATE supergame-warnings
+)

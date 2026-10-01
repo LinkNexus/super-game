@@ -71,21 +71,21 @@ struct BossSimState {
 
   /// Maps active player count to how many bullets a SPREAD_SHOT fires.
   /// Falls back to MAX_SPREAD_SHOT_BULLETS for any count not listed here.
-  static constexpr std::array<std::pair<uint8_t, int>, MAX_PLAYERS>
+  static constexpr std::array<std::pair<uint8_t, int>, MAX_PLAYERS_COOP>
       SPREAD_SHOT_BULLETS_COUNT_PER_PLAYERS_COUNT = {{
-          {MAX_PLAYERS, MAX_SPREAD_SHOT_BULLETS},
-          {MAX_PLAYERS - 1, MAX_SPREAD_SHOT_BULLETS - 2},
-          {MAX_PLAYERS - 2, MAX_SPREAD_SHOT_BULLETS - 4},
-          {MAX_PLAYERS - 3, MAX_SPREAD_SHOT_BULLETS - 6},
+          {MAX_PLAYERS_COOP, MAX_SPREAD_SHOT_BULLETS},
+          {MAX_PLAYERS_COOP - 1, MAX_SPREAD_SHOT_BULLETS - 2},
+          {MAX_PLAYERS_COOP - 2, MAX_SPREAD_SHOT_BULLETS - 4},
+          {MAX_PLAYERS_COOP - 3, MAX_SPREAD_SHOT_BULLETS - 6},
       }};
   /// Maps active player count to how many bullets a SUCCESSIVE_SHOTS burst
   /// fires. Falls back to MAX_SUCCESSIVE_SHOTS_BULLETS otherwise.
-  static constexpr std::array<std::pair<uint8_t, int>, MAX_PLAYERS>
+  static constexpr std::array<std::pair<uint8_t, int>, MAX_PLAYERS_COOP>
       SUCCESSIVE_SHOTS_BULLETS_COUNT_PER_PLAYERS_COUNT = {{
-          {MAX_PLAYERS, MAX_SUCCESSIVE_SHOTS_BULLETS},
-          {MAX_PLAYERS - 1, MAX_SUCCESSIVE_SHOTS_BULLETS - 2},
-          {MAX_PLAYERS - 2, MAX_SUCCESSIVE_SHOTS_BULLETS - 4},
-          {MAX_PLAYERS - 3, MAX_SUCCESSIVE_SHOTS_BULLETS - 6},
+          {MAX_PLAYERS_COOP, MAX_SUCCESSIVE_SHOTS_BULLETS},
+          {MAX_PLAYERS_COOP - 1, MAX_SUCCESSIVE_SHOTS_BULLETS - 2},
+          {MAX_PLAYERS_COOP - 2, MAX_SUCCESSIVE_SHOTS_BULLETS - 4},
+          {MAX_PLAYERS_COOP - 3, MAX_SUCCESSIVE_SHOTS_BULLETS - 6},
       }};
 
   /// Fires the current `shooting_pattern` into @p bullets once

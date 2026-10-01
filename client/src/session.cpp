@@ -1,75 +1,110 @@
 #include "session.h"
+#include "constants.h"
 #include "nlohmann/json.hpp"
+#include "shared/aliases.h"
 #include "shared/constants.h"
 #include "shared/helpers.h"
 #include "shared/messages.h"
+#include "shared/sim/game_sim.h"
 #include <algorithm>
-#include <cstdint>
 #include <optional>
 #include <string>
 #include <utility>
 
-LocalSession::LocalSession(Mode mode) : mode_(mode) {
+LocalSession::LocalSession(const GameMode *mode,
+                           shared::PlayerCount player_count) {
   mode_ = mode;
+  player_count_ = player_count;
 
-  switch (mode) {
-  case Mode::SINGLE_PLAYER:
-  case Mode::DUAL_PLAYER: {
-    std::array<std::optional<uint32_t>, shared::MAX_PLAYERS> ids{};
-    ids[0] = 1;
-    if (mode == Mode::DUAL_PLAYER)
-      ids[1] = 2;
+  std::visit(shared::overloaded{
+                 [&](const CoopMode &coopMode) {
+                   auto &s = sim_.emplace<shared::CoopGameSim>();
+                   s.init(coopMode.players_count);
+                   auto ids = s.start();
+                   for (std::size_t i = 0; i < coopMode.players_count; ++i) {
+                     player_ids_[i] = ids[i];
+                   }
 
-    auto &s = sim_.emplace<shared::CoopGameSim>();
-    s.start(ids);
-    state_ = shared::CoopGameState();
-    break;
-  }
+                   state_ = shared::CoopGameState();
+                 },
+                 [&](const PvPMode &pvpMode) {
+                   auto &s = sim_.emplace<shared::PvPGameSim>();
 
-  case Mode::PvP:
-    shared::PvPGameSim::PerTeamPlayerIds ids{};
-    ids[0][0] = 1;
-    ids[1][0] = 2;
+                   auto &[team_count, team_size] =
+                       pvpMode.pvp_match_ups[pvpMode.selected_match_up_idx];
 
-    auto &s = sim_.emplace<shared::PvPGameSim>(1);
-    s.start(ids);
-    state_ = shared::PvPGameState();
-    break;
-  }
+                   s.init(team_size, team_count);
+                   auto ids = s.start();
+
+                   for (std::size_t team = 0; team < team_count; ++team) {
+                     for (std::size_t player = 0; player < team_size;
+                          ++player) {
+                       std::size_t idx = team * team_size + player;
+                       player_ids_[idx] = ids[team][player];
+                     }
+                   }
+
+                   state_ = shared::PvPGameState();
+                 }},
+             *mode);
 }
 
 shared::GameState LocalSession::step(
-    const std::array<std::optional<shared::PlayerInput>, shared::MAX_PLAYERS>
-        &inputs,
+    const std::array<shared::PlayerInput, MAX_PLAYERS_ON_THIS_MACHINE> &inputs,
     float dt) {
-  std::visit(shared::overloaded{
-                 [&](shared::CoopGameSim &sim, shared::CoopGameState &state) {
-                   sim.step(state, inputs, dt);
-                 },
-                 [&](shared::PvPGameSim &sim, shared::PvPGameState &state) {
-                   sim.step(state, inputs, dt);
-                 },
-                 [&](auto &, auto &) {
-                   throw std::runtime_error("Invalid sim state");
-                 }},
-             sim_, state_);
+  std::visit(
+      shared::overloaded{
+          [&](const CoopMode &coopMode) {
+            std::array<shared::PlayerInput, shared::MAX_PLAYERS_COOP>
+                simInputs{};
+
+            for (std::size_t i = 0; i < coopMode.players_count; ++i) {
+              simInputs[i] = inputs[i];
+            }
+
+            auto &s = std::get<shared::CoopGameSim>(sim_);
+            s.step(std::get<shared::CoopGameState>(state_), simInputs, dt);
+          },
+          [&](const PvPMode &pvpMode) {
+            std::array<shared::PlayerInput,
+                       shared::MAX_TEAMS * shared::MAX_PLAYERS_PER_TEAM>
+                simInputs{};
+
+            auto &[team_count, team_size] =
+                pvpMode.pvp_match_ups[pvpMode.selected_match_up_idx];
+
+            for (std::size_t i = 0; i < team_count * team_size; ++i) {
+              simInputs[i] = inputs[i];
+            }
+
+            auto &s = std::get<shared::PvPGameSim>(sim_);
+            s.step(std::get<shared::PvPGameState>(state_), simInputs, dt);
+          }},
+      *mode_);
+
   return state_;
 }
 
-LocalSession::Mode LocalSession::getMode() const { return mode_; }
-
-OnlineSession::OnlineSession(const std::string &url)
+OnlineSession::OnlineSession(const std::string &url,
+                             shared::PlayerCount playerCount)
     : client_(url, [this](const std::string &msg) { onMessage(msg); }) {
+  player_count_ = playerCount;
   client_.connect();
 }
 
 shared::GameState OnlineSession::step(
-    const std::array<std::optional<shared::PlayerInput>, shared::MAX_PLAYERS>
-        &inputs,
+    const std::array<shared::PlayerInput, MAX_PLAYERS_ON_THIS_MACHINE> &inputs,
     float dt) {
   nlohmann::json inputEnvelope;
   inputEnvelope["type"] = shared::ClientMessageType::PLAYER_INPUT;
-  inputEnvelope["payload"] = inputs[0];
+
+  std::array<shared::PlayerInput, shared::MAX_PLAYERS_PER_CLIENT> payload{};
+
+  for (std::size_t i = 0; i < player_count_; ++i) {
+    payload[i] = inputs[i];
+  }
+
+  inputEnvelope["payload"] = payload;
   client_.send(inputEnvelope.dump());
 
   if (auto s = state_box_.take()) {
@@ -86,10 +121,22 @@ const shared::LobbyUpdate OnlineSession::getLobbyUpdate() {
   return lobby_update_;
 }
 
-const uint32_t OnlineSession::getPlayerId() {
+std::array<shared::PlayerId, MAX_PLAYERS_ON_THIS_MACHINE>
+OnlineSession::getPlayersIds() {
   if (auto msg = welcome_message_box_.take())
     welcome_message_ = std::move(*msg);
-  return welcome_message_.player_id;
+
+  if (MAX_PLAYERS_ON_THIS_MACHINE == shared::MAX_PLAYERS_PER_CLIENT)
+    return welcome_message_.players_ids;
+  else {
+    std::array<shared::PlayerId, MAX_PLAYERS_ON_THIS_MACHINE> players_ids{};
+
+    for (std::size_t i = 0; i < player_count_; ++i) {
+      players_ids[i] = welcome_message_.players_ids[i];
+    }
+
+    return players_ids;
+  }
 }
 
 void OnlineSession::sendReady(bool isReady) {
@@ -141,18 +188,15 @@ shared::GameState OnlineSession::interpolateState() const {
 
   std::visit(
       shared::overloaded{
-          [&alpha](const shared::CoopGameState &prevS,
-                   const shared::CoopGameState &targetS,
-                   shared::CoopGameState &interS) {
-            for (std::size_t idx = 0; idx < interS.players.size(); ++idx) {
-              auto &targetPlayer = targetS.players[idx];
-              auto &previousPlayer = prevS.players[idx];
+          [this, &alpha](const shared::CoopGameState &prevS,
+                         const shared::CoopGameState &targetS,
+                         shared::CoopGameState &interS) {
+            for (std::size_t i = 0; i < interS.player_count; ++i) {
+              auto &targetPlayer = targetS.players[i];
+              auto &previousPlayer = prevS.players[i];
 
-              if (!targetPlayer.has_value() || !previousPlayer.has_value())
-                continue;
-
-              interS.players[idx]->position =
-                  previousPlayer->position.lerp(targetPlayer->position, alpha);
+              interS.players[i].position =
+                  previousPlayer.position.lerp(targetPlayer.position, alpha);
             }
 
             interS.boss.position =
@@ -165,24 +209,57 @@ shared::GameState OnlineSession::interpolateState() const {
                 prevS.enemies_offset_y +
                 (targetS.enemies_offset_y - prevS.enemies_offset_y) * alpha;
           },
-          [](const shared::PvPGameState &prevS,
-             const shared::PvPGameState &targetS,
-             shared::PvPGameState &interS) {
+          [&alpha](const shared::PvPGameState &prevS,
+                   const shared::PvPGameState &targetS,
+                   shared::PvPGameState &interS) {
+            for (std::size_t teamIdx = 0; teamIdx < interS.teams_count;
+                 ++teamIdx) {
+              for (std::size_t playerIdx = 0;
+                   playerIdx < interS.teams[teamIdx].size; ++playerIdx) {
+                auto &targetPlayer = targetS.teams[teamIdx].players[playerIdx];
+                auto &previousPlayer = prevS.teams[teamIdx].players[playerIdx];
 
+                interS.teams[teamIdx].players[playerIdx].position =
+                    previousPlayer.position.lerp(targetPlayer.position, alpha);
+              }
+            }
           },
           [](auto &, auto &, auto &) {}},
       previous_state_.value(), target_state_, interpolatedState);
 
-  std::visit(shared::overloaded{[&alpha](const auto &prevS, const auto &targetS,
-                                         auto &interS) {
-               for (std::size_t idx = 0; idx < interS.bullets.size(); ++idx) {
-                 auto &targetBullet = targetS.bullets[idx];
-                 auto &previousBullet = prevS.bullets[idx];
-                 interS.bullets[idx].position =
-                     previousBullet.position.lerp(targetBullet.position, alpha);
-               }
-             }},
+  auto lerpBullets = [](const shared::BaseState &prevS,
+                        const shared::BaseState &targetS,
+                        shared::BaseState &interS, float alpha) {
+    for (std::size_t idx = 0; idx < interS.bullets.size(); ++idx) {
+      auto &targetBullet = targetS.bullets[idx];
+      auto &previousBullet = prevS.bullets[idx];
+      interS.bullets[idx].position =
+          previousBullet.position.lerp(targetBullet.position, alpha);
+    }
+  };
+
+  std::visit(shared::overloaded{
+                 [&alpha, &lerpBullets](const shared::CoopGameState &prevS,
+                                        const shared::CoopGameState &targetS,
+                                        shared::CoopGameState &interS) {
+                   lerpBullets(prevS, targetS, interS, alpha);
+                 },
+                 [&alpha, &lerpBullets](const shared::PvPGameState &prevS,
+                                        const shared::PvPGameState &targetS,
+                                        shared::PvPGameState &interS) {
+                   lerpBullets(prevS, targetS, interS, alpha);
+                 },
+                 [](auto &, auto &, auto &) {}},
              previous_state_.value(), target_state_, interpolatedState);
 
   return interpolatedState;
+}
+
+std::array<shared::PlayerId, MAX_PLAYERS_ON_THIS_MACHINE>
+LocalSession::getPlayersIds() {
+  return player_ids_;
+}
+
+shared::PlayerCount OnlineSession::getPlayerCount() const {
+  return player_count_;
 }

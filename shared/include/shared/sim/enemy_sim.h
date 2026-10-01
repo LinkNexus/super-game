@@ -49,11 +49,11 @@ struct EnemiesPoolSimState {
   /// Maps active player count to how many of `MAX_ROWS` rows start alive,
   /// so difficulty scales with player count. Falls back to `MAX_ROWS` for
   /// any player count not listed here.
-  static constexpr std::array<std::pair<uint8_t, int>, MAX_PLAYERS>
-      ROWS_PER_PLAYERS_COUNT = {{{MAX_PLAYERS, MAX_ROWS},
-                                 {MAX_PLAYERS - 1, MAX_ROWS - 2},
-                                 {MAX_PLAYERS - 2, MAX_ROWS - 3},
-                                 {MAX_PLAYERS - 3, MAX_ROWS - 5}}};
+  static constexpr std::array<std::pair<uint8_t, int>, MAX_PLAYERS_COOP>
+      ROWS_PER_PLAYERS_COUNT = {{{MAX_PLAYERS_COOP, MAX_ROWS},
+                                 {MAX_PLAYERS_COOP - 1, MAX_ROWS - 2},
+                                 {MAX_PLAYERS_COOP - 2, MAX_ROWS - 3},
+                                 {MAX_PLAYERS_COOP - 3, MAX_ROWS - 5}}};
 
   int active_rows;
   std::array<EnemySimState, MAX_ROWS * COLS> enemies;
