@@ -287,14 +287,19 @@ int main(int, char *[]) {
            .close =
                [](auto *ws, int, std::string_view) {
                  auto *data = ws->getUserData();
-                 data->game->removePlayers(data->players_data.ws);
 
-                 for (auto &player : data->players_data.players) {
-                   delete player;
-                 }
+                 if (data->game) {
+                   if (!data->game->isOver()) {
+                     data->game->removePlayers(data->players_data.ws);
 
-                 if (!data->game->isRunning() && !data->game->isOver()) {
-                   sendLobbyUpdate(data);
+                     if (!data->game->isRunning()) {
+                       sendLobbyUpdate(data);
+                     }
+                   }
+
+                   for (std::size_t i = 0; i < data->players_data.count; ++i) {
+                     delete data->players_data.players[i];
+                   }
                  }
                }})
       .listen("0.0.0.0", 9001,
