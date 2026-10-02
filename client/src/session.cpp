@@ -94,7 +94,7 @@ OnlineSession::OnlineSession(const std::string &url,
 
 shared::GameState OnlineSession::step(
     const std::array<shared::PlayerInput, MAX_PLAYERS_ON_THIS_MACHINE> &inputs,
-    float dt) {
+    float) {
   nlohmann::json inputEnvelope;
   inputEnvelope["type"] = shared::ClientMessageType::PLAYER_INPUT;
 
@@ -188,9 +188,9 @@ shared::GameState OnlineSession::interpolateState() const {
 
   std::visit(
       shared::overloaded{
-          [this, &alpha](const shared::CoopGameState &prevS,
-                         const shared::CoopGameState &targetS,
-                         shared::CoopGameState &interS) {
+          [&alpha](const shared::CoopGameState &prevS,
+                   const shared::CoopGameState &targetS,
+                   shared::CoopGameState &interS) {
             for (std::size_t i = 0; i < interS.player_count; ++i) {
               auto &targetPlayer = targetS.players[i];
               auto &previousPlayer = prevS.players[i];

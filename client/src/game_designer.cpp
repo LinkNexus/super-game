@@ -222,7 +222,7 @@ void GameDesigner::drawLobby(OnlineSession *session, bool areReady) const {
                      18, LIGHTGRAY);
             y += 32;
           },
-          [&y, &session](const shared::PvPGameLobbyUpdate &u) {
+          [&y](const shared::PvPGameLobbyUpdate &u) {
             std::string subtitle{std::to_string(u.team_size)};
             for (std::size_t i = 1; i < u.team_count; ++i) {
               subtitle += " Vs " + std::to_string(u.team_size);

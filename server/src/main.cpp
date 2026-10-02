@@ -21,7 +21,7 @@ auto sendLobbyUpdate(PerSocketData *data) {
 
   std::visit(
       shared::overloaded{
-          [&data, &envelope](const CoopGameType &t) {
+          [&data, &envelope](const CoopGameType &) {
             auto game = dynamic_cast<CoopGame *>(data->game);
             const auto &players = game->getPlayers();
 
