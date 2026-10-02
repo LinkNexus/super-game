@@ -69,8 +69,8 @@ TEST(coop_state_mirrors_roster_after_first_step) {
   sim.step(state, idle, FIXED_DT);
 
   CHECK_EQ(state.player_count, 2);
-  CHECK_EQ(state.players[0].id, 1);
-  CHECK_EQ(state.players[1].id, 2);
+  CHECK_EQ(state.players[0].id, 1u);
+  CHECK_EQ(state.players[1].id, 2u);
   CHECK_EQ(state.players[0].lives, PlayerSimState::INITIAL_LIVES);
   CHECK_EQ(state.players[1].lives, PlayerSimState::INITIAL_LIVES);
   CHECK_EQ(state.players[0].points, 0u);

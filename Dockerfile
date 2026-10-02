@@ -44,6 +44,7 @@ COPY server ./server
 RUN cmake -S . -B build -G Ninja \
     -DCMAKE_BUILD_TYPE=Release \
     -DBUILD_CLIENT=OFF \
+    -DBUILD_SERVER=ON \
     -DBUILD_TESTS=OFF \
     && cmake --build build --target supergame-server -j"$(nproc)"
 

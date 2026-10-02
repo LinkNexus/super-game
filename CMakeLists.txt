@@ -35,6 +35,37 @@ option(BUILD_TESTS "Build the supergame unit tests" ON)
 # that installed.
 option(BUILD_CLIENT "Build the raylib-based game client" ON)
 
+# The server is not buildable on Windows without an extra dependency we don't
+# vendor. uSockets picks its event backend at compile time from the target
+# platform (vendor/uWebSockets/uSockets/src/libusockets.h): kqueue on
+# macOS/BSD, epoll on Linux - both kernel facilities needing no library - but
+# **libuv on Windows**. With `_WIN32` defined, `internal/internal.h` pulls in
+# `internal/eventing/libuv.h`, which `#include <uv.h>`, and the build fails
+# there.
+#
+# This project only ever deploys the server as a Linux container, and the
+# Windows target exists solely to produce a client .exe, so the server (and
+# with it the whole uSockets build) is off by default on Windows. Turning it
+# back on there means also vendoring libuv and defining LIBUS_USE_LIBUV.
+#
+# Note this has to gate `include(vendor/uWebSockets.cmake)` too, not just the
+# server target: `add_library(usockets STATIC ...)` is part of the default
+# `all` target, so a plain `cmake --build <dir>` would compile libuv.c and hit
+# the same error even when supergame-server itself is never requested.
+if(WIN32)
+    set(SUPERGAME_BUILD_SERVER_DEFAULT OFF)
+else()
+    set(SUPERGAME_BUILD_SERVER_DEFAULT ON)
+endif()
+option(BUILD_SERVER "Build the headless game server"
+       ${SUPERGAME_BUILD_SERVER_DEFAULT})
+
+if(WIN32 AND NOT BUILD_SERVER)
+    message(STATUS
+        "supergame-server: skipped (Windows target - uSockets would need "
+        "libuv here; the server ships as a Linux container)")
+endif()
+
 if(BUILD_CLIENT)
     # Raylib
     set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
@@ -47,7 +78,9 @@ if(BUILD_CLIENT)
 endif()
 
 # uSockets / uWebSockets (server networking layer)
-include(vendor/uWebSockets.cmake)
+if(BUILD_SERVER)
+    include(vendor/uWebSockets.cmake)
+endif()
 
 # nlohmann/json (message serialization)
 include(vendor/json.cmake)
@@ -57,7 +90,9 @@ add_subdirectory(shared)
 if(BUILD_CLIENT)
     add_subdirectory(client)
 endif()
-add_subdirectory(server)
+if(BUILD_SERVER)
+    add_subdirectory(server)
+endif()
 
 if(BUILD_TESTS)
     enable_testing()
