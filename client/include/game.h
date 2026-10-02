@@ -1,34 +1,17 @@
 #pragma once
 
+#include "audio_manager.h"
 #include "constants.h"
-#include "entities/boss.h"
-#include "entities/player.h"
-#include "entities/star.h"
+#include "elements/text_input.h"
+#include "game_designer.h"
 #include "raylib.h"
 #include "session.h"
+#include "shared/constants.h"
 #include "shared/messages.h"
+#include "types.h"
 #include <array>
+#include <memory>
 #include <string>
-
-/// Client-only UI/flow state. Governs *whether* `Game` steps the
-/// simulation at all - `shared::GamePhase` (sim-side progression) is a
-/// separate concern that rides along in `GameState::phase`. Pause has no
-/// sim-side representation: `Game::run()` simply skips stepping the
-/// session while `PAUSED` and keeps drawing the last known state.
-enum class Screen {
-  MENU,
-  SELECT_ONLINE_MODE,
-  NAME_ENTRY,
-  CONNECTING,
-  LOBBY,
-  SELECT_LOCAL_MODE,
-  PLAYING,
-  PAUSED,
-  END
-};
-
-/// Which kind of `Session` the player picked from the main menu.
-enum class GameMode { LOCAL, ONLINE };
 
 /// Owns the raylib window/audio lifecycle, menu/screen flow, and a
 /// `Session` (local or online) that supplies each tick's `GameState`.
@@ -36,7 +19,7 @@ enum class GameMode { LOCAL, ONLINE };
 /// input polling that gets packaged into `PlayerInput`s for the session.
 class Game {
 public:
-  explicit Game(std::string server_url = shared::default_server_url);
+  explicit Game(std::string_view server_url = default_server_url);
 
   /// Runs the full window/game loop until the window is closed: polls
   /// input, steps the active session at a fixed timestep, and renders.
@@ -52,33 +35,14 @@ private:
   /// fresh `OnlineSession`, depending on `mode_`.
   void restart();
 
-  void draw() const;
-  void drawMainMenu() const;
-  void drawInputTextBox() const;
-  void drawLobby() const;
-  void drawLocalModeSelection() const;
-  void drawOnlineModeSelection() const;
-  void drawGame() const;
-  void drawEndScreen() const;
+  void draw();
 
   void handleInput();
 
   /// Polls raylib input and writes the resulting buttons into `inputs_`
   /// for whichever local player(s) are active this tick.
-  void getPlayersInputs();
+  void pollPlayersInputs();
 
-  /// Particle system for explosion effects (client-side only).
-  struct Particle {
-    Vector2 position{};
-    Vector2 velocity{};
-    float lifetime = 0.0f;
-    float max_lifetime = 0.0f;
-    Color color{255, 255, 255, 255};
-    float size = 3.0f;
-  };
-
-  void updateParticles(float dt);
-  void drawParticles() const;
   void spawnExplosion(const Vector2 &pos, shared::EnemyType type);
 
   /// Diffs @p before and @p after to spawn explosion particles for enemies
@@ -87,53 +51,49 @@ private:
   void spawnEnemyExplosions(const shared::CoopGameState &before,
                             const shared::CoopGameState &after);
 
-  /// Creates a fresh `LocalSession` for @p mode and resets `inputs_`
-  /// (player ids, dual-player slot) to match it.
-  void startLocalSession();
+  void handleEventsOnScreen();
 
-  /// Creates a fresh `OnlineSession` against `server_url_` (with the
-  /// chosen `player_name_` as a query parameter) and moves to
-  /// `Screen::CONNECTING`.
+  void checkAndPlaySoundsOnEvents();
+
+  void startLocalSession();
   void startOnlineSession();
 
-  static constexpr int MAX_PARTICLES = 128;
-  std::array<Particle, MAX_PARTICLES> particles_{};
+  void initNameTextBoxes();
 
-  Player player_;
-  Boss boss_;
+private:
+  GameDesigner game_designer_{};
+  AudioManager audio_manager_{};
+
+  static constexpr std::array<
+      std::array<std::pair<KeyboardKey, shared::Button>, 3>,
+      MAX_PLAYERS_ON_THIS_MACHINE>
+      PLAYERS_CONTROLS{{{{
+                            {KEY_LEFT, shared::Button::BUTTON_LEFT},
+                            {KEY_RIGHT, shared::Button::BUTTON_RIGHT},
+                            {KEY_SPACE, shared::Button::BUTTON_SHOOT},
+                        }},
+                        {{
+                            {KEY_A, shared::Button::BUTTON_LEFT},
+                            {KEY_D, shared::Button::BUTTON_RIGHT},
+                            {KEY_W, shared::Button::BUTTON_SHOOT},
+                        }}}};
+
+  std::array<Particle, MAX_PARTICLES> particles_{};
   std::array<Star, STAR_COUNT> stars_;
-  Screen screen_;
-  GameMode mode_ = GameMode::LOCAL;
+
+  GameScreen screen_{GameScreen::MENU};
+  GameType type_{GameType::LOCAL};
+
+  std::unique_ptr<Config> config_{nullptr};
+  std::unique_ptr<Session> session_{nullptr};
+
+  std::string server_url_{};
 
   /// Per-slot local input state, indexed by local player slot (not
   /// necessarily the sim's player id) and sent to the active `Session`
   /// each tick.
-  shared::PlayerInputs inputs_{};
+  std::array<shared::PlayerInput, MAX_PLAYERS_ON_THIS_MACHINE> inputs_{};
+  std::array<TextInput, shared::MAX_PLAYERS_PER_CLIENT> name_text_boxes_{};
 
-  OnlineSession::Config online_config_{};
-  LocalSession::Config local_config_{};
-
-  std::unique_ptr<Session> session_ = nullptr;
-  shared::GameState state_;
-  /// Previous tick's state, kept for edge-detection (enemy deaths, boss
-  /// hits) that the current `GameState` snapshot alone can't reveal.
-  shared::GameState prev_state_;
-
-  Rectangle name_text_box{shared::SCREEN_WIDTH / 2.0f - 130.0f,
-                          shared::SCREEN_HEIGHT / 2.0f - 25.0f, 250.0f, 50.0f};
-  int name_letters_count_{};
-  bool showPlayerNameError_{};
-
-  // audio
-  Sound shoot_sfx_;
-  Sound explosion_sfx_;
-  Sound boss_hit_sfx_;
-  Music background_music_;
-  bool music_loaded_ = false;
-  bool audio_ready_ = false;
-  float music_volume_ = 0.0f;
-  float target_music_volume_ = 0.0f;
-  static constexpr float MUSIC_FADE_SPEED = 1.0f; // volume units per second
-
-  float score_anim_time_ = 0.0f;
+  float score_anim_time_{};
 };

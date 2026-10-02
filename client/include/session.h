@@ -1,94 +1,92 @@
 #pragma once
 
+#include "constants.h"
+#include "mailbox.h"
 #include "network_client.h"
+#include "shared/aliases.h"
 #include "shared/constants.h"
 #include "shared/messages.h"
 #include "shared/sim/game_sim.h"
-#include <mutex>
+#include <cstddef>
 #include <optional>
 
-/// Single-slot, thread-safe mailbox used to hand a value from
-/// `NetworkClient`'s background IXWebSocket thread to the main thread
-/// polling it once per frame. A new `set()` overwrites any unread pending
-/// value - only the latest matters for rendering.
-template <typename T> class MailBox {
-public:
-  void set(T value) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    pending_ = std::move(value);
-    has_pending_ = true;
-  }
+struct CoopMode {
+  shared::PlayerCount players_count{1};
+};
 
-  /// @return The pending value and clears it, or `std::nullopt` if nothing
-  /// new has arrived since the last call.
-  std::optional<T> take() {
-    std::lock_guard<std::mutex> lock(mutex_);
-    if (!has_pending_)
-      return std::nullopt;
-    has_pending_ = false;
-    return std::move(pending_);
-  }
+struct PvPMode {
+  std::vector<std::pair<shared::PlayerCount, shared::PlayerCount>>
+      pvp_match_ups{};
+  std::size_t selected_match_up_idx{0};
+};
 
-private:
-  std::mutex mutex_;
-  T pending_;
-  bool has_pending_;
+using GameMode = std::variant<CoopMode, PvPMode>;
+
+struct Config {
+  std::size_t mode_idx{};
+  std::array<GameMode, 2> modes = {CoopMode{}, PvPMode{}};
+
+  shared::GameState state{};
+  shared::GameState prev_state{};
+
+  shared::PlayerCount player_count{1};
+
+  virtual ~Config() = default;
 };
 
 /// Abstracts over local (in-process) vs online (networked) play so `Game`
 /// can drive either the same way each tick.
 class Session {
+protected:
+  shared::PlayerCount player_count_{1};
+
 public:
   virtual ~Session() = default;
 
-  /// Advances the session by one tick with the given local @p inputs and
-  /// @p dt, returning the resulting `GameState` to render.
+  virtual std::array<shared::PlayerId, MAX_PLAYERS_ON_THIS_MACHINE>
+  getPlayersIds() = 0;
+
   virtual shared::GameState
-  step(const std::array<std::optional<shared::PlayerInput>, shared::MAX_PLAYERS>
+  step(const std::array<shared::PlayerInput, MAX_PLAYERS_ON_THIS_MACHINE>
            &inputs,
        float dt) = 0;
 };
+
+struct LocalConfig : Config {};
 
 /// Runs a `GameSim` in-process, with no networking - the same simulation
 /// code path the server uses, just fed local input directly.
 class LocalSession : public Session {
 public:
-  enum class Mode { SINGLE_PLAYER, DUAL_PLAYER, PvP };
-  struct Config {
-    int mode_idx{};
-    static constexpr std::array<Mode, 3> modes = {Mode::SINGLE_PLAYER,
-                                                  Mode::DUAL_PLAYER, Mode::PvP};
-  };
+  LocalSession(const GameMode *mode, shared::PlayerCount player_count);
 
-  LocalSession(Mode mode);
-  Mode getMode() const;
-  shared::GameState step(const std::array<std::optional<shared::PlayerInput>,
-                                          shared::MAX_PLAYERS> &inputs,
+  shared::GameState step(const std::array<shared::PlayerInput,
+                                          MAX_PLAYERS_ON_THIS_MACHINE> &inputs,
                          float dt) override;
 
+  std::array<shared::PlayerId, MAX_PLAYERS_ON_THIS_MACHINE>
+  getPlayersIds() override;
+
 private:
-  Mode mode_{Mode::SINGLE_PLAYER};
+  const GameMode *mode_{nullptr};
   shared::GameSim sim_{};
   shared::GameState state_{};
+  std::array<shared::PlayerId, MAX_PLAYERS_ON_THIS_MACHINE> player_ids_{};
 };
 
-enum class OnlineMode { COOP, _1V1, _2V2 };
+struct OnlineConfig : Config {
+  std::array<std::string, shared::MAX_PLAYERS_PER_CLIENT> players_names{};
+  bool are_ready{};
+  std::string server_url{};
+};
 
 class OnlineSession : public Session {
 public:
-  struct Config {
-    char player_name[shared::MAX_NAME_LENGTH + 1]{};
-    bool is_ready{};
-    std::string server_url;
+  explicit OnlineSession(const std::string &url,
+                         shared::PlayerCount playersCount);
 
-    int mode_idx;
-    constexpr static std::array<OnlineMode, 3> modes = {
-        OnlineMode::COOP, OnlineMode::_1V1, OnlineMode::_2V2};
-  };
-
-  explicit OnlineSession(const std::string &url);
-  shared::GameState step(const std::array<std::optional<shared::PlayerInput>,
-                                          shared::MAX_PLAYERS> &inputs,
+  shared::GameState step(const std::array<shared::PlayerInput,
+                                          MAX_PLAYERS_ON_THIS_MACHINE> &inputs,
                          float dt) override;
 
   /// @return The most recently received lobby snapshot (player list,
@@ -97,10 +95,13 @@ public:
 
   /// @return The player id assigned by the server's `WelcomeMessage`, or
   /// 0 if none has been received yet.
-  const uint32_t getPlayerId();
+  std::array<shared::PlayerId, MAX_PLAYERS_ON_THIS_MACHINE>
+  getPlayersIds() override;
 
   /// Sends this client's ready-state toggle to the server.
   void sendReady(bool isReady);
+
+  shared::PlayerCount getPlayerCount() const;
 
 private:
   /// Dispatches an incoming `{type, payload}` envelope to the matching

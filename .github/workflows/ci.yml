@@ -18,38 +18,46 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-# Artifacts (client binaries bundle ~52MB of game audio each, docs are
-# smaller but still add up) are only uploaded for master pushes and version
-# tags - the "official" build history. PRs still compile on every job below
-# (so breakage is caught before merge), they just don't persist any output,
-# since a PR build is superseded the moment it merges anyway.
+# Artifacts (client binaries bundle ~52MB of game audio each) are only
+# uploaded for master pushes and version tags - the "official" build history.
+# PRs still compile on every job below (so breakage is caught before merge),
+# they just don't persist any output, since a PR build is superseded the
+# moment it merges anyway.
 env:
   IS_MASTER_PUSH: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
   IS_RELEASE: ${{ startsWith(github.ref, 'refs/tags/v') }}
 
 jobs:
-  docs:
+  # The shared/ simulation is headless and engine-agnostic, so its tests need
+  # neither raylib nor a running server - only the uWebSockets submodule that
+  # the shared target's own CMake wiring pulls in. Kept as its own fast job
+  # (rather than a step bolted onto a client build) so a logic regression
+  # reports as a distinct red check, and so `needs:` can gate on it.
+  test-shared:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: false
 
-      - name: Install Doxygen + graphviz
+      - name: Init uWebSockets submodule
+        run: |
+          git submodule update --init vendor/uWebSockets
+          git -C vendor/uWebSockets submodule update --init uSockets
+
+      - name: Install build deps
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq --no-install-recommends doxygen graphviz
+          sudo apt-get install -y -qq --no-install-recommends cmake ninja-build g++
 
-      - name: Generate docs
+      - name: Build tests
         run: |
-          mkdir -p docs/doxygen
-          doxygen Doxyfile
+          cmake -S . -B build/tests -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug -DBUILD_CLIENT=OFF -DBUILD_TESTS=ON
+          cmake --build build/tests --target supergame-tests
 
-      - name: Upload docs artifact
-        if: env.IS_MASTER_PUSH == 'true' || env.IS_RELEASE == 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: docs-html
-          path: docs/doxygen/html
-          retention-days: 14
+      - name: Run tests
+        run: ctest --test-dir build/tests --output-on-failure
 
   build-client-linux:
     runs-on: ubuntu-latest
@@ -81,7 +89,13 @@ jobs:
           path: |
             build/debug
             build/release
-          key: client-linux-${{ github.ref_name }}
+          # Keyed on the build definition rather than the branch name: a
+          # CMake/submodule change must invalidate the cache (the old key
+          # never did), while an ordinary source edit should still hit it.
+          # restore-keys lets a PR warm from the newest existing cache -
+          # under the branch-name key, every PR started cold.
+          key: client-linux-${{ hashFiles('CMakeLists.txt', 'CMakePresets.json', 'client/CMakeLists.txt', 'server/CMakeLists.txt', 'shared/CMakeLists.txt', 'shared/tests/CMakeLists.txt', 'cmake/**', 'vendor/*.cmake', '.gitmodules') }}
+          restore-keys: client-linux-
 
       - name: Build (debug, compile check)
         run: |
@@ -126,7 +140,8 @@ jobs:
           path: |
             build/debug
             build/release
-          key: client-macos-${{ github.ref_name }}
+          key: client-macos-${{ hashFiles('CMakeLists.txt', 'CMakePresets.json', 'client/CMakeLists.txt', 'server/CMakeLists.txt', 'shared/CMakeLists.txt', 'shared/tests/CMakeLists.txt', 'cmake/**', 'vendor/*.cmake', '.gitmodules') }}
+          restore-keys: client-macos-
 
       - name: Build (debug, compile check)
         run: |
@@ -173,7 +188,8 @@ jobs:
         uses: actions/cache@v4
         with:
           path: build/windows-client-release
-          key: client-windows-${{ github.ref_name }}
+          key: client-windows-${{ hashFiles('CMakeLists.txt', 'CMakePresets.json', 'client/CMakeLists.txt', 'server/CMakeLists.txt', 'shared/CMakeLists.txt', 'shared/tests/CMakeLists.txt', 'cmake/**', 'vendor/*.cmake', '.gitmodules') }}
+          restore-keys: client-windows-
 
       - name: Build
         run: |
@@ -214,7 +230,8 @@ jobs:
           path: |
             build/server-debug
             build/server-release
-          key: server-${{ github.ref_name }}
+          key: server-${{ hashFiles('CMakeLists.txt', 'CMakePresets.json', 'client/CMakeLists.txt', 'server/CMakeLists.txt', 'shared/CMakeLists.txt', 'shared/tests/CMakeLists.txt', 'cmake/**', 'vendor/*.cmake', '.gitmodules') }}
+          restore-keys: server-
 
       - name: Build (debug, compile check)
         run: |
@@ -228,7 +245,10 @@ jobs:
 
   docker-server:
     runs-on: ubuntu-latest
-    needs: build-server
+    # Gated on the sim tests as well as the server build: this job is what
+    # fires the Dokploy redeploy webhook, so a failing test must not be able
+    # to reach production.
+    needs: [build-server, test-shared]
     # Push an image on a master push or a version tag - never from a PR
     # (which may come from a fork with no registry access anyway).
     if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v'))
@@ -299,7 +319,7 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       [
-        docs,
+        test-shared,
         build-client-linux,
         build-client-macos,
         build-client-windows,
@@ -309,12 +329,6 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Download docs artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: docs-html
-          path: artifacts/docs-html
-
       - name: Download client artifacts
         # Scoped patterns only - an unfiltered download-artifact also picks
         # up docker/build-push-action's own internal build-record artifact

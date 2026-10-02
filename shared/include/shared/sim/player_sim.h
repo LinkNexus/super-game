@@ -24,7 +24,7 @@ struct PlayerSimState {
   static constexpr float SPEED = 300.0f;
   /// Fraction of `SIZE` actually used as the collision hitbox - kept
   /// smaller than the visual size so grazes feel fair.
-  static constexpr float HITBOX_SCALE = 0.80f;
+  static constexpr float HITBOX_SCALE = 0.85f;
   static constexpr float FIRE_COOLDOWN = 0.15f;
   static constexpr int INITIAL_LIVES = 3;
   static constexpr float POSITION_Y = 60.0f;
