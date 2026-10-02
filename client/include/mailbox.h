@@ -1,6 +1,7 @@
 #pragma once
 
 #include <mutex>
+#include <optional>
 
 /// Single-slot, thread-safe mailbox used to hand a value from
 /// `NetworkClient`'s background IXWebSocket thread to the main thread
