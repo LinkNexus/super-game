@@ -18,6 +18,8 @@
 Game::Game(std::string_view server_url) : server_url_(std::move(server_url)) {}
 
 void Game::restart() {
+  session_ = nullptr;
+
   if (type_ == GameType::LOCAL) {
     startLocalSession();
   } else {
@@ -26,13 +28,12 @@ void Game::restart() {
 }
 
 void Game::init() {
+  session_ = nullptr;
+  config_ = nullptr;
   screen_ = GameScreen::MENU;
 
   for (auto &s : stars_)
     s.initRandom();
-
-  audio_manager_.initAudio();
-  game_designer_.init();
 }
 
 void Game::pollPlayersInputs() {
@@ -123,7 +124,6 @@ void Game::handleEventsOnScreen() {
 
                              if (phase == GamePhase::GAME_OVER ||
                                  phase == GamePhase::WON) {
-                               session_ = nullptr;
                                screen_ = GameScreen::END;
                              }
                            },
@@ -132,7 +132,6 @@ void Game::handleEventsOnScreen() {
                              auto phase = static_cast<GamePhase>(s.phase);
 
                              if (phase == GamePhase::END) {
-                               session_ = nullptr;
                                screen_ = GameScreen::END;
                              }
                            }},
@@ -150,6 +149,9 @@ void Game::run() {
   SetTargetFPS(TARGET_FPS);
 
   init();
+
+  audio_manager_.initAudio();
+  game_designer_.init();
 
   float accumulator = 0.0f;
 
@@ -542,7 +544,8 @@ void Game::draw() {
     break;
 
   case GameScreen::END:
-    game_designer_.drawEndScreen();
+    game_designer_.drawEndScreen(config_->state, session_.get(), type_,
+                                 score_anim_time_);
     break;
   }
 
