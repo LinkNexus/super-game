@@ -1,6 +1,7 @@
 #include "App.h"
 #include "Loop.h"
 #include "game.h"
+#include "game_manager.h"
 #include "internal/eventing/epoll_kqueue.h"
 #include "libusockets.h"
 #include "shared/aliases.h"
@@ -8,8 +9,25 @@
 #include "shared/helpers.h"
 #include "shared/messages.h"
 #include "shared/rnd_generator.h"
+#include "types.h"
 #include <cstdio>
 #include <cstring>
+
+struct PerSocketData;
+
+struct UwsConnection final : WsConnection {
+  uWS::WebSocket<false, true, PerSocketData> *ws{};
+  void send(std::string_view payload) override {
+    ws->send(payload, uWS::OpCode::TEXT);
+  }
+};
+
+struct PerSocketData {
+  GameType game_type{};
+  GameId game_id{};
+  PerSocketPlayers players_data{};
+  UwsConnection connection{};
+};
 
 /// Builds and broadcasts a `LOBBY_UPDATE` to every player in @p data's
 /// game: current roster (name + ready state per slot) and whether the
@@ -80,7 +98,7 @@ auto sendLobbyUpdate(const GameManager &manager, PerSocketData *data) {
 
   for (const auto &socket : g->getPlayerSockets()) {
     if (socket)
-      socket->send(envelope.dump(), uWS::OpCode::TEXT);
+      socket->send(envelope.dump());
   }
 }
 
@@ -180,7 +198,8 @@ int main(int, char *[]) {
                [&manager](auto *ws) {
                  auto *data = ws->getUserData();
 
-                 data->players_data.ws = ws;
+                 data->connection.ws = ws;
+                 data->players_data.ws = &data->connection;
 
                  for (int i = 0; i < data->players_data.count; ++i) {
                    data->players_data.players[i] = manager.next_player_id++;
@@ -288,18 +307,15 @@ int main(int, char *[]) {
                  if (!game)
                    return;
 
-                 if (!game->isOver()) {
-                   game->removePlayers(data->players_data.ws);
+                 game->removePlayers(data->players_data.ws);
 
-                   if (game->isEmpty()) {
-                     manager.destroyGame(data->game_id);
-                     return;
-                   }
-
-                   if (!game->isRunning()) {
-                     sendLobbyUpdate(manager, data);
-                   }
+                 if (game->isEmpty()) {
+                   manager.destroyGame(data->game_id);
+                   return;
                  }
+
+                 if (!game->isOver() && !game->isRunning())
+                   sendLobbyUpdate(manager, data);
                }})
       .listen("0.0.0.0", 9001,
               [](auto *token) {

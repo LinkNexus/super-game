@@ -24,9 +24,11 @@ else()
     target_compile_options(supergame-warnings INTERFACE -Wall -Wextra)
 endif()
 
-# Unit tests cover shared/ only - it's the headless, engine-agnostic half of
-# the codebase, so the tests need neither raylib nor a running server. Off in
-# the Docker image, which only wants the server binary.
+# Unit tests cover the two headless halves of the codebase: shared/ (the
+# simulation) and server/ (matchmaking and connection lifetime, via
+# supergame-server-lib). Neither needs raylib or a listening socket, so the
+# test build stays free of the client's graphics deps. Off in the Docker image,
+# which only wants the server binary.
 option(BUILD_TESTS "Build the supergame unit tests" ON)
 
 # The raylib client pulls in GUI/graphics system deps (X11, OpenGL, ALSA...)
@@ -90,11 +92,22 @@ add_subdirectory(shared)
 if(BUILD_CLIENT)
     add_subdirectory(client)
 endif()
-if(BUILD_SERVER)
-    add_subdirectory(server)
-endif()
+# Unconditional: server/CMakeLists.txt gates only the *executable* on
+# BUILD_SERVER. The library half (matchmaking, rosters, the sim-stepping
+# broadcast loop) names no uWS type, so it builds everywhere and its tests
+# come along - see the comment on the add_executable there.
+add_subdirectory(server)
 
 if(BUILD_TESTS)
     enable_testing()
+
+    # The runner/assertion macros, shared by both test binaries below.
+    add_subdirectory(tests/harness)
+
     add_subdirectory(shared/tests)
+
+    # Not gated on BUILD_SERVER: these link supergame-server-lib, which is
+    # free of uSockets, so they build and run even where the server executable
+    # can't (Windows/MinGW).
+    add_subdirectory(server/tests)
 endif()

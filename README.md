@@ -31,3 +31,26 @@ cmake --build build/debug
 ./build/debug/bin/supergame-client      # Linux
 build\debug\bin\supergame-client.exe    # Windows
 ```
+
+## Tests
+
+```bash
+make test
+```
+
+That configures and builds a headless `tests` preset (no raylib, no client) and runs both
+suites through CTest — the simulation in `shared/tests/` and the server's matchmaking,
+rosters and broadcast loop in `server/tests/`. Neither needs a graphics stack or a listening
+port, so this also works on Windows, where the server *executable* isn't buildable.
+
+Without `make`, or to run a single suite:
+
+```bash
+cmake --preset tests && cmake --build --preset tests
+ctest --preset tests                      # both suites
+./build/tests/bin/supergame-shared-tests  # one suite, per-case output
+./build/tests/bin/supergame-server-tests
+```
+
+`make test-debug` runs the same suites against an existing full `build/debug` tree instead
+of a second build directory.
