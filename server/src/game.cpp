@@ -4,103 +4,17 @@
 #include "shared/helpers.h"
 #include "shared/messages.h"
 #include "shared/sim/game_sim.h"
+#include "types.h"
 #include <cstddef>
 
-void GameManager::forEachGame(std::function<void(Game *)> fn) {
-  for (const auto &game : games_by_id) {
-    fn(game.second.get());
-  }
-}
-
-CoopGame *GameManager::createCoopGame() {
-  auto game = std::make_unique<CoopGame>();
-  game->id = next_game_id++;
-  auto gamePtr = game.get();
-  games_by_id[game->id] = std::move(game);
-  return gamePtr;
-}
-
-std::optional<GameId>
-GameManager::joinOrCreateCoopGame(const PerSocketPlayers &players_data) {
-  for (auto game : open_coop_games_) {
-    if (game->addPlayers(players_data)) {
-      return game->id;
-    }
-  }
-
-  auto new_game = createCoopGame();
-  open_coop_games_.push_back(new_game);
-  return new_game->addPlayers(players_data)
-             ? std::optional<GameId>{new_game->id}
-             : std::nullopt;
-}
-
-PvPGame *GameManager::createPvPGame(shared::PlayerCount team_size,
-                                    shared::PlayerCount team_count) {
-  auto game = std::make_unique<PvPGame>(team_size, team_count);
-  game->id = next_game_id++;
-  auto gamePtr = game.get();
-  games_by_id[game->id] = std::move(game);
-  return gamePtr;
-}
-
-std::optional<GameId>
-GameManager::joinOrCreatePvPGame(const PerSocketPlayers &players_data,
-                                 shared::PlayerCount team_size,
-                                 shared::PlayerCount team_count) {
-  auto &openGames = open_pvp_games_[{team_count, team_size}];
-
-  for (auto game : openGames) {
-    if (game->addPlayers(players_data)) {
-      return game->id;
-    }
-  }
-
-  auto new_game = createPvPGame(team_size, team_count);
-  openGames.push_back(new_game);
-  return new_game->addPlayers(players_data)
-             ? std::optional<GameId>{new_game->id}
-             : std::nullopt;
-}
-
-Game *GameManager::findGameById(GameId id) const {
-  auto it = games_by_id.find(id);
-  if (it != games_by_id.end()) {
-    return it->second.get();
-  }
-  return nullptr;
-}
-
-void GameManager::destroyGame(GameId gameId) {
-  auto game = findGameById(gameId);
-  if (!game)
-    return;
-
-  open_coop_games_.erase(
-      std::remove(open_coop_games_.begin(), open_coop_games_.end(), game),
-      open_coop_games_.end());
-
-  for (auto &kvp : open_pvp_games_) {
-    auto it = std::find(kvp.second.begin(), kvp.second.end(), game);
-
-    if (it != kvp.second.end()) {
-      kvp.second.erase(std::remove(kvp.second.begin(), kvp.second.end(), game),
-                       kvp.second.end());
-      break;
-    }
-  }
-
-  games_by_id.erase(gameId);
-}
-
-const std::vector<WsPtr> &Game::getPlayerSockets() const {
+const std::vector<WsConnection *> &Game::getPlayerSockets() const {
   return player_sockets_;
 }
 
 bool Game::isOver() const { return is_over_; }
 
 inline void initPlayerConnection(PlayerConnection &p, ServerPlayerId id,
-                                 WsPtr ws, const std::string &name) {
+                                 WsConnection *ws, const std::string &name) {
   p.id = id;
   p.ws = ws;
   p.name = name;
@@ -160,7 +74,7 @@ bool PvPGame::addPlayers(const PerSocketPlayers &players_data) {
   return false;
 }
 
-void CoopGame::removePlayers(WsPtr ws) {
+void CoopGame::removePlayers(const WsConnection *ws) {
   for (std::size_t i = 0; i < players_.size(); ++i) {
     const auto &player = players_[i];
 
@@ -175,7 +89,7 @@ void CoopGame::removePlayers(WsPtr ws) {
       player_sockets_.end());
 }
 
-void PvPGame::removePlayers(WsPtr ws) {
+void PvPGame::removePlayers(const WsConnection *ws) {
   for (std::size_t teamIdx = 0; teamIdx < team_count_; ++teamIdx) {
     auto &team = teams_[teamIdx];
 
@@ -284,7 +198,7 @@ void CoopGame::update(float dt) {
   envelope["payload"] = state_;
 
   for (const auto &ws : player_sockets_) {
-    ws->send(envelope.dump(), uWS::OpCode::TEXT);
+    ws->send(envelope.dump());
   }
 
   if (state_.phase ==
@@ -344,7 +258,7 @@ void PvPGame::update(float dt) {
   envelope["payload"] = state_;
 
   for (const auto &ws : player_sockets_) {
-    ws->send(envelope.dump(), uWS::OpCode::TEXT);
+    ws->send(envelope.dump());
   }
 
   if (state_.phase == static_cast<uint8_t>(shared::PvPGameSim::Phase::END)) {
@@ -398,7 +312,7 @@ bool PvPGame::thereIsEnoughPlayers() const {
 
 const PvPGame::Teams &PvPGame::getTeams() const { return teams_; }
 
-void CoopGame::setPlayersReady(WsPtr ws, bool ready) {
+void CoopGame::setPlayersReady(const WsConnection *ws, bool ready) {
   for (auto &player : players_) {
     if (player && player->ws == ws) {
       player->is_ready = ready;
@@ -408,7 +322,7 @@ void CoopGame::setPlayersReady(WsPtr ws, bool ready) {
   tryStart();
 }
 
-void PvPGame::setPlayersReady(WsPtr ws, bool ready) {
+void PvPGame::setPlayersReady(const WsConnection *ws, bool ready) {
   for (std::size_t teamIdx = 0; teamIdx < team_count_; ++teamIdx) {
     auto &team = teams_[teamIdx];
 

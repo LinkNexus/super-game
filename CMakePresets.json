@@ -35,6 +35,15 @@
 				"CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/mingw-w64-toolchain.cmake",
 				"BUILD_SERVER": "OFF"
 			}
+		},
+		{
+			"name": "tests",
+			"displayName": "Tests only (Debug, headless)",
+			"inherits": "base",
+			"cacheVariables": {
+				"CMAKE_BUILD_TYPE": "Debug",
+				"BUILD_CLIENT": "OFF"
+			}
 		}
 	],
 	"buildPresets": [
@@ -50,6 +59,26 @@
 			"name": "windows-client-release",
 			"configurePreset": "windows-client-release",
 			"targets": "supergame-client"
+		},
+		{
+			"name": "tests",
+			"configurePreset": "tests"
+		}
+	],
+	"testPresets": [
+		{
+			"name": "tests",
+			"configurePreset": "tests",
+			"output": {
+				"outputOnFailure": true
+			}
+		},
+		{
+			"name": "debug",
+			"configurePreset": "debug",
+			"output": {
+				"outputOnFailure": true
+			}
 		}
 	]
 }

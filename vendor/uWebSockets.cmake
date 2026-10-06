@@ -30,7 +30,13 @@ set_target_properties(usockets PROPERTIES C_STANDARD 11)
 
 add_library(uwebsockets INTERFACE)
 
-target_include_directories(uwebsockets INTERFACE
+# SYSTEM so -Wall -Wextra doesn't report uWebSockets' own header warnings
+# against whatever file of ours includes App.h. The supergame-warnings target
+# already keeps our flags off vendored *targets*, but vendored *headers* are
+# compiled as part of our translation units, so they need suppressing here
+# instead. Required before -Werror can go on (L64) - otherwise two warnings in
+# HttpCache.h would fail the server build.
+target_include_directories(uwebsockets SYSTEM INTERFACE
     ${CMAKE_CURRENT_SOURCE_DIR}/vendor/uWebSockets/src
 )
 
