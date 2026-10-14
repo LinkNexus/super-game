@@ -8,6 +8,7 @@
 
 #include "fake_connection.h"
 #include "game.h"
+#include "game_manager.h"
 #include "match_support.h"
 #include "shared/constants.h"
 #include "shared/helpers.h"
@@ -18,6 +19,8 @@ using testing::coopState;
 using testing::FakeConnection;
 using testing::fakeConnection;
 using testing::findPlayer;
+using testing::hasPlayerNamed;
+using testing::livePlayers;
 using testing::pvpState;
 using testing::stepUntil;
 
@@ -39,11 +42,13 @@ void startCoopMatch(CoopGame &game, FakeConnection &first,
   REQUIRE(game.isRunning());
 }
 
-/// A running 1v1, one player per team.
+/// A running 1v1, one player per team. Connection ids are a parameter for the
+/// same reason as `startCoopMatch`'s.
 void startDuelMatch(PvPGame &game, FakeConnection &first,
-                    FakeConnection &second) {
-  REQUIRE(game.addPlayers(fakeConnection(first, {1})));
-  REQUIRE(game.addPlayers(fakeConnection(second, {2})));
+                    FakeConnection &second, ServerPlayerId firstId = 1,
+                    ServerPlayerId secondId = 2) {
+  REQUIRE(game.addPlayers(fakeConnection(first, {firstId})));
+  REQUIRE(game.addPlayers(fakeConnection(second, {secondId})));
 
   game.setPlayersReady(&first, true);
   game.setPlayersReady(&second, true);
@@ -111,7 +116,7 @@ TEST(coop_patches_each_players_name_into_the_broadcast) {
   game.update(shared::FIXED_DT);
   const auto state = coopState(a);
 
-  REQUIRE(state.player_count == 2);
+  REQUIRE(livePlayers(state) == 2u);
 
   const auto first = findPlayer(state, 1);
   const auto second = findPlayer(state, 2);
@@ -134,13 +139,12 @@ TEST(coop_patches_names_in_a_later_match_where_ids_no_longer_coincide) {
   game.update(shared::FIXED_DT);
   const auto state = coopState(a);
 
-  // Sim ids still start at 1 - it is only the connection ids that moved on.
-  const auto first = findPlayer(state, 1);
-  const auto second = findPlayer(state, 2);
-  REQUIRE(first.has_value());
-  REQUIRE(second.has_value());
-  CHECK_EQ(first->name, std::string("P7"));
-  CHECK_EQ(second->name, std::string("P8"));
+  REQUIRE(livePlayers(state) == 2u);
+  // Looked up by name rather than by id, so this case survives L62 unifying
+  // the two namespaces - which changes *which* ids appear here but not that
+  // both names must resolve. A missing patch still leaves them empty.
+  CHECK(hasPlayerNamed(state, "P7"));
+  CHECK(hasPlayerNamed(state, "P8"));
 }
 
 TEST(pvp_patches_names_into_both_teams) {
@@ -157,6 +161,99 @@ TEST(pvp_patches_names_into_both_teams) {
   REQUIRE(second.has_value());
   CHECK_EQ(first->name, std::string("P1"));
   CHECK_EQ(second->name, std::string("P2"));
+}
+
+// --- One id namespace (L62) ------------------------------------------------
+//
+// WELCOME is sent from `.open` and carries the *connection* ids
+// (`GameManager::next_player_id++`, process-wide). `PlayerState::id` carries
+// the *sim* id, which `tryStart()` only mints once a match forms and which
+// restarts at 1 every match. The client compares the two to decide "(You)",
+// ship colours and the end-screen roster, so those all degrade from the
+// second match after a server restart onward.
+//
+// These cases encode the structural fix - `start()` takes the ids the server
+// already holds, so there is one namespace and every comparison site becomes
+// correct, the lobby included. They are RED until that lands.
+//
+// If you instead re-send WELCOME with sim ids at match start, these are the
+// wrong assertions: flip them to "the ids WELCOME re-sent match
+// PlayerState::id" and remember that the L72 lobby rosters, which compare
+// against `PlayerInfo::id` (a connection id, filled in `sendLobbyUpdate`),
+// go from correct to broken under that option.
+
+TEST(coop_broadcast_ids_are_the_ids_welcome_handed_out) {
+  FakeConnection a, b;
+  CoopGame game;
+  startCoopMatch(game, a, b, /*firstId=*/7, /*secondId=*/8);
+
+  game.update(shared::FIXED_DT);
+  const auto state = coopState(a);
+
+  REQUIRE(livePlayers(state) == 2u);
+  CHECK(findPlayer(state, 7).has_value());
+  CHECK(findPlayer(state, 8).has_value());
+}
+
+/// The same requirement read from both sides at once: one number must
+/// address a player in the roster *and* in the broadcast. `PlayerConnection`
+/// no longer carries a second `id_in_game` for this to disagree with, so this
+/// is now a guard against the two namespaces growing back rather than a
+/// reproduction of the original bug.
+TEST(coop_one_id_addresses_both_the_roster_and_the_wire) {
+  FakeConnection a, b;
+  CoopGame game;
+  startCoopMatch(game, a, b, /*firstId=*/7, /*secondId=*/8);
+
+  game.update(shared::FIXED_DT);
+  const auto state = coopState(a);
+
+  for (const ServerPlayerId id : {7u, 8u}) {
+    CHECK(game.findPlayerById(id) != nullptr);
+    CHECK(findPlayer(state, id).has_value());
+  }
+}
+
+TEST(pvp_broadcast_ids_are_the_ids_welcome_handed_out) {
+  FakeConnection a, b;
+  PvPGame game{/*team_size=*/1, /*team_count=*/2};
+  startDuelMatch(game, a, b, /*firstId=*/5, /*secondId=*/6);
+
+  game.update(shared::FIXED_DT);
+  const auto state = pvpState(a);
+
+  CHECK(findPlayer(state, 5).has_value());
+  CHECK(findPlayer(state, 6).has_value());
+}
+
+/// Input routing already keys on the connection id and so is correct today
+/// (L32) - this pins that it stays correct once the ids unify, since the
+/// `input.player_id` the sim matches on becomes the same number.
+TEST(coop_input_still_reaches_the_right_ship_with_unified_ids) {
+  FakeConnection a, b;
+  CoopGame game;
+  startCoopMatch(game, a, b, /*firstId=*/7, /*secondId=*/8);
+
+  game.update(shared::FIXED_DT);
+  const auto before = coopState(a);
+  const auto movedBefore = findPlayer(before, 7);
+  const auto stillBefore = findPlayer(before, 8);
+  REQUIRE(movedBefore.has_value());
+  REQUIRE(stillBefore.has_value());
+
+  auto *player = game.findPlayerById(7);
+  REQUIRE(player != nullptr);
+  player->pending_movement = shared::Button::BUTTON_RIGHT;
+
+  game.update(shared::FIXED_DT);
+  const auto after = coopState(a);
+  const auto movedAfter = findPlayer(after, 7);
+  const auto stillAfter = findPlayer(after, 8);
+  REQUIRE(movedAfter.has_value());
+  REQUIRE(stillAfter.has_value());
+
+  CHECK(movedAfter->position.x > movedBefore->position.x);
+  CHECK_EQ(stillAfter->position.x, stillBefore->position.x);
 }
 
 // --- Input routing ---------------------------------------------------------
@@ -245,7 +342,7 @@ TEST(coop_disconnect_drops_the_player_from_the_broadcast_state) {
   game.update(shared::FIXED_DT);
 
   const auto state = coopState(b);
-  CHECK_EQ(state.player_count, 1);
+  CHECK_EQ(livePlayers(state), 1u);
   // The departed player must be gone from the live roster, and the survivor
   // must still be there. Checked by id rather than slot on purpose: the sim
   // currently compacts on removal (L63), so a survivor's index can change
@@ -267,8 +364,8 @@ TEST(pvp_disconnect_frees_both_the_team_slot_and_the_socket) {
   game.removePlayers(&a);
 
   const auto &teams = game.getTeams();
-  CHECK_EQ(shared::count_optional(teams[0].players), 0);
-  CHECK_EQ(shared::count_optional(teams[1].players), 1);
+  CHECK_EQ(shared::count_optional(teams[0]->players), 0);
+  CHECK_EQ(shared::count_optional(teams[1]->players), 1);
   CHECK_EQ(game.getPlayerSockets().size(), 1u);
   CHECK(game.findPlayerById(1) == nullptr);
   CHECK(game.findPlayerById(2) != nullptr);
@@ -296,9 +393,9 @@ TEST(pvp_duel_ends_with_the_remaining_team_winning_after_a_disconnect) {
 
   const auto state = pvpState(b);
   CHECK_EQ(state.phase, static_cast<uint8_t>(shared::PvPGameSim::Phase::END));
-  CHECK_EQ(state.teams[1].outcome,
+  CHECK_EQ(state.teams[1]->outcome,
            static_cast<uint8_t>(shared::PvPGameSim::TeamOutcome::WON));
-  CHECK_EQ(state.teams[0].outcome,
+  CHECK_EQ(state.teams[0]->outcome,
            static_cast<uint8_t>(shared::PvPGameSim::TeamOutcome::LOST));
   CHECK_EQ(game.isOver(), true);
   CHECK_EQ(game.isRunning(), false);
@@ -337,6 +434,89 @@ TEST(coop_ends_when_its_last_player_disconnects) {
 
   CHECK_EQ(game.isOver(), true);
   CHECK_EQ(game.isRunning(), false);
+}
+
+// --- Disconnect after the match is over (L76) ------------------------------
+// A finished match still holds its connections: the winner's client sits on
+// the end screen and closes whenever the player does. Releasing a connection
+// must not be conditional on the match still running - the roster holds a
+// `WsConnection *` into per-socket storage uWS frees the moment its close
+// handler returns, and every broadcast is now a virtual call through it.
+
+TEST(pvp_disconnect_after_the_match_is_over_still_frees_the_socket) {
+  FakeConnection a, b;
+  PvPGame game{/*team_size=*/1, /*team_count=*/2};
+  startDuelMatch(game, a, b);
+
+  REQUIRE(stepUntil(game, [&] {
+    return pvpState(b).phase ==
+           static_cast<uint8_t>(shared::PvPGameSim::Phase::PLAYERS_FIGHT);
+  }));
+
+  game.removePlayers(&a);
+  game.update(shared::FIXED_DT);
+  REQUIRE(game.isOver());
+
+  // The winner now leaves the end screen.
+  game.removePlayers(&b);
+
+  CHECK_EQ(game.getPlayerSockets().size(), 0u);
+  // Counted across engaged team slots rather than indexed: whether an
+  // emptied team keeps its slot is the sim's business, not this case's.
+  std::size_t rosterPlayers = 0;
+  for (const auto &team : game.getTeams()) {
+    if (team)
+      rosterPlayers += shared::count_optional(team->players);
+  }
+  CHECK_EQ(rosterPlayers, 0u);
+  CHECK(game.findPlayerById(2) == nullptr);
+  // With no socket left the game reports empty, which is the only thing that
+  // routes the close handler into destroyGame.
+  CHECK_EQ(game.isEmpty(), true);
+}
+
+/// The close handler's own sequence, driven against the library: free the
+/// departing connection's slots, then destroy the game if that emptied it.
+/// Both halves have to hold on a match that has *already finished*, not only
+/// on a live one.
+TEST(manager_destroys_a_finished_duel_once_its_last_connection_closes) {
+  FakeConnection a, b;
+  GameManager manager;
+
+  const auto id = manager.joinOrCreatePvPGame(fakeConnection(a, {1}), 1, 2);
+  const auto joined = manager.joinOrCreatePvPGame(fakeConnection(b, {2}), 1, 2);
+  REQUIRE(id.has_value());
+  REQUIRE(joined == id);
+
+  auto *game = manager.findGameById(*id);
+  REQUIRE(game != nullptr);
+  game->setPlayersReady(&a, true);
+  game->setPlayersReady(&b, true);
+  REQUIRE(game->isRunning());
+
+  REQUIRE(stepUntil(*game, [&] {
+    return pvpState(b).phase ==
+           static_cast<uint8_t>(shared::PvPGameSim::Phase::PLAYERS_FIGHT);
+  }));
+
+  // First close: the match ends on the following tick, but b is still
+  // connected, so the game must survive it.
+  game->removePlayers(&a);
+  REQUIRE(game->isEmpty() == false);
+  game->update(shared::FIXED_DT);
+  REQUIRE(game->isOver());
+  CHECK(manager.findGameById(*id) != nullptr);
+
+  // Second close, from the end screen. Nothing may touch `game` after the
+  // destroy, so the emptiness check is read once, here.
+  game->removePlayers(&b);
+  const bool emptied = game->isEmpty();
+  CHECK_EQ(emptied, true);
+
+  if (emptied)
+    manager.destroyGame(*id);
+
+  CHECK(manager.findGameById(*id) == nullptr);
 }
 
 // --- Joining a match that is no longer open --------------------------------

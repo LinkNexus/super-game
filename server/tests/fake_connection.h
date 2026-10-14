@@ -20,6 +20,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace testing {
@@ -48,19 +49,18 @@ struct FakeConnection final : WsConnection {
 /// The payload `.upgrade`/`.open` hands to `addPlayers`: @p ids claimed as
 /// slots on @p connection, named `P<id>` so roster assertions can tell them
 /// apart. The ids are the server-global `ServerPlayerId`s that `.open`
-/// normally draws from `GameManager::next_player_id`.
+/// normally draws from `GameManager::next_player_id` - and since the two id
+/// namespaces were collapsed, the same number is what reaches the sim and
+/// the wire.
 inline PerSocketPlayers
 fakeConnection(FakeConnection &connection,
                std::initializer_list<ServerPlayerId> ids) {
   PerSocketPlayers data{};
   data.ws = &connection;
-  data.count = static_cast<shared::PlayerCount>(ids.size());
 
   std::size_t i = 0;
   for (const auto id : ids) {
-    data.players[i] = id;
-    data.names[i] = "P" + std::to_string(id);
-    ++i;
+    data.players[i++] = std::pair{id, "P" + std::to_string(id)};
   }
 
   return data;

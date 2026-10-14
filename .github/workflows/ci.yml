@@ -31,23 +31,26 @@ jobs:
   # Both test suites: the shared/ simulation (headless and engine-agnostic)
   # and the server's matchmaking/connection-lifetime logic, which is linkable
   # as supergame-server-lib and drives its rosters with fake sockets rather
-  # than a listening port. So this job needs neither raylib nor a running
-  # server - only the uWebSockets submodule, initialized below. Kept as its
-  # own fast job (rather than a step bolted onto a client build) so a logic
-  # regression reports as a distinct red check, and so `needs:` can gate on
-  # it. The job id stays `test-shared` despite now covering both, since it's
-  # what the branch-protection status check and two `needs:` below refer to.
+  # than a listening port.
+  #
+  # So this job needs **no submodules at all**: the `tests` preset sets
+  # BUILD_CLIENT=OFF (no raylib/ixwebsocket/mbedtls) and BUILD_SERVER=OFF,
+  # which skips `include(vendor/uWebSockets.cmake)` entirely - and
+  # supergame-server-lib names no uWS type, so the server's own tests still
+  # build. Verified by configuring and running both suites with
+  # vendor/uWebSockets physically absent.
+  #
+  # Kept as its own fast job (rather than a step bolted onto a client build)
+  # so a logic regression reports as a distinct red check, and so `needs:`
+  # can gate on it. The job id stays `test-shared` despite now covering both,
+  # since it's what the branch-protection status check and two `needs:` below
+  # refer to.
   test-shared:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: false
-
-      - name: Init uWebSockets submodule
-        run: |
-          git submodule update --init vendor/uWebSockets
-          git -C vendor/uWebSockets submodule update --init uSockets
 
       - name: Install build deps
         run: |
@@ -56,13 +59,11 @@ jobs:
 
       - name: Build tests
         run: |
-          cmake -S . -B build/tests -G Ninja \
-            -DCMAKE_BUILD_TYPE=Debug -DBUILD_CLIENT=OFF -DBUILD_TESTS=ON
-          cmake --build build/tests \
-            --target supergame-shared-tests supergame-server-tests
+          cmake --preset tests
+          cmake --build --preset tests
 
       - name: Run tests
-        run: ctest --test-dir build/tests --output-on-failure
+        run: ctest --preset tests
 
   build-client-linux:
     runs-on: ubuntu-latest
@@ -75,9 +76,12 @@ jobs:
           # selectively below instead.
           submodules: true
 
+      # Only mbedtls' `framework` is needed: it is required just to configure
+      # mbedtls, which ixwebsocket links. uSockets is deliberately not
+      # initialized - every client preset sets BUILD_SERVER=OFF, so
+      # vendor/uWebSockets.cmake is never included.
       - name: Init nested submodules
         run: |
-          git -C vendor/uWebSockets submodule update --init uSockets
           git -C vendor/mbedtls submodule update --init framework
 
       - name: Install build deps
@@ -92,32 +96,32 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            build/debug
-            build/release
+            build/client
+            build/client-release
           # Keyed on the build definition rather than the branch name: a
           # CMake/submodule change must invalidate the cache (the old key
           # never did), while an ordinary source edit should still hit it.
           # restore-keys lets a PR warm from the newest existing cache -
           # under the branch-name key, every PR started cold.
-          key: client-linux-${{ hashFiles('CMakeLists.txt', 'CMakePresets.json', 'client/CMakeLists.txt', 'server/CMakeLists.txt', 'shared/CMakeLists.txt', 'shared/tests/CMakeLists.txt', 'cmake/**', 'vendor/*.cmake', '.gitmodules') }}
+          key: client-linux-${{ hashFiles('CMakeLists.txt', 'CMakePresets.json', 'client/CMakeLists.txt', 'server/CMakeLists.txt', 'shared/CMakeLists.txt', 'shared/tests/CMakeLists.txt', 'server/tests/CMakeLists.txt', 'tests/harness/CMakeLists.txt', 'cmake/**', 'vendor/*.cmake', '.gitmodules') }}
           restore-keys: client-linux-
 
       - name: Build (debug, compile check)
         run: |
-          cmake --preset debug
-          cmake --build --preset debug --target supergame-client
+          cmake --preset client
+          cmake --build --preset client
 
       - name: Build (release)
         run: |
-          cmake --preset release
-          cmake --build --preset release --target supergame-client
+          cmake --preset client-release
+          cmake --build --preset client-release
 
       - name: Upload client-linux artifact
         if: env.IS_MASTER_PUSH == 'true' || env.IS_RELEASE == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: supergame-client-linux-${{ github.sha }}
-          path: build/release/bin/
+          path: build/client-release/bin/
           retention-days: 14
 
   build-client-macos:
@@ -131,9 +135,12 @@ jobs:
         with:
           submodules: true
 
+      # Only mbedtls' `framework` is needed: it is required just to configure
+      # mbedtls, which ixwebsocket links. uSockets is deliberately not
+      # initialized - every client preset sets BUILD_SERVER=OFF, so
+      # vendor/uWebSockets.cmake is never included.
       - name: Init nested submodules
         run: |
-          git -C vendor/uWebSockets submodule update --init uSockets
           git -C vendor/mbedtls submodule update --init framework
 
       - name: Install build deps
@@ -143,27 +150,27 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            build/debug
-            build/release
-          key: client-macos-${{ hashFiles('CMakeLists.txt', 'CMakePresets.json', 'client/CMakeLists.txt', 'server/CMakeLists.txt', 'shared/CMakeLists.txt', 'shared/tests/CMakeLists.txt', 'cmake/**', 'vendor/*.cmake', '.gitmodules') }}
+            build/client
+            build/client-release
+          key: client-macos-${{ hashFiles('CMakeLists.txt', 'CMakePresets.json', 'client/CMakeLists.txt', 'server/CMakeLists.txt', 'shared/CMakeLists.txt', 'shared/tests/CMakeLists.txt', 'server/tests/CMakeLists.txt', 'tests/harness/CMakeLists.txt', 'cmake/**', 'vendor/*.cmake', '.gitmodules') }}
           restore-keys: client-macos-
 
       - name: Build (debug, compile check)
         run: |
-          cmake --preset debug
-          cmake --build --preset debug --target supergame-client
+          cmake --preset client
+          cmake --build --preset client
 
       - name: Build (release)
         run: |
-          cmake --preset release
-          cmake --build --preset release --target supergame-client
+          cmake --preset client-release
+          cmake --build --preset client-release
 
       - name: Upload client-macos artifact
         if: env.IS_MASTER_PUSH == 'true' || env.IS_RELEASE == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: supergame-client-macos-${{ github.sha }}
-          path: build/release/bin/
+          path: build/client-release/bin/
           retention-days: 14
 
   build-client-windows:
@@ -173,9 +180,12 @@ jobs:
         with:
           submodules: true
 
+      # Only mbedtls' `framework` is needed: it is required just to configure
+      # mbedtls, which ixwebsocket links. uSockets is deliberately not
+      # initialized - every client preset sets BUILD_SERVER=OFF, so
+      # vendor/uWebSockets.cmake is never included.
       - name: Init nested submodules
         run: |
-          git -C vendor/uWebSockets submodule update --init uSockets
           git -C vendor/mbedtls submodule update --init framework
 
       - name: Install cross-compile toolchain
@@ -193,7 +203,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: build/windows-client-release
-          key: client-windows-${{ hashFiles('CMakeLists.txt', 'CMakePresets.json', 'client/CMakeLists.txt', 'server/CMakeLists.txt', 'shared/CMakeLists.txt', 'shared/tests/CMakeLists.txt', 'cmake/**', 'vendor/*.cmake', '.gitmodules') }}
+          key: client-windows-${{ hashFiles('CMakeLists.txt', 'CMakePresets.json', 'client/CMakeLists.txt', 'server/CMakeLists.txt', 'shared/CMakeLists.txt', 'shared/tests/CMakeLists.txt', 'server/tests/CMakeLists.txt', 'tests/harness/CMakeLists.txt', 'cmake/**', 'vendor/*.cmake', '.gitmodules') }}
           restore-keys: client-windows-
 
       - name: Build
@@ -233,20 +243,23 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            build/server-debug
+            build/server
             build/server-release
-          key: server-${{ hashFiles('CMakeLists.txt', 'CMakePresets.json', 'client/CMakeLists.txt', 'server/CMakeLists.txt', 'shared/CMakeLists.txt', 'shared/tests/CMakeLists.txt', 'cmake/**', 'vendor/*.cmake', '.gitmodules') }}
+          key: server-${{ hashFiles('CMakeLists.txt', 'CMakePresets.json', 'client/CMakeLists.txt', 'server/CMakeLists.txt', 'shared/CMakeLists.txt', 'shared/tests/CMakeLists.txt', 'server/tests/CMakeLists.txt', 'tests/harness/CMakeLists.txt', 'cmake/**', 'vendor/*.cmake', '.gitmodules') }}
           restore-keys: server-
 
+      # The `server` presets are BUILD_CLIENT=OFF + BUILD_TESTS=OFF, so this
+      # no longer builds the two test binaries it never runs (test-shared
+      # owns those).
       - name: Build (debug, compile check)
         run: |
-          cmake -S . -B build/server-debug -G Ninja -DCMAKE_BUILD_TYPE=Debug -DBUILD_CLIENT=OFF
-          cmake --build build/server-debug --target supergame-server
+          cmake --preset server
+          cmake --build --preset server
 
       - name: Build (release)
         run: |
-          cmake -S . -B build/server-release -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_CLIENT=OFF
-          cmake --build build/server-release --target supergame-server
+          cmake --preset server-release
+          cmake --build --preset server-release
 
   docker-server:
     runs-on: ubuntu-latest

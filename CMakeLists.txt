@@ -92,11 +92,15 @@ add_subdirectory(shared)
 if(BUILD_CLIENT)
     add_subdirectory(client)
 endif()
-# Unconditional: server/CMakeLists.txt gates only the *executable* on
-# BUILD_SERVER. The library half (matchmaking, rosters, the sim-stepping
-# broadcast loop) names no uWS type, so it builds everywhere and its tests
-# come along - see the comment on the add_executable there.
-add_subdirectory(server)
+# server/CMakeLists.txt gates only the *executable* on BUILD_SERVER. The
+# library half (matchmaking, rosters, the sim-stepping broadcast loop) names no
+# uWS type, so it builds everywhere and its tests come along - see the comment
+# on the add_executable there. That is why BUILD_TESTS alone is enough to want
+# this subdirectory: the `tests` preset builds the server's tests with
+# BUILD_SERVER=OFF and so needs no vendored submodule at all.
+if(BUILD_SERVER OR BUILD_TESTS)
+    add_subdirectory(server)
+endif()
 
 if(BUILD_TESTS)
     enable_testing()

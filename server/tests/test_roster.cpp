@@ -112,8 +112,8 @@ TEST(pvp_auto_balances_arrivals_across_teams) {
   REQUIRE(game.addPlayers(fakeConnection(b, {2})));
 
   const auto &teams = game.getTeams();
-  CHECK_EQ(shared::count_optional(teams[0].players), 1);
-  CHECK_EQ(shared::count_optional(teams[1].players), 1);
+  CHECK_EQ(shared::count_optional(teams[0]->players), 1);
+  CHECK_EQ(shared::count_optional(teams[1]->players), 1);
   CHECK_EQ(game.thereIsEnoughPlayers(), true);
 }
 
@@ -124,8 +124,8 @@ TEST(pvp_duo_on_one_connection_lands_on_a_single_team) {
   REQUIRE(game.addPlayers(fakeConnection(a, {1, 2})));
 
   const auto &teams = game.getTeams();
-  CHECK_EQ(shared::count_optional(teams[0].players), 2);
-  CHECK_EQ(shared::count_optional(teams[1].players), 0);
+  CHECK_EQ(shared::count_optional(teams[0]->players), 2);
+  CHECK_EQ(shared::count_optional(teams[1]->players), 0);
   CHECK_EQ(game.thereIsEnoughPlayers(), false);
 }
 

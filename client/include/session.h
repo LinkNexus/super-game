@@ -10,9 +10,7 @@
 #include <cstddef>
 #include <optional>
 
-struct CoopMode {
-  shared::PlayerCount players_count{1};
-};
+struct CoopMode {};
 
 struct PvPMode {
   std::vector<std::pair<shared::PlayerCount, shared::PlayerCount>>
@@ -34,6 +32,10 @@ struct Config {
   virtual ~Config() = default;
 };
 
+using ThisMachinePlayerIds = shared::PlayerIds<MAX_PLAYERS_ON_THIS_MACHINE>;
+using ThisMachinePlayerInputs =
+    shared::PlayerInputs<MAX_PLAYERS_ON_THIS_MACHINE>;
+
 /// Abstracts over local (in-process) vs online (networked) play so `Game`
 /// can drive either the same way each tick.
 class Session {
@@ -43,13 +45,10 @@ protected:
 public:
   virtual ~Session() = default;
 
-  virtual std::array<shared::PlayerId, MAX_PLAYERS_ON_THIS_MACHINE>
-  getPlayersIds() = 0;
+  virtual ThisMachinePlayerIds getPlayersIds() = 0;
 
-  virtual shared::GameState
-  step(const std::array<shared::PlayerInput, MAX_PLAYERS_ON_THIS_MACHINE>
-           &inputs,
-       float dt) = 0;
+  virtual shared::GameState step(const ThisMachinePlayerInputs &inputs,
+                                 float dt) = 0;
 };
 
 struct LocalConfig : Config {};
@@ -60,18 +59,17 @@ class LocalSession : public Session {
 public:
   LocalSession(const GameMode *mode, shared::PlayerCount player_count);
 
-  shared::GameState step(const std::array<shared::PlayerInput,
-                                          MAX_PLAYERS_ON_THIS_MACHINE> &inputs,
-                         float dt) override;
+  shared::GameState
+  step(const shared::PlayerInputs<MAX_PLAYERS_ON_THIS_MACHINE> &inputs,
+       float dt) override;
 
-  std::array<shared::PlayerId, MAX_PLAYERS_ON_THIS_MACHINE>
-  getPlayersIds() override;
+  ThisMachinePlayerIds getPlayersIds() override;
 
 private:
   const GameMode *mode_{nullptr};
   shared::GameSim sim_{};
   shared::GameState state_{};
-  std::array<shared::PlayerId, MAX_PLAYERS_ON_THIS_MACHINE> player_ids_{};
+  ThisMachinePlayerIds player_ids_{};
 };
 
 struct OnlineConfig : Config {
@@ -85,9 +83,9 @@ public:
   explicit OnlineSession(const std::string &url,
                          shared::PlayerCount playersCount);
 
-  shared::GameState step(const std::array<shared::PlayerInput,
-                                          MAX_PLAYERS_ON_THIS_MACHINE> &inputs,
-                         float dt) override;
+  shared::GameState
+  step(const shared::PlayerInputs<MAX_PLAYERS_ON_THIS_MACHINE> &inputs,
+       float dt) override;
 
   /// @return The most recently received lobby snapshot (player list,
   /// ready states, whether the match has started).
@@ -95,8 +93,7 @@ public:
 
   /// @return The player id assigned by the server's `WelcomeMessage`, or
   /// 0 if none has been received yet.
-  std::array<shared::PlayerId, MAX_PLAYERS_ON_THIS_MACHINE>
-  getPlayersIds() override;
+  ThisMachinePlayerIds getPlayersIds() override;
 
   /// Sends this client's ready-state toggle to the server.
   void sendReady(bool isReady);

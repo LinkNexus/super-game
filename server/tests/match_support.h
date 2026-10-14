@@ -12,8 +12,11 @@
 #include "game.h"
 #include "nlohmann/json.hpp"
 #include "shared/constants.h"
+#include "shared/helpers.h"
 #include "shared/messages.h"
+#include <cstddef>
 #include <optional>
+#include <string_view>
 
 namespace testing {
 
@@ -22,8 +25,8 @@ namespace testing {
 ///
 /// Always ticks at least once, and checks the predicate only after a tick -
 /// predicates here read the broadcast state, which does not exist until the
-/// first `update()`. The budget is generous because the entrance phases are
-/// time-based (several seconds of sim time), and bounded so a
+/// first `update()`. The budget is generous because the coop entrance phase
+/// is time-based (several seconds of sim time), and bounded so a
 /// never-satisfied condition fails the case instead of hanging the suite.
 template <typename Predicate>
 bool stepUntil(Game &game, Predicate predicate, int maxTicks = 1200) {
@@ -46,35 +49,93 @@ inline shared::PvPGameState pvpState(const FakeConnection &connection) {
   return connection.lastEnvelope().at("payload").get<shared::PvPGameState>();
 }
 
-/// One player from a broadcast coop state, looked up by sim id within the
-/// live `player_count` prefix. Entries past that count are unspecified
-/// padding on the wire (the dense count+array boundary L68 kept on purpose),
-/// so a lookup must not consider them.
+/// One player from a broadcast coop state, looked up by id.
+///
+/// Vacancy is the `std::optional` itself now - there is no count field on the
+/// wire to bound a scan by, and no implicit id-0 sentinel to skip.
 inline std::optional<shared::PlayerState>
 findPlayer(const shared::CoopGameState &state, shared::PlayerId id) {
-  for (std::size_t i = 0; i < state.player_count && i < state.players.size();
-       ++i) {
-    if (state.players[i].id == id)
-      return state.players[i];
+  for (const auto &player : state.players) {
+    if (player && player->id == id)
+      return player;
   }
 
   return std::nullopt;
 }
 
-/// Same for PvP, searching every team's live `size` prefix.
+/// Same for PvP, searching every engaged team slot.
 inline std::optional<shared::PlayerState>
 findPlayer(const shared::PvPGameState &state, shared::PlayerId id) {
-  for (std::size_t teamIdx = 0;
-       teamIdx < state.teams_count && teamIdx < state.teams.size(); ++teamIdx) {
-    const auto &team = state.teams[teamIdx];
+  for (const auto &team : state.teams) {
+    if (!team)
+      continue;
 
-    for (std::size_t i = 0; i < team.size && i < team.players.size(); ++i) {
-      if (team.players[i].id == id)
-        return team.players[i];
+    for (const auto &player : team->players) {
+      if (player && player->id == id)
+        return player;
     }
   }
 
   return std::nullopt;
+}
+
+/// How many player slots the broadcast actually carries.
+inline std::size_t livePlayers(const shared::CoopGameState &state) {
+  return shared::count_optional(state.players);
+}
+
+inline std::size_t livePlayers(const shared::PvPGameState &state) {
+  std::size_t found = 0;
+
+  for (const auto &team : state.teams) {
+    if (team)
+      found += shared::count_optional(team->players);
+  }
+
+  return found;
+}
+
+/// The team carrying @p id, or nullptr. Teams are looked up by id rather than
+/// by slot for the same reason players are.
+inline const shared::TeamState *teamById(const shared::PvPGameState &state,
+                                         shared::PvPGameSim::TeamId id) {
+  for (const auto &team : state.teams) {
+    if (team && team->id == id)
+      return &team.value();
+  }
+
+  return nullptr;
+}
+
+/// Whether any player in @p state carries @p name.
+///
+/// Name-based rather than id-based on purpose: the name-patching cases must
+/// keep holding across the id-namespace collapse, which changed *which* ids
+/// show up here. A missing patch still leaves the name empty, so this keeps
+/// the assertion's teeth either way.
+inline bool hasPlayerNamed(const shared::CoopGameState &state,
+                           std::string_view name) {
+  for (const auto &player : state.players) {
+    if (player && player->name == name)
+      return true;
+  }
+
+  return false;
+}
+
+inline bool hasPlayerNamed(const shared::PvPGameState &state,
+                           std::string_view name) {
+  for (const auto &team : state.teams) {
+    if (!team)
+      continue;
+
+    for (const auto &player : team->players) {
+      if (player && player->name == name)
+        return true;
+    }
+  }
+
+  return false;
 }
 
 } // namespace testing

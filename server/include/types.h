@@ -1,6 +1,5 @@
 #pragma once
 
-#include "shared/aliases.h"
 #include "shared/constants.h"
 #include <array>
 #include <cstdint>
@@ -16,8 +15,8 @@ struct WsConnection {
 };
 
 struct PerSocketPlayers {
-  std::array<ServerPlayerId, shared::MAX_PLAYERS_PER_CLIENT> players{};
-  std::array<std::string, shared::MAX_PLAYERS_PER_CLIENT> names{};
-  shared::PlayerCount count{};
+  std::array<std::optional<std::pair<ServerPlayerId, std::string>>,
+             shared::MAX_PLAYERS_PER_CLIENT>
+      players{};
   WsConnection *ws{};
 };

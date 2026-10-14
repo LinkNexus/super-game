@@ -41,7 +41,7 @@ private:
 
   /// Polls raylib input and writes the resulting buttons into `inputs_`
   /// for whichever local player(s) are active this tick.
-  void pollPlayersInputs();
+  ThisMachinePlayerInputs pollPlayersInputs();
 
   void spawnExplosion(const Vector2 &pos, shared::EnemyType type);
 
@@ -89,10 +89,6 @@ private:
 
   std::string server_url_{};
 
-  /// Per-slot local input state, indexed by local player slot (not
-  /// necessarily the sim's player id) and sent to the active `Session`
-  /// each tick.
-  std::array<shared::PlayerInput, MAX_PLAYERS_ON_THIS_MACHINE> inputs_{};
   std::array<TextInput, shared::MAX_PLAYERS_PER_CLIENT> name_text_boxes_{};
 
   float score_anim_time_{};

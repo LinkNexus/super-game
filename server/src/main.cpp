@@ -40,61 +40,63 @@ auto sendLobbyUpdate(const GameManager &manager, PerSocketData *data) {
   if (!g)
     return;
 
-  std::visit(
-      shared::overloaded{
-          [&g, &envelope](const CoopGameType &) {
-            auto game = dynamic_cast<CoopGame *>(g);
-            const auto &players = game->getPlayers();
+  std::visit(shared::overloaded{
+                 [&g, &envelope](const CoopGameType &) {
+                   auto game = dynamic_cast<CoopGame *>(g);
+                   const auto &players = game->getPlayers();
 
-            std::array<shared::PlayerInfo, shared::MAX_PLAYERS_COOP>
-                playersInfos{};
-            shared::PlayerCount idx{0};
-            for (const auto &player : players) {
-              if (player) {
-                playersInfos[idx++] =
-                    shared::PlayerInfo{.id = player->id,
-                                       .name = player->name,
-                                       .is_ready = player->is_ready};
-              }
-            }
+                   std::array<shared::PlayerInfo, shared::MAX_PLAYERS_COOP>
+                       playersInfos{};
+                   shared::PlayerCount idx{0};
+                   for (const auto &player : players) {
+                     if (player) {
+                       playersInfos[idx++] =
+                           shared::PlayerInfo{.id = player->id,
+                                              .name = player->name,
+                                              .is_ready = player->is_ready};
+                     }
+                   }
 
-            envelope["type"] =
-                shared::ServerMessageType::COOP_GAME_LOBBY_UPDATE;
-            envelope["payload"] = shared::CoopGameLobbyUpdate{
-                .players = playersInfos,
-                .players_count = shared::count_optional(players),
-                .max_players_count = shared::MAX_PLAYERS_COOP,
-                .game_started = game->isRunning()};
-          },
-          [&g, &envelope](const PvPGameType &t) {
-            auto game = dynamic_cast<PvPGame *>(g);
-            const auto &teams = game->getTeams();
+                   envelope["type"] =
+                       shared::ServerMessageType::COOP_GAME_LOBBY_UPDATE;
+                   envelope["payload"] = shared::CoopGameLobbyUpdate{
+                       .players = playersInfos,
+                       .players_count = shared::count_optional(players),
+                       .max_players_count = shared::MAX_PLAYERS_COOP,
+                       .game_started = game->isRunning()};
+                 },
+                 [&g, &envelope](const PvPGameType &t) {
+                   auto game = dynamic_cast<PvPGame *>(g);
+                   const auto &teams = game->getTeams();
 
-            std::array<shared::PvPGameLobbyUpdate::Team, shared::MAX_TEAMS>
-                teamsInfos{};
+                   shared::PvPGameLobbyUpdate::TeamInfos teamsInfos{};
 
-            for (std::size_t teamIndex = 0; teamIndex < teams.size();
-                 ++teamIndex) {
-              const auto &team = teams[teamIndex];
+                   auto teamInfoSlot{0ul};
+                   for (const auto &team : teams) {
+                     if (!team)
+                       continue;
 
-              shared::PlayerCount idx{0};
-              for (const auto &player : team.players) {
-                if (player)
-                  teamsInfos[teamIndex].players[idx++] =
-                      shared::PlayerInfo{.id = player->id,
-                                         .name = player->name,
-                                         .is_ready = player->is_ready};
-              }
-            }
+                     shared::PlayerCount idx{0};
+                     for (const auto &player : team->players) {
+                       if (player)
+                         teamsInfos[teamInfoSlot].emplace()[idx++] =
+                             shared::PlayerInfo{.id = player->id,
+                                                .name = player->name,
+                                                .is_ready = player->is_ready};
+                     }
 
-            envelope["type"] = shared::ServerMessageType::PVP_GAME_LOBBY_UPDATE;
-            envelope["payload"] =
-                shared::PvPGameLobbyUpdate{.teams = teamsInfos,
-                                           .team_count = t.team_count,
-                                           .team_size = t.team_size,
-                                           .game_started = game->isRunning()};
-          }},
-      data->game_type);
+                     ++teamInfoSlot;
+                   }
+
+                   envelope["type"] =
+                       shared::ServerMessageType::PVP_GAME_LOBBY_UPDATE;
+                   envelope["payload"] = shared::PvPGameLobbyUpdate{
+                       .teams = teamsInfos,
+                       .team_count = t.team_count,
+                       .team_size = t.team_size,
+                       .game_started = game->isRunning()};
+                 }},
+             data->game_type);
 
   for (const auto &socket : g->getPlayerSockets()) {
     if (socket)
@@ -149,9 +151,20 @@ int main(int, char *[]) {
                      slotsCount && *slotsCount > 0 &&
                      *slotsCount <= shared::MAX_PLAYERS_PER_CLIENT;
 
+                 auto initPlayers = [slotsCount,
+                                     players = &data.players_data.players,
+                                     &req]() {
+                   for (auto i{0ul};
+                        i < static_cast<unsigned long>(*slotsCount); ++i) {
+                     auto &[_, name] = (*players)[i].emplace();
+                     auto reqName =
+                         req->getQuery("name" + std::to_string(i + 1));
+                     name = std::string(reqName);
+                   }
+                 };
+
                  if (!teamSize && slotsCountIsValid) {
-                   data.players_data.count =
-                       static_cast<shared::PlayerCount>(*slotsCount);
+                   initPlayers();
                    data.game_type = CoopGameType{};
                  } else if (teamSize && slotsCountIsValid) {
                    auto teamCount = shared::toInt(req->getQuery("team_count"));
@@ -163,8 +176,7 @@ int main(int, char *[]) {
 
                    if (teamSizeIsValid && teamCountIsValid &&
                        *slotsCount <= *teamSize) {
-                     data.players_data.count =
-                         static_cast<shared::PlayerCount>(*slotsCount);
+                     initPlayers();
                      data.game_type = PvPGameType{
                          .team_size =
                              static_cast<shared::PlayerCount>(*teamSize),
@@ -175,11 +187,6 @@ int main(int, char *[]) {
 
                  } else {
                    goto bad_request;
-                 }
-
-                 for (std::size_t i = 0; i < data.players_data.count; ++i) {
-                   auto reqName = req->getQuery("name" + std::to_string(i + 1));
-                   data.players_data.names[i] = std::string(reqName);
                  }
 
                  res->template upgrade<PerSocketData>(
@@ -201,8 +208,10 @@ int main(int, char *[]) {
                  data->connection.ws = ws;
                  data->players_data.ws = &data->connection;
 
-                 for (int i = 0; i < data->players_data.count; ++i) {
-                   data->players_data.players[i] = manager.next_player_id++;
+                 for (auto &kvp : data->players_data.players) {
+                   if (kvp) {
+                     kvp->first = manager.next_player_id++;
+                   }
                  }
 
                  std::visit(shared::overloaded{
@@ -222,8 +231,16 @@ int main(int, char *[]) {
                  nlohmann::json welcomeEnvelope;
                  welcomeEnvelope["type"] = shared::ServerMessageType::WELCOME;
 
-                 welcomeEnvelope["payload"] = shared::WelcomeMessage{
-                     .players_ids = data->players_data.players};
+                 shared::PlayerIds<shared::MAX_PLAYERS_PER_CLIENT> ids{};
+                 std::transform(data->players_data.players.begin(),
+                                data->players_data.players.end(), ids.begin(),
+                                [](const auto &player) {
+                                  return player ? std::optional(player->first)
+                                                : std::nullopt;
+                                });
+
+                 welcomeEnvelope["payload"] =
+                     shared::WelcomeMessage{.players_ids = ids};
                  ws->send(welcomeEnvelope.dump());
 
                  sendLobbyUpdate(manager, data);
@@ -258,36 +275,36 @@ int main(int, char *[]) {
                      if (!game)
                        return;
 
-                     auto inputs =
-                         j.at("payload")
-                             .get<std::array<shared::PlayerInput,
-                                             shared::MAX_PLAYERS_PER_CLIENT>>();
+                     auto inputs = j.at("payload")
+                                       .get<shared::PlayerInputs<
+                                           shared::MAX_PLAYERS_PER_CLIENT>>();
 
-                     for (std::size_t i = 0; i < data->players_data.count;
-                          ++i) {
-                       const auto &input = inputs[i];
-
-                       auto endIt = data->players_data.players.begin() +
-                                    data->players_data.count;
-                       auto playerIt =
-                           std::find(data->players_data.players.begin(), endIt,
-                                     input.player_id);
-
-                       if (playerIt == endIt)
+                     for (const auto &input : inputs) {
+                       if (!input)
                          continue;
 
-                       auto player = game->findPlayerById(*playerIt);
+                       auto playerIt = std::find_if(
+                           data->players_data.players.begin(),
+                           data->players_data.players.end(),
+                           [&input](const auto &player) {
+                             return player && player->first == input->player_id;
+                           });
+                       if (playerIt == data->players_data.players.end())
+                         continue;
+
+                       const auto &player =
+                           game->findPlayerById((*playerIt)->first);
                        if (!player)
                          continue;
 
                        bool shoot_now =
-                           input.buttons & shared::Button::BUTTON_SHOOT;
+                           input->buttons & shared::Button::BUTTON_SHOOT;
                        if (shoot_now && !player->prev_shoot_held)
                          player->pending_shots++;
 
                        player->prev_shoot_held = shoot_now;
                        player->pending_movement = static_cast<shared::Button>(
-                           input.buttons &
+                           input->buttons &
                            (shared::BUTTON_LEFT | shared::BUTTON_RIGHT));
                      }
 
