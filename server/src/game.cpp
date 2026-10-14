@@ -143,7 +143,7 @@ void PvPGame::tryStart() {
   sim_ = shared::PvPGameSim();
   state_ = shared::PvPGameState();
 
-  shared::PvPGameSim::PlayerIds ids{};
+  shared::PvPGameSim::TeamRosters ids{};
   auto teamIdx{0ul};
   for (const auto &team : teams_) {
     if (team) {

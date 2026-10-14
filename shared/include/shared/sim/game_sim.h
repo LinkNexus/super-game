@@ -176,7 +176,7 @@ public:
   enum class TeamOutcome { PLAYING, WON, LOST, DREW };
 
   using TeamId = uint8_t;
-  using PlayerIds = std::array<
+  using TeamRosters = std::array<
       std::optional<std::pair<TeamId, PlayerIds<MAX_PLAYERS_PER_TEAM>>>,
       MAX_TEAMS>;
 
@@ -194,7 +194,7 @@ public:
 
   enum class Phase : uint8_t { PLAYERS_FIGHT, END };
 
-  void start(const PlayerIds &ids);
+  void start(const TeamRosters &ids);
 
   void removePlayer(PlayerId player_id);
 

@@ -14,7 +14,7 @@
 
 using namespace shared;
 
-void shared::PvPGameSim::start(const PlayerIds &ids) {
+void shared::PvPGameSim::start(const TeamRosters &ids) {
   bool isOnTop{true};
   PlayerCount teamSlot{0};
 

@@ -35,7 +35,7 @@ LocalSession::LocalSession(const GameMode *mode,
                    const auto &[team_count, team_size] =
                        pvpMode.pvp_match_ups[pvpMode.selected_match_up_idx];
 
-                   shared::PvPGameSim::PlayerIds ids{};
+                   shared::PvPGameSim::TeamRosters ids{};
                    shared::PlayerId currentId{1};
 
                    for (std::size_t i = 0; i < team_count; ++i) {

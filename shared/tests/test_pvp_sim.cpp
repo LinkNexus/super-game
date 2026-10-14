@@ -35,9 +35,10 @@ Outcome outcomeOf(const TeamState &team) {
 
 /// Two teams, each roster given as the ids on that team. Team ids are 1-based
 /// because the sim indexes an internal status array by `id - 1`.
-PvPGameSim::PlayerIds rosters(const PlayerIds<MAX_PLAYERS_PER_TEAM> &first,
-                              const PlayerIds<MAX_PLAYERS_PER_TEAM> &second) {
-  PvPGameSim::PlayerIds ids{};
+PvPGameSim::TeamRosters
+rosters(const PlayerIds<MAX_PLAYERS_PER_TEAM> &first,
+        const PlayerIds<MAX_PLAYERS_PER_TEAM> &second) {
+  PvPGameSim::TeamRosters ids{};
   ids[0] = TeamRoster{1, first};
   ids[1] = TeamRoster{2, second};
 
