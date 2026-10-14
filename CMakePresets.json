@@ -1,84 +1,141 @@
 {
-	"version": 3,
-	"configurePresets": [
-		{
-			"name": "base",
-			"hidden": true,
-			"generator": "Ninja",
-			"binaryDir": "${sourceDir}/build/${presetName}",
-			"cacheVariables": {
-				"CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
-			}
-		},
-		{
-			"name": "debug",
-			"displayName": "Debug",
-			"inherits": "base",
-			"cacheVariables": {
-				"CMAKE_BUILD_TYPE": "Debug"
-			}
-		},
-		{
-			"name": "release",
-			"displayName": "Release",
-			"inherits": "base",
-			"cacheVariables": {
-				"CMAKE_BUILD_TYPE": "Release"
-			}
-		},
-		{
-			"name": "windows-client-release",
-			"displayName": "Windows client (Release, MinGW-w64 cross-compile)",
-			"inherits": "base",
-			"cacheVariables": {
-				"CMAKE_BUILD_TYPE": "Release",
-				"CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/mingw-w64-toolchain.cmake",
-				"BUILD_SERVER": "OFF"
-			}
-		},
-		{
-			"name": "tests",
-			"displayName": "Tests only (Debug, headless)",
-			"inherits": "base",
-			"cacheVariables": {
-				"CMAKE_BUILD_TYPE": "Debug",
-				"BUILD_CLIENT": "OFF"
-			}
-		}
-	],
-	"buildPresets": [
-		{
-			"name": "debug",
-			"configurePreset": "debug"
-		},
-		{
-			"name": "release",
-			"configurePreset": "release"
-		},
-		{
-			"name": "windows-client-release",
-			"configurePreset": "windows-client-release",
-			"targets": "supergame-client"
-		},
-		{
-			"name": "tests",
-			"configurePreset": "tests"
-		}
-	],
-	"testPresets": [
-		{
-			"name": "tests",
-			"configurePreset": "tests",
-			"output": {
-				"outputOnFailure": true
-			}
-		},
-		{
-			"name": "debug",
-			"configurePreset": "debug",
-			"output": {
-				"outputOnFailure": true
-			}
-		}
-	]
+  "version": 3,
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+      }
+    },
+    {
+      "name": "debug",
+      "displayName": "Debug",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "release",
+      "displayName": "Release",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "windows-client-release",
+      "displayName": "Windows client (Release, MinGW-w64 cross-compile)",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/mingw-w64-toolchain.cmake",
+        "BUILD_SERVER": "OFF"
+      }
+    },
+    {
+      "name": "client",
+      "displayName": "Client only (Debug)",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "BUILD_SERVER": "OFF",
+        "BUILD_TESTS": "OFF"
+      }
+    },
+    {
+      "name": "client-release",
+      "displayName": "Client only (Release)",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "BUILD_SERVER": "OFF",
+        "BUILD_TESTS": "OFF"
+      }
+    },
+    {
+      "name": "server",
+      "displayName": "Server only (Debug)",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "BUILD_CLIENT": "OFF",
+        "BUILD_TESTS": "OFF"
+      }
+    },
+    {
+      "name": "server-release",
+      "displayName": "Server only (Release)",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "BUILD_CLIENT": "OFF",
+        "BUILD_TESTS": "OFF"
+      }
+    },
+    {
+      "name": "tests",
+      "displayName": "Tests only (Debug, headless)",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "BUILD_CLIENT": "OFF",
+        "BUILD_SERVER": "OFF"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "debug",
+      "configurePreset": "debug"
+    },
+    {
+      "name": "release",
+      "configurePreset": "release"
+    },
+    {
+      "name": "windows-client-release",
+      "configurePreset": "windows-client-release",
+      "targets": "supergame-client"
+    },
+    {
+      "name": "client",
+      "configurePreset": "client"
+    },
+    {
+      "name": "client-release",
+      "configurePreset": "client-release"
+    },
+    {
+      "name": "server",
+      "configurePreset": "server"
+    },
+    {
+      "name": "server-release",
+      "configurePreset": "server-release"
+    },
+    {
+      "name": "tests",
+      "configurePreset": "tests"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "tests",
+      "configurePreset": "tests",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "debug",
+      "configurePreset": "debug",
+      "output": {
+        "outputOnFailure": true
+      }
+    }
+  ]
 }

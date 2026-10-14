@@ -36,24 +36,32 @@ void Game::init() {
     s.initRandom();
 }
 
-void Game::pollPlayersInputs() {
+ThisMachinePlayerInputs Game::pollPlayersInputs() {
+  ThisMachinePlayerInputs inputs{};
   auto playersIds = session_->getPlayersIds();
 
   for (std::size_t i = 0; i < config_->player_count; ++i) {
-    auto &input = inputs_[i];
     auto playerId = playersIds[i];
 
+    if (!playerId)
+      continue;
+
+    auto &input = inputs[i].emplace();
     input.buttons = shared::BUTTON_NONE;
     const auto &controls = PLAYERS_CONTROLS[i];
 
     for (auto control : controls) {
-      if (IsKeyDown(control.first)) {
-        input.player_id = playerId;
-        input.buttons =
-            static_cast<shared::Button>(input.buttons | control.second);
+      const auto &[key, button] = control;
+
+      if (IsKeyDown(key)) {
+        input.buttons = static_cast<shared::Button>(input.buttons | button);
       }
     }
+
+    input.player_id = *playerId;
   }
+
+  return inputs;
 }
 
 void Game::checkAndPlaySoundsOnEvents() {
@@ -89,7 +97,7 @@ void Game::handleEventsOnScreen() {
       auto playerIds = s->getPlayersIds();
 
       if (std::any_of(playerIds.begin(), playerIds.end(),
-                      [](const auto &id) { return id != 0; })) {
+                      [](const auto &id) { return id && *id != 0; })) {
         screen_ = GameScreen::LOBBY;
       }
     }
@@ -106,10 +114,8 @@ void Game::handleEventsOnScreen() {
   }
 
   if (screen_ == GameScreen::PLAYING) {
-    pollPlayersInputs();
-
     if (session_)
-      config_->state = session_->step(inputs_, shared::FIXED_DT);
+      config_->state = session_->step(pollPlayersInputs(), shared::FIXED_DT);
 
     checkAndPlaySoundsOnEvents();
 
@@ -317,15 +323,15 @@ void Game::handleInput() {
 
     std::visit(
         shared::overloaded{
-            [](CoopMode &m) {
+            [this](CoopMode &) {
               if (IsKeyPressed(KEY_LEFT)) {
-                m.players_count = (m.players_count > 1)
-                                      ? m.players_count - 1
-                                      : MAX_PLAYERS_ON_THIS_MACHINE;
+                config_->player_count = (config_->player_count > 1)
+                                            ? config_->player_count - 1
+                                            : MAX_PLAYERS_ON_THIS_MACHINE;
               } else if (IsKeyPressed(KEY_RIGHT)) {
-                m.players_count =
-                    (m.players_count < MAX_PLAYERS_ON_THIS_MACHINE)
-                        ? m.players_count + 1
+                config_->player_count =
+                    (config_->player_count < MAX_PLAYERS_ON_THIS_MACHINE)
+                        ? config_->player_count + 1
                         : 1;
               }
             },
@@ -346,9 +352,7 @@ void Game::handleInput() {
     if (IsKeyPressed(KEY_ENTER)) {
       if (type_ == GameType::LOCAL) {
         std::visit(shared::overloaded{
-                       [this](CoopMode &m) {
-                         config_->player_count = m.players_count;
-                       },
+                       [](CoopMode &) {},
                        [this](PvPMode &m) {
                          auto &matchUp =
                              m.pvp_match_ups[m.selected_match_up_idx];
@@ -504,9 +508,9 @@ void Game::draw() {
     auto &mode = config_->modes[config_->mode_idx];
 
     std::visit(shared::overloaded{
-                   [this](CoopMode &m) {
+                   [this](CoopMode &) {
                      game_designer_.drawPlayerCountSelectionCoop(
-                         m.players_count);
+                         config_->player_count);
                    },
                    [this](PvPMode &m) {
                      game_designer_.drawPvPSchemaSelection(

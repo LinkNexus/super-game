@@ -20,18 +20,17 @@ struct PvPGameType {
 using GameType = std::variant<CoopGameType, PvPGameType>;
 
 struct PlayerConnection {
-  /// Shot count accumulated since the last `Game::update()` tick, so a
-  /// shoot press isn't missed even if it happens between ticks.
-  uint8_t pending_shots{};
+  ServerPlayerId id{};
+  bool is_ready{false};
   /// Tracks whether SHOOT was already held last message, so held-down fire
   /// only counts as one shot per press rather than one per message.
   bool prev_shoot_held{false};
-  bool is_ready{false};
+  /// Shot count accumulated since the last `Game::update()` tick, so a
+  /// shoot press isn't missed even if it happens between ticks.
+  uint8_t pending_shots{};
   shared::Button pending_movement{shared::Button::BUTTON_NONE};
-  std::string name{};
-  ServerPlayerId id{};
-  shared::PlayerId id_in_game{};
   WsConnection *ws{};
+  std::string name{};
 };
 
 class Game {
@@ -81,6 +80,10 @@ protected:
 };
 
 class CoopGame : public Game {
+public:
+  using Players =
+      std::array<std::optional<PlayerConnection>, shared::MAX_PLAYERS_COOP>;
+
 private:
   void tryStart();
   bool allPlayersReady() const override;
@@ -90,8 +93,7 @@ public:
 
   bool thereIsEnoughPlayers() const override;
 
-  const std::array<std::optional<PlayerConnection>, shared::MAX_PLAYERS_COOP> &
-  getPlayers() const;
+  const Players &getPlayers() const;
 
   bool addPlayers(const PerSocketPlayers &players_data) override;
 
@@ -102,10 +104,8 @@ public:
   PlayerConnection *findPlayerById(ServerPlayerId id) override;
 
 private:
-  std::array<std::optional<PlayerConnection>, shared::MAX_PLAYERS_COOP>
-      players_{};
-  std::array<std::optional<shared::PlayerInput>, shared::MAX_PLAYERS_COOP>
-      inputs_{};
+  Players players_{};
+  shared::PlayerInputs<shared::MAX_PLAYERS_COOP> inputs_{};
 
   shared::CoopGameSim sim_;
   shared::CoopGameState state_;
@@ -115,8 +115,9 @@ class PvPGame : public Game {
   struct Team {
     std::array<std::optional<PlayerConnection>, shared::MAX_PLAYERS_PER_TEAM>
         players{};
+    shared::PvPGameSim::TeamId id{};
   };
-  using Teams = std::array<Team, shared::MAX_TEAMS>;
+  using Teams = std::array<std::optional<Team>, shared::MAX_TEAMS>;
 
 private:
   void tryStart();

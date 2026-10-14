@@ -3,6 +3,7 @@
 #include "raylib.h"
 #include "shared/aliases.h"
 #include "shared/constants.h"
+#include "shared/helpers.h"
 #include "shared/math_utils.h"
 #include "shared/messages.h"
 #include "types.h"
@@ -226,17 +227,21 @@ void EntityDesigner::drawPlayersForCoopGame(const shared::CoopGameState &state,
   auto yOffset = 10.0f;
   const auto playerIds = session->getPlayersIds();
 
-  for (std::size_t i = 0; i < state.player_count; ++i) {
-    const auto &player = state.players[i];
+  for (auto idx{0ul}; idx < state.players.size(); ++idx) {
+    const auto &player = state.players[idx];
 
-    auto it = std::find(playerIds.begin(), playerIds.end(), player.id);
+    if (!player)
+      continue;
+
+    auto it = std::find(playerIds.begin(), playerIds.end(), player->id);
     int64_t playerIdx =
         (it != playerIds.end()) ? std::distance(playerIds.begin(), it) : -1;
 
-    drawPlayerStats(player, yOffset, gameType, playerIdx >= 0);
+    drawPlayerStats(*player, yOffset, gameType, playerIdx >= 0);
 
-    if (player.lives > 0)
-      drawPlayer(player, playerIdx == 0 ? MAIN_PLAYER_COLOR : PLAYER_COLORS[i],
+    if (player->lives > 0)
+      drawPlayer(*player,
+                 playerIdx == 0 ? MAIN_PLAYER_COLOR : PLAYER_COLORS[idx],
                  playerIdx);
   }
 }
@@ -253,18 +258,22 @@ void EntityDesigner::drawPlayersForPvPGame(Session *session,
   };
   const auto thisMachineTeam = std::find_if(
       state.teams.begin(), state.teams.end(), [&](const auto &team) {
-        return std::any_of(team.players.begin(), team.players.end(),
-                           [&isOnThisMachine](const auto &player) {
-                             return isOnThisMachine(player.id);
-                           });
+        return team && std::any_of(team->players.begin(), team->players.end(),
+                                   [&isOnThisMachine](const auto &player) {
+                                     return player &&
+                                            isOnThisMachine(player->id);
+                                   });
       });
 
   std::size_t colorIdx{0};
 
-  for (std::size_t teamIdx = 0; teamIdx < state.teams_count; ++teamIdx) {
+  for (auto teamIdx{0ul}; teamIdx < state.teams.size(); ++teamIdx) {
     const auto &team = state.teams[teamIdx];
 
-    if (state.team_size > 1) {
+    if (!team)
+      continue;
+
+    if (shared::count_optional(team->players) > 1) {
       const auto teamLabel = std::string("Team ") + std::to_string(teamIdx + 1);
       DrawText(teamLabel.c_str(),
                shared::SCREEN_WIDTH - 10 -
@@ -273,10 +282,12 @@ void EntityDesigner::drawPlayersForPvPGame(Session *session,
       yOffset += STATUS_FONT_SIZE + 10;
     }
 
-    for (std::size_t playerIdx = 0; playerIdx < team.size; ++playerIdx) {
-      const auto &player = team.players[playerIdx];
+    for (const auto &player : team->players) {
+      if (!player)
+        continue;
+
       Color color{PLAYER_ENEMY_COLOR};
-      auto it = std::find(playerIds.begin(), playerIds.end(), player.id);
+      auto it = std::find(playerIds.begin(), playerIds.end(), player->id);
       int64_t playerIdxOnThisMachine =
           (it != playerIds.end()) ? std::distance(playerIds.begin(), it) : -1;
 
@@ -293,10 +304,10 @@ void EntityDesigner::drawPlayersForPvPGame(Session *session,
         }
       }
 
-      drawPlayerStats(player, yOffset, gameType, playerIdxOnThisMachine >= 0);
+      drawPlayerStats(*player, yOffset, gameType, playerIdxOnThisMachine >= 0);
 
-      if (player.lives > 0)
-        drawPlayer(player, color, playerIdxOnThisMachine);
+      if (player->lives > 0)
+        drawPlayer(*player, color, playerIdxOnThisMachine);
     }
   }
 }

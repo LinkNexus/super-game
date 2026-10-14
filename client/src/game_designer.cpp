@@ -255,15 +255,17 @@ void GameDesigner::drawLobby(OnlineSession *session, bool areReady) const {
 
             auto readyCount{0};
 
-            for (std::size_t teamIdx = 0; teamIdx < u.team_count; ++teamIdx) {
+            for (std::size_t teamIdx = 0; teamIdx < u.teams.size(); ++teamIdx) {
               const auto &team = u.teams[teamIdx];
+
+              if (!team)
+                continue;
 
               auto teamLabel{std::string("Team ") +
                              std::to_string(teamIdx + 1)};
-              if (std::any_of(team.players.begin(),
-                              team.players.begin() + team.players_count,
+              if (std::any_of(team->begin(), team->end(),
                               [&isOnThisMachine](const auto &p) {
-                                return isOnThisMachine(p.id);
+                                return p && isOnThisMachine(p->id);
                               }))
                 teamLabel += " (Yours)";
 
@@ -272,16 +274,19 @@ void GameDesigner::drawLobby(OnlineSession *session, bool areReady) const {
                   LINE_GAP;
 
               for (std::size_t slot = 0; slot < u.team_size; ++slot) {
-                if (slot >= team.players_count) {
+                if (slot >= shared::count_optional(*team)) {
                   y = drawEmptySlot(y);
                   continue;
                 }
 
-                const auto &p = team.players[slot];
-                if (p.is_ready)
+                const auto &p = (*team)[slot];
+                if (!p)
+                  continue;
+
+                if (p->is_ready)
                   ++readyCount;
 
-                y = drawSlot(p, slot + 1, y);
+                y = drawSlot(*p, slot + 1, y);
               }
 
               y += ROW_GAP;
@@ -363,7 +368,7 @@ void GameDesigner::drawEndScreen(const shared::GameState &state,
                                  float animTime) const {
   drawEndScreenBackdrop(animTime);
 
-  std::array<shared::PlayerId, MAX_PLAYERS_ON_THIS_MACHINE> playerIds{};
+  ThisMachinePlayerIds playerIds{};
   if (session)
     playerIds = session->getPlayersIds();
 
@@ -399,18 +404,21 @@ void GameDesigner::drawEndScreen(const shared::GameState &state,
                 SECTION_GAP;
 
             uint32_t total{};
-            for (std::size_t i = 0; i < s.player_count; ++i)
-              total += s.players[i].points;
+            for (const auto &player : s.players) {
+              if (player)
+                total += player->points;
+            }
 
             y = drawCentered(("Team score: " + std::to_string(total)).c_str(),
                              y, HEADING_FONT_SIZE, WHITE) +
                 SECTION_GAP;
 
-            for (std::size_t i = 0; i < s.player_count; ++i) {
-              const auto &p = s.players[i];
-              y = drawRosterRow(
-                  playerLabel(p, marksYours && isOnThisMachine(p.id)),
-                  scoreLine(p), p.lives > 0 ? LIGHTGRAY : RED, y);
+            for (const auto &player : s.players) {
+              if (player)
+                y = drawRosterRow(
+                    playerLabel(*player,
+                                marksYours && isOnThisMachine(player->id)),
+                    scoreLine(*player), player->lives > 0 ? LIGHTGRAY : RED, y);
             }
 
             y += LINE_GAP;
@@ -418,25 +426,26 @@ void GameDesigner::drawEndScreen(const shared::GameState &state,
           [&](const shared::PvPGameState &s) {
             using Outcome = shared::PvPGameSim::TeamOutcome;
 
-            const auto teamsEnd{s.teams.begin() + s.teams_count};
-            const auto ownsTeam = [&](const shared::TeamState &team) {
-              return std::any_of(team.players.begin(),
-                                 team.players.begin() + team.size,
-                                 [&isOnThisMachine](const auto &p) {
-                                   return isOnThisMachine(p.id);
-                                 });
-            };
+            const auto ownsTeam =
+                [&isOnThisMachine](
+                    const std::optional<shared::TeamState> &team) {
+                  return team &&
+                         std::any_of(team->players.begin(), team->players.end(),
+                                     [&isOnThisMachine](const auto &p) {
+                                       return p && isOnThisMachine(p->id);
+                                     });
+                };
 
             const auto myTeam{
-                std::find_if(s.teams.begin(), teamsEnd, ownsTeam)};
+                std::find_if(s.teams.begin(), s.teams.end(), ownsTeam)};
             const auto myTeamsCount{
-                std::count_if(s.teams.begin(), teamsEnd, ownsTeam)};
+                std::count_if(s.teams.begin(), s.teams.end(), ownsTeam)};
 
             // With both teams on this machine (local PvP) a "you won"
             // headline would be meaningless, so only personalise it when
             // exactly one team is ours.
             if (myTeamsCount == 1) {
-              switch (static_cast<Outcome>(myTeam->outcome)) {
+              switch (static_cast<Outcome>((*myTeam)->outcome)) {
               case Outcome::WON:
                 y = drawCentered("YOU WIN", y, TITLE_FONT_SIZE, GOLD);
                 break;
@@ -448,12 +457,13 @@ void GameDesigner::drawEndScreen(const shared::GameState &state,
                 break;
               }
             } else {
-              const auto winner{
-                  std::find_if(s.teams.begin(), teamsEnd, [](const auto &team) {
-                    return static_cast<Outcome>(team.outcome) == Outcome::WON;
+              const auto winner{std::find_if(
+                  s.teams.begin(), s.teams.end(), [](const auto &team) {
+                    return team &&
+                           static_cast<Outcome>(team->outcome) == Outcome::WON;
                   })};
 
-              if (winner == teamsEnd) {
+              if (winner == s.teams.end()) {
                 y = drawCentered("DRAW", y, TITLE_FONT_SIZE, LIGHTGRAY);
               } else {
                 const auto winnerIdx{std::distance(s.teams.begin(), winner)};
@@ -465,45 +475,47 @@ void GameDesigner::drawEndScreen(const shared::GameState &state,
 
             y += SECTION_GAP;
 
-            for (std::size_t teamIdx = 0; teamIdx < s.teams_count; ++teamIdx) {
-              const auto &team = s.teams[teamIdx];
+            auto teamIdx{0u};
+            for (const auto &team : s.teams) {
+              if (team) {
+                uint32_t total{};
+                for (const auto &player : team->players)
+                  if (player)
+                    total += player->points;
 
-              uint32_t total{};
-              for (std::size_t i = 0; i < team.size; ++i)
-                total += team.players[i].points;
+                auto teamLabel{"Team " + std::to_string(teamIdx + 1)};
+                if (myTeamsCount == 1 && ownsTeam(team))
+                  teamLabel += " (Yours)";
 
-              auto teamLabel{"Team " + std::to_string(teamIdx + 1)};
-              if (myTeamsCount == 1 && ownsTeam(team))
-                teamLabel += " (Yours)";
+                switch (static_cast<Outcome>(team->outcome)) {
+                case Outcome::WON:
+                  teamLabel += " - WON";
+                  break;
+                case Outcome::LOST:
+                  teamLabel += " - LOST";
+                  break;
+                case Outcome::DREW:
+                  teamLabel += " - DREW";
+                  break;
+                default:
+                  break;
+                }
 
-              switch (static_cast<Outcome>(team.outcome)) {
-              case Outcome::WON:
-                teamLabel += " - WON";
-                break;
-              case Outcome::LOST:
-                teamLabel += " - LOST";
-                break;
-              case Outcome::DREW:
-                teamLabel += " - DREW";
-                break;
-              default:
-                break;
+                teamLabel += "  (" + std::to_string(total) + " pts)";
+
+                y = drawCentered(teamLabel.c_str(), y, BODY_FONT_SIZE,
+                                 TEAMS_COLORS[teamIdx]) +
+                    LINE_GAP;
+
+                for (const auto &p : team->players) {
+                  if (p)
+                    y = drawRosterRow(
+                        playerLabel(*p, marksYours && isOnThisMachine(p->id)),
+                        scoreLine(*p), p->lives > 0 ? LIGHTGRAY : RED, y);
+                }
+
+                y += ROW_GAP;
               }
-
-              teamLabel += "  (" + std::to_string(total) + " pts)";
-
-              y = drawCentered(teamLabel.c_str(), y, BODY_FONT_SIZE,
-                               TEAMS_COLORS[teamIdx]) +
-                  LINE_GAP;
-
-              for (std::size_t i = 0; i < team.size; ++i) {
-                const auto &p = team.players[i];
-                y = drawRosterRow(
-                    playerLabel(p, marksYours && isOnThisMachine(p.id)),
-                    scoreLine(p), p.lives > 0 ? LIGHTGRAY : RED, y);
-              }
-
-              y += ROW_GAP;
             }
           }},
       state);

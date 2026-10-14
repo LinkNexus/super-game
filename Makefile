@@ -1,64 +1,96 @@
-.PHONY: all debug release configure configure-debug configure-release \
-        run run-debug run-release clean rebuild test test-debug
+.PHONY: all client server tests run run-client run-server \
+        clean rebuild test test-debug help debug release
 
-# Default target
-all: debug
+# Which module to build, and at which optimisation level. Every target below
+# resolves to a CMake preset named `<module>` (Debug) or `<module>-release`,
+# so `make server BUILD=release` and `cmake --preset server-release` are the
+# same build - nothing here knows anything the presets don't.
+#
+#   make                  # everything, Debug
+#   make client           # just the client
+#   make server BUILD=release
+#   make tests            # just the two headless test suites
+#
+BUILD ?= debug
 
-configure: configure-debug
+ifeq ($(BUILD),release)
+SUFFIX := -release
+else ifeq ($(BUILD),debug)
+SUFFIX :=
+else
+$(error BUILD must be `debug` or `release`, got `$(BUILD)`)
+endif
 
-configure-debug:
-	cmake --preset debug
+# `all` keeps its own preset names (debug/release) rather than a module name,
+# since it is the one configuration that builds every target at once.
+ALL_PRESET := $(if $(SUFFIX),release,debug)
 
-configure-release:
-	cmake --preset release
+help:
+	@echo "Targets:  all client server tests   |   run-client run-server   |   test clean rebuild"
+	@echo "Variable: BUILD=debug (default) | release"
+	@echo "Example:  make server BUILD=release"
 
+# --- Whole project --------------------------------------------------------
+
+all:
+	cmake --preset $(ALL_PRESET)
+	cmake --build --preset $(ALL_PRESET)
+
+# Kept so the old spellings still work; `make` and `make BUILD=release` are
+# the same two builds.
 debug:
-	cmake --build --preset debug
+	$(MAKE) all BUILD=debug
 
 release:
-	cmake --build --preset release
+	$(MAKE) all BUILD=release
 
-run-client: run-client-debug
+# --- One module at a time -------------------------------------------------
+# Each lands in its own build/<preset> tree, so switching modules never
+# reconfigures (or invalidates) another one's cache.
 
-run-client-debug: debug
-	./build/debug/bin/supergame-client ws://localhost:9001
+client:
+	cmake --preset client$(SUFFIX)
+	cmake --build --preset client$(SUFFIX)
 
-run-server: run-server-debug
+server:
+	cmake --preset server$(SUFFIX)
+	cmake --build --preset server$(SUFFIX)
 
-run-server-debug: debug
-	-lsof -ti:9001 | xargs kill 2>/dev/null
-	./build/debug/bin/supergame-server
-
-run-client-release: release
-	./build/release/bin/supergame-client ws://localhost:9001
-
-run-server-release: release
-	./build/release/bin/supergame-server
-
-run-debug: run-server-debug run-client-debug
-
-run-release: run-server-release run-client-release
-
-run: run-debug
-
-# Both suites (shared/ simulation + server/ rosters & broadcast) in a headless
-# build: no raylib, no client, so it configures and builds in seconds and needs
-# none of the graphics deps. Same configuration CI runs. Configures every time
-# on purpose, so this works from a fresh checkout with no setup step.
-test:
+tests:
 	cmake --preset tests
 	cmake --build --preset tests
+
+# --- Running --------------------------------------------------------------
+
+run: run-client
+
+run-client: client
+	./build/client$(SUFFIX)/bin/supergame-client ws://localhost:9001
+
+run-server: server
+	-lsof -ti:9001 | xargs kill 2>/dev/null
+	./build/server$(SUFFIX)/bin/supergame-server
+
+# --- Tests ----------------------------------------------------------------
+# Both suites (shared/ simulation + server/ rosters & broadcast) in a headless
+# build: no raylib, no client, and with BUILD_SERVER=OFF no uWebSockets
+# either, so it configures and builds in seconds from a bare checkout.
+# Same configuration CI runs. Configures every time on purpose.
+test: tests
 	ctest --preset tests
 
 # Same suites against the full debug tree, for when it's already built and a
 # second build dir isn't worth it.
-test-debug: debug
-	ctest --preset debug
-
-clean:
-	cmake --build --preset debug --target clean
-
-rebuild:
-	rm -rf build/debug
+test-debug:
 	cmake --preset debug
 	cmake --build --preset debug
+	ctest --preset debug
+
+# --- Housekeeping ---------------------------------------------------------
+
+clean:
+	rm -rf build
+
+rebuild:
+	rm -rf build/$(ALL_PRESET)
+	$(MAKE) all BUILD=$(BUILD)
