@@ -62,8 +62,9 @@ TEST(coop_broadcasts_one_identical_state_frame_per_connection_each_tick) {
   CoopGame game;
   startCoopMatch(game, a, b);
 
-  // Joining and readying broadcast nothing on their own: lobby updates are
-  // still sent from main.cpp, not from Game (that moves here with L66).
+  // Joining and readying broadcast nothing on their own: a lobby update goes
+  // out only when the connection handlers ask for one (L66 moved the payload
+  // onto `Game`, not the decision of when to send it).
   CHECK_EQ(a.sent.size(), 0u);
 
   game.update(shared::FIXED_DT);
@@ -483,13 +484,15 @@ TEST(manager_destroys_a_finished_duel_once_its_last_connection_closes) {
   FakeConnection a, b;
   GameManager manager;
 
-  const auto id = manager.joinOrCreatePvPGame(fakeConnection(a, {1}), 1, 2);
-  const auto joined = manager.joinOrCreatePvPGame(fakeConnection(b, {2}), 1, 2);
-  REQUIRE(id.has_value());
-  REQUIRE(joined == id);
-
-  auto *game = manager.findGameById(*id);
+  auto *game = manager.joinOrCreatePvPGame(fakeConnection(a, {1}), 1, 2);
+  const auto *joined = manager.joinOrCreatePvPGame(fakeConnection(b, {2}), 1, 2);
   REQUIRE(game != nullptr);
+  REQUIRE(joined == game);
+
+  // Kept separately so the post-destroy assertions below never reach through
+  // the handle.
+  const auto id = game->id;
+
   game->setPlayersReady(&a, true);
   game->setPlayersReady(&b, true);
   REQUIRE(game->isRunning());
@@ -505,7 +508,7 @@ TEST(manager_destroys_a_finished_duel_once_its_last_connection_closes) {
   REQUIRE(game->isEmpty() == false);
   game->update(shared::FIXED_DT);
   REQUIRE(game->isOver());
-  CHECK(manager.findGameById(*id) != nullptr);
+  CHECK(manager.findGameById(id) != nullptr);
 
   // Second close, from the end screen. Nothing may touch `game` after the
   // destroy, so the emptiness check is read once, here.
@@ -514,9 +517,9 @@ TEST(manager_destroys_a_finished_duel_once_its_last_connection_closes) {
   CHECK_EQ(emptied, true);
 
   if (emptied)
-    manager.destroyGame(*id);
+    manager.destroyGame(id);
 
-  CHECK(manager.findGameById(*id) == nullptr);
+  CHECK(manager.findGameById(id) == nullptr);
 }
 
 // --- Joining a match that is no longer open --------------------------------

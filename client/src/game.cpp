@@ -458,6 +458,7 @@ void Game::handleInput() {
       session_ = nullptr;
       config_ = nullptr;
       screen_ = GameScreen::MENU;
+      break;
     }
 
     if (IsKeyPressed(KEY_SPACE)) {

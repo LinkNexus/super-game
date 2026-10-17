@@ -4,6 +4,7 @@
 #include "shared/constants.h"
 #include "shared/messages.h"
 #include "shared/sim/game_sim.h"
+#include "shared/wire.h"
 #include "types.h"
 #include <array>
 #include <cstdint>
@@ -73,6 +74,23 @@ public:
 
   virtual PlayerConnection *findPlayerById(ServerPlayerId id) = 0;
 
+  virtual shared::LobbyUpdate buildLobbyUpdate() const = 0;
+
+  void broadcastLobbyUpdate() const;
+
+protected:
+  template <class Payload> void broadcast(const Payload &payload) const {
+    nlohmann::json envelope{};
+    envelope["type"] = Payload::TYPE;
+    envelope["payload"] = payload;
+    const auto frame = shared::encode(envelope);
+
+    for (auto *ws : player_sockets_) {
+      if (ws)
+        ws->send({reinterpret_cast<const char *>(frame.data()), frame.size()});
+    }
+  }
+
 protected:
   bool is_running_{false};
   bool is_over_{false};
@@ -102,6 +120,8 @@ public:
   void setPlayersReady(const WsConnection *ws, bool ready) override;
 
   PlayerConnection *findPlayerById(ServerPlayerId id) override;
+
+  shared::LobbyUpdate buildLobbyUpdate() const override;
 
 private:
   Players players_{};
@@ -138,6 +158,8 @@ public:
   void setPlayersReady(const WsConnection *ws, bool ready) override;
 
   PlayerConnection *findPlayerById(ServerPlayerId id) override;
+
+  shared::LobbyUpdate buildLobbyUpdate() const override;
 
 private:
   bool allPlayersReady() const override;

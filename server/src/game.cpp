@@ -200,13 +200,7 @@ void CoopGame::update(float dt) {
     }
   }
 
-  nlohmann::json envelope;
-  envelope["type"] = shared::ServerMessageType::COOP_GAME_STATE;
-  envelope["payload"] = state_;
-
-  for (const auto &ws : player_sockets_) {
-    ws->send(envelope.dump());
-  }
+  broadcast(state_);
 
   if (state_.phase ==
           static_cast<uint8_t>(shared::CoopGameSim::Phase::GAME_OVER) ||
@@ -264,13 +258,7 @@ void PvPGame::update(float dt) {
     }
   }
 
-  nlohmann::json envelope;
-  envelope["type"] = shared::ServerMessageType::PVP_GAME_STATE;
-  envelope["payload"] = state_;
-
-  for (const auto &ws : player_sockets_) {
-    ws->send(envelope.dump());
-  }
+  broadcast(state_);
 
   if (state_.phase == static_cast<uint8_t>(shared::PvPGameSim::Phase::END)) {
     is_running_ = false;
@@ -377,4 +365,56 @@ PlayerConnection *CoopGame::findPlayerById(ServerPlayerId id) {
   }
 
   return nullptr;
+}
+
+shared::LobbyUpdate PvPGame::buildLobbyUpdate() const {
+  shared::PvPGameLobbyUpdate::TeamInfos teamsInfos{};
+
+  for (auto i{0ul}; i < team_count_; ++i) {
+    teamsInfos[i].emplace();
+  }
+
+  auto slot{0ul};
+  for (const auto &team : teams_) {
+    if (!team)
+      continue;
+
+    auto &tInfo = teamsInfos[slot++];
+
+    if (!tInfo)
+      continue;
+
+    for (auto i{0ul}; i < team->players.size(); ++i) {
+      const auto &player = team->players[i];
+
+      if (player)
+        (*tInfo)[i] = shared::PlayerInfo{.id = player->id,
+                                         .name = player->name,
+                                         .is_ready = player->is_ready};
+    }
+  }
+
+  return shared::PvPGameLobbyUpdate{.teams = teamsInfos,
+                                    .team_size = team_size_,
+                                    .game_started = is_running_};
+}
+
+shared::LobbyUpdate CoopGame::buildLobbyUpdate() const {
+  shared::CoopGameLobbyUpdate::PlayerInfos playersInfos{};
+
+  for (auto i{0ul}; i < players_.size(); ++i) {
+    const auto &player = players_[i];
+
+    if (player) {
+      playersInfos[i] = shared::PlayerInfo{
+          .id = player->id, .name = player->name, .is_ready = player->is_ready};
+    }
+  }
+
+  return shared::CoopGameLobbyUpdate{.players = playersInfos,
+                                     .game_started = is_running_};
+}
+
+void Game::broadcastLobbyUpdate() const {
+  std::visit([this](const auto &u) { broadcast(u); }, buildLobbyUpdate());
 }
