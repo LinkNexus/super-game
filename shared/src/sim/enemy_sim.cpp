@@ -44,7 +44,8 @@ void EnemiesPoolSimState::init(uint8_t playersCount) {
     active_rows = MAX_ROWS;
   }
 
-  int pool_size_x = (COLS * EnemySimState::WIDTH) + (SPACING_X * (COLS - 1));
+  const float pool_size_x =
+      (COLS * EnemySimState::WIDTH) + (SPACING_X * (COLS - 1));
   offset_x = (SCREEN_WIDTH - pool_size_x) / 2.0f;
   offset_y = MIN_INITIAL_OFFSET_Y + (active_rows - 1) * ROW_PITCH;
   direction = 1;

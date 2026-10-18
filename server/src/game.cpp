@@ -144,13 +144,13 @@ void PvPGame::tryStart() {
   state_ = shared::PvPGameState();
 
   shared::PvPGameSim::TeamRosters ids{};
-  auto teamIdx{0ul};
+  std::size_t teamIdx{0};
   for (const auto &team : teams_) {
     if (team) {
       auto &[rId, rPlayers] = ids[teamIdx++].emplace();
       rId = team->id;
 
-      auto playerIdx{0ul};
+      std::size_t playerIdx{0};
       for (const auto &player : team->players) {
         if (player) {
           rPlayers[playerIdx++] = player->id;
@@ -222,7 +222,7 @@ void PvPGame::update(float dt) {
 
   inputs_.fill(std::nullopt);
 
-  auto inputIdx{0ul};
+  std::size_t inputIdx{0};
   for (auto &team : teams_) {
     if (team) {
       for (auto &player : team->players) {

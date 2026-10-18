@@ -40,8 +40,8 @@ struct EnemySimState {
 struct EnemiesPoolSimState {
   static constexpr float SPACING_X = 40.0f;
   static constexpr float SPACING_Y = 40.0f;
-  static constexpr int MAX_ROWS = 8;
-  static constexpr int COLS = 10;
+  static constexpr uint8_t MAX_ROWS = 8;
+  static constexpr uint8_t COLS = 10;
   static constexpr float ROW_PITCH = EnemySimState::HEIGHT + SPACING_Y;
   static constexpr float MIN_INITIAL_OFFSET_Y = SCREEN_HEIGHT + 30.0f;
   static constexpr float FINAL_OFFSET_Y = SCREEN_HEIGHT - 50.0f;
@@ -55,7 +55,7 @@ struct EnemiesPoolSimState {
                                  {MAX_PLAYERS_COOP - 2, MAX_ROWS - 3},
                                  {MAX_PLAYERS_COOP - 3, MAX_ROWS - 5}}};
 
-  int active_rows;
+  uint8_t active_rows;
   std::array<EnemySimState, MAX_ROWS * COLS> enemies;
   std::size_t alive_enemies_count;
   float offset_x;
