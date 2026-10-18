@@ -37,8 +37,8 @@ struct BossSimState {
   float phase2_shooting_cooldown;
   int phase2_bullets_shot;
 
-  int spread_shot_bullets_count;
-  int successive_shots_bullets_count;
+  uint8_t spread_shot_bullets_count;
+  uint8_t successive_shots_bullets_count;
 
   /// Horizontal movement direction: +1 or -1.
   int direction;
