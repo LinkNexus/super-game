@@ -35,6 +35,14 @@ const shared::PvPGameLobbyUpdate *pvpLobby(const shared::LobbyUpdate &update) {
   return std::get_if<shared::PvPGameLobbyUpdate>(&update);
 }
 
+/// `buildLobbyUpdate()` returns by value, and these hand back a pointer *into*
+/// that variant - so calling them on the temporary directly leaves a dangling
+/// pointer the moment the full expression ends. Deleting the rvalue overload
+/// makes that a compile error rather than a use-after-scope that happens to
+/// read the right bytes under one compiler and not the other.
+const shared::CoopGameLobbyUpdate *coopLobby(shared::LobbyUpdate &&) = delete;
+const shared::PvPGameLobbyUpdate *pvpLobby(shared::LobbyUpdate &&) = delete;
+
 } // namespace
 
 TEST(coop_lobby_lists_every_joined_player_by_slot_with_its_name) {
@@ -145,7 +153,8 @@ TEST(coop_lobby_reports_the_match_as_started_once_it_is_running) {
   game.setPlayersReady(&b, true);
   REQUIRE(game.isRunning());
 
-  const auto *lobby = coopLobby(game.buildLobbyUpdate());
+  const auto update = game.buildLobbyUpdate();
+  const auto *lobby = coopLobby(update);
   REQUIRE(lobby != nullptr);
   CHECK_EQ(lobby->game_started, true);
 }
@@ -221,7 +230,8 @@ TEST(pvp_lobby_reports_the_games_own_team_size) {
 
   REQUIRE(game.addPlayers(fakeConnection(a, {1})));
 
-  const auto *lobby = pvpLobby(game.buildLobbyUpdate());
+  const auto update = game.buildLobbyUpdate();
+  const auto *lobby = pvpLobby(update);
   REQUIRE(lobby != nullptr);
   CHECK_EQ(lobby->team_size, 2u);
 }
@@ -272,7 +282,8 @@ TEST(coop_lobby_frame_decodes_back_into_the_snapshot_that_was_sent) {
 
   const auto decoded =
       a.lastEnvelope().at("payload").get<shared::CoopGameLobbyUpdate>();
-  const auto *built = coopLobby(game.buildLobbyUpdate());
+  const auto update = game.buildLobbyUpdate();
+  const auto *built = coopLobby(update);
   REQUIRE(built != nullptr);
 
   CHECK_EQ(shared::count_optional(decoded.players),
