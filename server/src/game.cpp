@@ -231,29 +231,25 @@ void PvPGame::update(float dt) {
   sim_.step(state_, inputs_, dt);
 
   for (auto &team : teams_) {
-    std::optional<shared::TeamState> *teamStateIt{nullptr};
+    if (!team)
+      continue;
 
-    if (team) {
-      for (auto &player : team->players) {
-        teamStateIt =
-            teamStateIt ? teamStateIt
-                        : std::find_if(state_.teams.begin(), state_.teams.end(),
-                                       [&team](const auto &s) {
-                                         return s && s->id == team->id;
-                                       });
+    auto teamStateIt =
+        std::find_if(state_.teams.begin(), state_.teams.end(),
+                     [&team](const auto &s) { return s && s->id == team->id; });
 
-        if (teamStateIt == state_.teams.end())
-          continue;
+    for (auto &player : team->players) {
+      if (teamStateIt == state_.teams.end())
+        continue;
 
-        auto playerStateIt = std::find_if(
-            (*teamStateIt)->players.begin(), (*teamStateIt)->players.end(),
-            [&player](const auto &s) {
-              return s && player && s->id == player->id;
-            });
+      auto playerStateIt =
+          std::find_if((*teamStateIt)->players.begin(),
+                       (*teamStateIt)->players.end(), [&player](const auto &s) {
+                         return s && player && s->id == player->id;
+                       });
 
-        if (playerStateIt != (*teamStateIt)->players.end()) {
-          (*playerStateIt)->name = player->name;
-        }
+      if (playerStateIt != (*teamStateIt)->players.end()) {
+        (*playerStateIt)->name = player->name;
       }
     }
   }
