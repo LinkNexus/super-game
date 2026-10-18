@@ -82,8 +82,7 @@ int main(int, char *[]) {
                  auto initPlayers = [slotsCount,
                                      players = &data.players_data.players,
                                      &req]() {
-                   const auto slots =
-                       static_cast<std::size_t>(*slotsCount);
+                   const auto slots = static_cast<std::size_t>(*slotsCount);
 
                    for (std::size_t i{0}; i < slots; ++i) {
                      auto &[_, name] = (*players)[i].emplace();

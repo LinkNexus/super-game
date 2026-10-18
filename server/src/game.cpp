@@ -366,11 +366,11 @@ PlayerConnection *CoopGame::findPlayerById(ServerPlayerId id) {
 shared::LobbyUpdate PvPGame::buildLobbyUpdate() const {
   shared::PvPGameLobbyUpdate::TeamInfos teamsInfos{};
 
-  for (auto i{0ul}; i < team_count_; ++i) {
+  for (std::size_t i{0}; i < team_count_; ++i) {
     teamsInfos[i].emplace();
   }
 
-  auto slot{0ul};
+  std::size_t slot{0};
   for (const auto &team : teams_) {
     if (!team)
       continue;
@@ -380,7 +380,7 @@ shared::LobbyUpdate PvPGame::buildLobbyUpdate() const {
     if (!tInfo)
       continue;
 
-    for (auto i{0ul}; i < team->players.size(); ++i) {
+    for (std::size_t i{0}; i < team->players.size(); ++i) {
       const auto &player = team->players[i];
 
       if (player)
@@ -398,7 +398,7 @@ shared::LobbyUpdate PvPGame::buildLobbyUpdate() const {
 shared::LobbyUpdate CoopGame::buildLobbyUpdate() const {
   shared::CoopGameLobbyUpdate::PlayerInfos playersInfos{};
 
-  for (auto i{0ul}; i < players_.size(); ++i) {
+  for (std::size_t i{0}; i < players_.size(); ++i) {
     const auto &player = players_[i];
 
     if (player) {

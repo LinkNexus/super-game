@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <string>
 #include <variant>
@@ -226,7 +227,7 @@ void GameDesigner::drawLobby(OnlineSession *session, bool areReady) const {
           [&](const shared::CoopGameLobbyUpdate &u) {
             auto readyCount{0};
 
-            for (auto i{0ul}; i < u.players.size(); ++i) {
+            for (std::size_t i{0}; i < u.players.size(); ++i) {
               const auto &player = u.players[i];
 
               if (!player) {
