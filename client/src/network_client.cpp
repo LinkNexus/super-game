@@ -1,6 +1,7 @@
 #include "network_client.h"
 #include "ixwebsocket/IXNetSystem.h"
 #include "ixwebsocket/IXWebSocket.h"
+#include "shared/wire.h"
 #include <iostream>
 
 NetworkClient::NetworkClient(const std::string &url,
@@ -51,7 +52,7 @@ void NetworkClient::connect() {
 
 bool NetworkClient::send(const std::string &message) {
   if (ws_) {
-    ws_->send(message);
+    ws_->send(message, shared::WIRE_BINARY);
     return true;
   }
   return false;

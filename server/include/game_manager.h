@@ -17,15 +17,13 @@ public:
   GameId next_game_id{1};
 
 public:
-  std::optional<GameId>
-  joinOrCreateCoopGame(const PerSocketPlayers &players_data);
+  CoopGame *joinOrCreateCoopGame(const PerSocketPlayers &players_data);
 
   CoopGame *createCoopGame();
 
-  std::optional<GameId>
-  joinOrCreatePvPGame(const PerSocketPlayers &players_data,
-                      shared::PlayerCount team_size,
-                      shared::PlayerCount team_count);
+  PvPGame *joinOrCreatePvPGame(const PerSocketPlayers &players_data,
+                               shared::PlayerCount team_size,
+                               shared::PlayerCount team_count);
 
   PvPGame *createPvPGame(shared::PlayerCount team_size,
                          shared::PlayerCount team_count);

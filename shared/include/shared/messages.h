@@ -82,13 +82,14 @@ struct PlayerInfo {
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(PlayerInfo, name, is_ready, id)
 
 struct CoopGameLobbyUpdate {
-  std::array<PlayerInfo, MAX_PLAYERS_COOP> players{};
-  shared::PlayerCount players_count{};
-  shared::PlayerCount max_players_count{};
+  using PlayerInfos = std::array<std::optional<PlayerInfo>, MAX_PLAYERS_COOP>;
+
+  PlayerInfos players{};
   bool game_started{};
+
+  static constexpr auto TYPE = ServerMessageType::COOP_GAME_LOBBY_UPDATE;
 };
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(CoopGameLobbyUpdate, players, game_started,
-                                   max_players_count, players_count)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(CoopGameLobbyUpdate, players, game_started)
 
 struct PvPGameLobbyUpdate {
   using TeamInfos =
@@ -97,12 +98,13 @@ struct PvPGameLobbyUpdate {
                  MAX_TEAMS>;
 
   TeamInfos teams{};
-  uint8_t team_count{};
   uint8_t team_size{};
   bool game_started{};
+
+  static constexpr auto TYPE = ServerMessageType::PVP_GAME_LOBBY_UPDATE;
 };
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(PvPGameLobbyUpdate, teams, game_started,
-                                   team_size, team_count)
+                                   team_size)
 
 using LobbyUpdate = std::variant<CoopGameLobbyUpdate, PvPGameLobbyUpdate>;
 
@@ -171,6 +173,8 @@ struct CoopGameState : BaseState {
   EnemiesPoolState enemies{};
   float enemies_offset_x, enemies_offset_y{};
   BossState boss{};
+
+  static constexpr auto TYPE = ServerMessageType::COOP_GAME_STATE;
 };
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(CoopGameState, phase, players, bullets,
                                    enemies, enemies_offset_x, enemies_offset_y,
@@ -185,6 +189,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(TeamState, id, outcome, players)
 
 struct PvPGameState : BaseState {
   std::array<std::optional<TeamState>, MAX_TEAMS> teams{};
+
+  static constexpr auto TYPE = ServerMessageType::PVP_GAME_STATE;
 };
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(PvPGameState, phase, teams, bullets)
 

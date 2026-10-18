@@ -1,6 +1,7 @@
 add_executable(supergame-server-tests
     test_roster.cpp
     test_match.cpp
+    test_lobby.cpp
 )
 
 target_link_libraries(supergame-server-tests PRIVATE

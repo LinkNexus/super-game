@@ -226,28 +226,32 @@ void GameDesigner::drawLobby(OnlineSession *session, bool areReady) const {
           [&](const shared::CoopGameLobbyUpdate &u) {
             auto readyCount{0};
 
-            for (std::size_t i = 0; i < u.max_players_count; ++i) {
-              if (i >= u.players_count) {
+            for (auto i{0ul}; i < u.players.size(); ++i) {
+              const auto &player = u.players[i];
+
+              if (!player) {
                 y = drawEmptySlot(y);
                 continue;
               }
 
-              const auto &p = u.players[i];
-              if (p.is_ready)
+              if (player->is_ready)
                 ++readyCount;
 
-              y = drawSlot(p, i + 1, y);
+              y = drawSlot(*player, i + 1, y);
             }
 
             y += LINE_GAP;
             y = drawCentered(TextFormat("Players ready: %d/%d", readyCount,
-                                        static_cast<int>(u.max_players_count)),
+                                        static_cast<int>(
+                                            shared::count_optional(u.players))),
                              y, HINT_FONT_SIZE, LIGHTGRAY) +
                 SECTION_GAP;
           },
           [&](const shared::PvPGameLobbyUpdate &u) {
             std::string subtitle{std::to_string(u.team_size)};
-            for (std::size_t i = 1; i < u.team_count; ++i)
+            auto teamCount = shared::count_optional(u.teams);
+
+            for (std::size_t i = 1; i < teamCount; ++i)
               subtitle += " Vs " + std::to_string(u.team_size);
 
             y = drawCentered(subtitle.c_str(), y, HINT_FONT_SIZE, DARKGRAY) +
@@ -274,14 +278,12 @@ void GameDesigner::drawLobby(OnlineSession *session, bool areReady) const {
                   LINE_GAP;
 
               for (std::size_t slot = 0; slot < u.team_size; ++slot) {
-                if (slot >= shared::count_optional(*team)) {
+                const auto &p = (*team)[slot];
+
+                if (!p) {
                   y = drawEmptySlot(y);
                   continue;
                 }
-
-                const auto &p = (*team)[slot];
-                if (!p)
-                  continue;
 
                 if (p->is_ready)
                   ++readyCount;
@@ -293,7 +295,7 @@ void GameDesigner::drawLobby(OnlineSession *session, bool areReady) const {
             }
 
             y = drawCentered(TextFormat("Players ready: %d/%d", readyCount,
-                                        u.team_count * u.team_size),
+                                        teamCount * u.team_size),
                              y, HINT_FONT_SIZE, LIGHTGRAY) +
                 SECTION_GAP;
           }},

@@ -133,40 +133,46 @@ TEST(manager_matches_a_second_coop_connection_into_the_same_game) {
   FakeConnection a, b;
   GameManager manager;
 
-  const auto first = manager.joinOrCreateCoopGame(fakeConnection(a, {1}));
-  const auto second = manager.joinOrCreateCoopGame(fakeConnection(b, {2}));
+  auto *first = manager.joinOrCreateCoopGame(fakeConnection(a, {1}));
+  auto *second = manager.joinOrCreateCoopGame(fakeConnection(b, {2}));
 
-  REQUIRE(first.has_value());
-  REQUIRE(second.has_value());
-  CHECK_EQ(*first, *second);
-  CHECK(manager.findGameById(*first) != nullptr);
+  REQUIRE(first != nullptr);
+  REQUIRE(second != nullptr);
+  CHECK_EQ(first, second);
+  CHECK(manager.findGameById(first->id) != nullptr);
 }
 
 TEST(manager_keeps_coop_and_pvp_seekers_in_separate_pools) {
   FakeConnection a, b;
   GameManager manager;
 
-  const auto coop = manager.joinOrCreateCoopGame(fakeConnection(a, {1}));
-  const auto pvp = manager.joinOrCreatePvPGame(fakeConnection(b, {2}), 1, 2);
+  const auto *coop = manager.joinOrCreateCoopGame(fakeConnection(a, {1}));
+  const auto *pvp = manager.joinOrCreatePvPGame(fakeConnection(b, {2}), 1, 2);
 
-  REQUIRE(coop.has_value());
-  REQUIRE(pvp.has_value());
-  CHECK(*coop != *pvp);
+  REQUIRE(coop != nullptr);
+  REQUIRE(pvp != nullptr);
+  // Compared by id rather than by pointer: the two handles are unrelated
+  // types now, and distinct ids is the property that matters anyway.
+  CHECK(coop->id != pvp->id);
 }
 
 TEST(manager_destroys_a_game_and_stops_matching_into_it) {
   FakeConnection a, b;
   GameManager manager;
 
-  const auto id = manager.joinOrCreateCoopGame(fakeConnection(a, {1}));
-  REQUIRE(id.has_value());
+  auto *game = manager.joinOrCreateCoopGame(fakeConnection(a, {1}));
+  REQUIRE(game != nullptr);
 
-  manager.destroyGame(*id);
-  CHECK(manager.findGameById(*id) == nullptr);
+  // Read the id out before the destroy: the handle itself dangles from that
+  // point on, which is the whole hazard this case is about.
+  const auto id = game->id;
+
+  manager.destroyGame(id);
+  CHECK(manager.findGameById(id) == nullptr);
 
   // The destroyed game must also be gone from the open-games pool, or the
   // next joiner gets matched into freed memory.
-  const auto next = manager.joinOrCreateCoopGame(fakeConnection(b, {2}));
-  REQUIRE(next.has_value());
-  CHECK(*next != *id);
+  auto *next = manager.joinOrCreateCoopGame(fakeConnection(b, {2}));
+  REQUIRE(next != nullptr);
+  CHECK(next->id != id);
 }
