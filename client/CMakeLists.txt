@@ -31,11 +31,20 @@ if(WIN32)
 
     # Statically link the MinGW runtime (libgcc/libstdc++/libwinpthread) so
     # the .exe runs standalone - a stock Windows install doesn't have those
-    # DLLs, only the Universal CRT ones.
-    target_link_options(supergame-client PRIVATE -static-libgcc -static-libstdc++ -static)
+    # DLLs, only the Universal CRT ones. GCC-only flags; MSVC's link.exe
+    # doesn't understand them.
+    if(MINGW)
+        target_link_options(supergame-client PRIVATE -static-libgcc -static-libstdc++ -static)
+    endif()
 
     # No console window alongside the game window when launched.
     set_target_properties(supergame-client PROPERTIES WIN32_EXECUTABLE TRUE)
+
+    # MSVC's /SUBSYSTEM:WINDOWS expects a WinMain entry point; point the CRT
+    # at the regular main() instead (MinGW does this on its own).
+    if(MSVC)
+        target_link_options(supergame-client PRIVATE /ENTRY:mainCRTStartup)
+    endif()
 endif()
 
 # Copy assets next to the binary after build
