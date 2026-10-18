@@ -200,13 +200,7 @@ void CoopGame::update(float dt) {
     }
   }
 
-  nlohmann::json envelope;
-  envelope["type"] = shared::ServerMessageType::COOP_GAME_STATE;
-  envelope["payload"] = state_;
-
-  for (const auto &ws : player_sockets_) {
-    ws->send(envelope.dump());
-  }
+  broadcast(state_);
 
   if (state_.phase ==
           static_cast<uint8_t>(shared::CoopGameSim::Phase::GAME_OVER) ||
@@ -237,40 +231,30 @@ void PvPGame::update(float dt) {
   sim_.step(state_, inputs_, dt);
 
   for (auto &team : teams_) {
-    std::optional<shared::TeamState> *teamStateIt{nullptr};
+    if (!team)
+      continue;
 
-    if (team) {
-      for (auto &player : team->players) {
-        teamStateIt =
-            teamStateIt ? teamStateIt
-                        : std::find_if(state_.teams.begin(), state_.teams.end(),
-                                       [&team](const auto &s) {
-                                         return s && s->id == team->id;
-                                       });
+    auto teamStateIt =
+        std::find_if(state_.teams.begin(), state_.teams.end(),
+                     [&team](const auto &s) { return s && s->id == team->id; });
 
-        if (teamStateIt == state_.teams.end())
-          continue;
+    for (auto &player : team->players) {
+      if (teamStateIt == state_.teams.end())
+        continue;
 
-        auto playerStateIt = std::find_if(
-            (*teamStateIt)->players.begin(), (*teamStateIt)->players.end(),
-            [&player](const auto &s) {
-              return s && player && s->id == player->id;
-            });
+      auto playerStateIt =
+          std::find_if((*teamStateIt)->players.begin(),
+                       (*teamStateIt)->players.end(), [&player](const auto &s) {
+                         return s && player && s->id == player->id;
+                       });
 
-        if (playerStateIt != (*teamStateIt)->players.end()) {
-          (*playerStateIt)->name = player->name;
-        }
+      if (playerStateIt != (*teamStateIt)->players.end()) {
+        (*playerStateIt)->name = player->name;
       }
     }
   }
 
-  nlohmann::json envelope;
-  envelope["type"] = shared::ServerMessageType::PVP_GAME_STATE;
-  envelope["payload"] = state_;
-
-  for (const auto &ws : player_sockets_) {
-    ws->send(envelope.dump());
-  }
+  broadcast(state_);
 
   if (state_.phase == static_cast<uint8_t>(shared::PvPGameSim::Phase::END)) {
     is_running_ = false;
@@ -377,4 +361,56 @@ PlayerConnection *CoopGame::findPlayerById(ServerPlayerId id) {
   }
 
   return nullptr;
+}
+
+shared::LobbyUpdate PvPGame::buildLobbyUpdate() const {
+  shared::PvPGameLobbyUpdate::TeamInfos teamsInfos{};
+
+  for (auto i{0ul}; i < team_count_; ++i) {
+    teamsInfos[i].emplace();
+  }
+
+  auto slot{0ul};
+  for (const auto &team : teams_) {
+    if (!team)
+      continue;
+
+    auto &tInfo = teamsInfos[slot++];
+
+    if (!tInfo)
+      continue;
+
+    for (auto i{0ul}; i < team->players.size(); ++i) {
+      const auto &player = team->players[i];
+
+      if (player)
+        (*tInfo)[i] = shared::PlayerInfo{.id = player->id,
+                                         .name = player->name,
+                                         .is_ready = player->is_ready};
+    }
+  }
+
+  return shared::PvPGameLobbyUpdate{.teams = teamsInfos,
+                                    .team_size = team_size_,
+                                    .game_started = is_running_};
+}
+
+shared::LobbyUpdate CoopGame::buildLobbyUpdate() const {
+  shared::CoopGameLobbyUpdate::PlayerInfos playersInfos{};
+
+  for (auto i{0ul}; i < players_.size(); ++i) {
+    const auto &player = players_[i];
+
+    if (player) {
+      playersInfos[i] = shared::PlayerInfo{
+          .id = player->id, .name = player->name, .is_ready = player->is_ready};
+    }
+  }
+
+  return shared::CoopGameLobbyUpdate{.players = playersInfos,
+                                     .game_started = is_running_};
+}
+
+void Game::broadcastLobbyUpdate() const {
+  std::visit([this](const auto &u) { broadcast(u); }, buildLobbyUpdate());
 }

@@ -18,7 +18,7 @@ public:
   /// start firing (on a background thread) before this call returns.
   void connect();
 
-  /// Sends @p message as a text frame.
+  /// Sends @p message as a either a text or a binary frame.
   /// @return false if not currently connected.
   bool send(const std::string &message);
 

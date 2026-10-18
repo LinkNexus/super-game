@@ -15,19 +15,17 @@ CoopGame *GameManager::createCoopGame() {
   return gamePtr;
 }
 
-std::optional<GameId>
+CoopGame *
 GameManager::joinOrCreateCoopGame(const PerSocketPlayers &players_data) {
   for (auto game : open_coop_games_) {
     if (game->addPlayers(players_data)) {
-      return game->id;
+      return game;
     }
   }
 
   auto new_game = createCoopGame();
   open_coop_games_.push_back(new_game);
-  return new_game->addPlayers(players_data)
-             ? std::optional<GameId>{new_game->id}
-             : std::nullopt;
+  return new_game->addPlayers(players_data) ? new_game : nullptr;
 }
 
 PvPGame *GameManager::createPvPGame(shared::PlayerCount team_size,
@@ -39,23 +37,20 @@ PvPGame *GameManager::createPvPGame(shared::PlayerCount team_size,
   return gamePtr;
 }
 
-std::optional<GameId>
-GameManager::joinOrCreatePvPGame(const PerSocketPlayers &players_data,
-                                 shared::PlayerCount team_size,
-                                 shared::PlayerCount team_count) {
+PvPGame *GameManager::joinOrCreatePvPGame(const PerSocketPlayers &players_data,
+                                          shared::PlayerCount team_size,
+                                          shared::PlayerCount team_count) {
   auto &openGames = open_pvp_games_[{team_count, team_size}];
 
   for (auto game : openGames) {
     if (game->addPlayers(players_data)) {
-      return game->id;
+      return game;
     }
   }
 
   auto new_game = createPvPGame(team_size, team_count);
   openGames.push_back(new_game);
-  return new_game->addPlayers(players_data)
-             ? std::optional<GameId>{new_game->id}
-             : std::nullopt;
+  return new_game->addPlayers(players_data) ? new_game : nullptr;
 }
 
 Game *GameManager::findGameById(GameId id) const {

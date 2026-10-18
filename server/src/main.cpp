@@ -9,6 +9,7 @@
 #include "shared/helpers.h"
 #include "shared/messages.h"
 #include "shared/rnd_generator.h"
+#include "shared/wire.h"
 #include "types.h"
 #include <cstddef>
 #include <cstdio>
@@ -19,7 +20,8 @@ struct PerSocketData;
 struct UwsConnection final : WsConnection {
   uWS::WebSocket<false, true, PerSocketData> *ws{};
   void send(std::string_view payload) override {
-    ws->send(payload, uWS::OpCode::TEXT);
+    ws->send(payload,
+             shared::WIRE_BINARY ? uWS::OpCode::BINARY : uWS::OpCode::TEXT);
   }
 };
 
@@ -29,81 +31,6 @@ struct PerSocketData {
   PerSocketPlayers players_data{};
   UwsConnection connection{};
 };
-
-/// Builds and broadcasts a `LOBBY_UPDATE` to every player in @p data's
-/// game: current roster (name + ready state per slot) and whether the
-/// match has started. Called after any lobby-relevant change - a join, a
-/// disconnect, or a ready toggle - so every client's lobby screen stays in
-/// sync.
-auto sendLobbyUpdate(const GameManager &manager, PerSocketData *data) {
-  nlohmann::json envelope;
-  auto g = manager.findGameById(data->game_id);
-  if (!g)
-    return;
-
-  std::visit(shared::overloaded{
-                 [&g, &envelope](const CoopGameType &) {
-                   auto game = dynamic_cast<CoopGame *>(g);
-                   const auto &players = game->getPlayers();
-
-                   std::array<shared::PlayerInfo, shared::MAX_PLAYERS_COOP>
-                       playersInfos{};
-                   shared::PlayerCount idx{0};
-                   for (const auto &player : players) {
-                     if (player) {
-                       playersInfos[idx++] =
-                           shared::PlayerInfo{.id = player->id,
-                                              .name = player->name,
-                                              .is_ready = player->is_ready};
-                     }
-                   }
-
-                   envelope["type"] =
-                       shared::ServerMessageType::COOP_GAME_LOBBY_UPDATE;
-                   envelope["payload"] = shared::CoopGameLobbyUpdate{
-                       .players = playersInfos,
-                       .players_count = shared::count_optional(players),
-                       .max_players_count = shared::MAX_PLAYERS_COOP,
-                       .game_started = game->isRunning()};
-                 },
-                 [&g, &envelope](const PvPGameType &t) {
-                   auto game = dynamic_cast<PvPGame *>(g);
-                   const auto &teams = game->getTeams();
-
-                   shared::PvPGameLobbyUpdate::TeamInfos teamsInfos{};
-
-                   std::size_t teamInfoSlot{0};
-                   for (const auto &team : teams) {
-                     if (!team)
-                       continue;
-
-                     shared::PlayerCount idx{0};
-                     for (const auto &player : team->players) {
-                       if (player)
-                         teamsInfos[teamInfoSlot].emplace()[idx++] =
-                             shared::PlayerInfo{.id = player->id,
-                                                .name = player->name,
-                                                .is_ready = player->is_ready};
-                     }
-
-                     ++teamInfoSlot;
-                   }
-
-                   envelope["type"] =
-                       shared::ServerMessageType::PVP_GAME_LOBBY_UPDATE;
-                   envelope["payload"] = shared::PvPGameLobbyUpdate{
-                       .teams = teamsInfos,
-                       .team_count = t.team_count,
-                       .team_size = t.team_size,
-                       .game_started = game->isRunning()};
-                 }},
-             data->game_type);
-
-  for (const auto &socket : g->getPlayerSockets()) {
-    if (socket)
-      socket->send(envelope.dump());
-  }
-}
 
 int main(int, char *[]) {
   RndGenerator::seed();
@@ -217,19 +144,18 @@ int main(int, char *[]) {
                    }
                  }
 
-                 std::visit(shared::overloaded{
-                                [&data, &manager](CoopGameType &) {
-                                  if (auto res = manager.joinOrCreateCoopGame(
-                                          data->players_data))
-                                    data->game_id = res.value();
-                                },
-                                [&data, &manager](PvPGameType &t) {
-                                  if (auto res = manager.joinOrCreatePvPGame(
-                                          data->players_data, t.team_size,
-                                          t.team_count))
-                                    data->game_id = res.value();
-                                }},
-                            data->game_type);
+                 Game *game{nullptr};
+                 std::visit(
+                     shared::overloaded{
+                         [&data, &manager, &game](CoopGameType &) {
+                           game =
+                               manager.joinOrCreateCoopGame(data->players_data);
+                         },
+                         [&data, &manager, &game](PvPGameType &t) {
+                           game = manager.joinOrCreatePvPGame(
+                               data->players_data, t.team_size, t.team_count);
+                         }},
+                     data->game_type);
 
                  nlohmann::json welcomeEnvelope;
                  welcomeEnvelope["type"] = shared::ServerMessageType::WELCOME;
@@ -244,9 +170,12 @@ int main(int, char *[]) {
 
                  welcomeEnvelope["payload"] =
                      shared::WelcomeMessage{.players_ids = ids};
-                 ws->send(welcomeEnvelope.dump());
+                 ws->send(shared::encode(welcomeEnvelope));
 
-                 sendLobbyUpdate(manager, data);
+                 if (game) {
+                   data->game_id = game->id;
+                   game->broadcastLobbyUpdate();
+                 }
                },
            // Dispatches an incoming `{type, payload}` envelope by
            // `ClientMessageType`. The whole parse+dispatch is wrapped in
@@ -258,18 +187,20 @@ int main(int, char *[]) {
                  auto *data = ws->getUserData();
 
                  try {
-                   auto j = nlohmann::json::parse(message);
+                   auto j = shared::decode(message);
 
-                   switch (j.at("type").get<shared::ClientMessageType>()) {
+                   const auto type{
+                       j.at("type").get<shared::ClientMessageType>()};
+
+                   switch (type) {
                    case shared::ClientMessageType::READY: {
-                     auto game = manager.findGameById(data->game_id);
-                     if (game) {
+                     if (auto game = manager.findGameById(data->game_id)) {
                        game->setPlayersReady(data->players_data.ws,
                                              j.at("payload")
                                                  .get<shared::ReadyMessage>()
                                                  .is_ready);
+                       game->broadcastLobbyUpdate();
                      }
-                     sendLobbyUpdate(manager, data);
                      break;
                    }
 
@@ -335,7 +266,7 @@ int main(int, char *[]) {
                  }
 
                  if (!game->isOver() && !game->isRunning())
-                   sendLobbyUpdate(manager, data);
+                   game->broadcastLobbyUpdate();
                }})
       .listen("0.0.0.0", 9001,
               [](auto *token) {

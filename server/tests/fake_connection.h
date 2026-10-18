@@ -11,9 +11,9 @@
 /// Deliberately the only place the suite builds one, so a change to the
 /// interface lands here rather than in every case.
 
-#include "game.h"
 #include "nlohmann/json.hpp"
 #include "shared/messages.h"
+#include "shared/wire.h"
 #include "types.h"
 #include <cstddef>
 #include <initializer_list>
@@ -38,7 +38,7 @@ struct FakeConnection final : WsConnection {
     if (sent.empty())
       throw std::runtime_error("no frame was sent on this connection");
 
-    return nlohmann::json::parse(sent.back());
+    return shared::decode(sent.back());
   }
 
   shared::ServerMessageType lastType() const {

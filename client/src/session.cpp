@@ -6,6 +6,7 @@
 #include "shared/helpers.h"
 #include "shared/messages.h"
 #include "shared/sim/game_sim.h"
+#include "shared/wire.h"
 #include <algorithm>
 #include <optional>
 #include <string>
@@ -89,7 +90,7 @@ shared::GameState OnlineSession::step(
   }
 
   inputEnvelope["payload"] = inputsToSend;
-  client_.send(inputEnvelope.dump());
+  client_.send(shared::encode(inputEnvelope));
 
   if (auto s = state_box_.take()) {
     last_update_time_ = std::chrono::steady_clock::now();
@@ -123,12 +124,12 @@ void OnlineSession::sendReady(bool isReady) {
   readyEnvelope["type"] = shared::ClientMessageType::READY;
   readyEnvelope["payload"] = shared::ReadyMessage{.is_ready = isReady};
 
-  client_.send(readyEnvelope.dump());
+  client_.send(shared::encode(readyEnvelope));
 }
 
 void OnlineSession::onMessage(const std::string &msg) {
   try {
-    auto j = nlohmann::json::parse(msg);
+    auto j = shared::decode(msg);
     auto payload = j.at("payload");
 
     switch (j.at("type").get<shared::ServerMessageType>()) {
