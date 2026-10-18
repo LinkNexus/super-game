@@ -65,6 +65,54 @@ jobs:
       - name: Run tests
         run: ctest --preset tests
 
+  # The same two suites again, but pinned to g++-14 rather than whatever g++
+  # ubuntu-latest defaults to (13 on 24.04).
+  #
+  # This exists because of a specific break: GCC 14's -Wchanges-meaning
+  # rejected a member type alias in PvPGameSim whose initializer named the
+  # unqualified namespace-scope template, which is ill-formed per
+  # [basic.scope.class] and which GCC enforces as an *error by default* while
+  # clang silently accepts it. That built green on clang locally and failed the
+  # pipeline. The existing jobs are all GCC already, so the gap this closes is
+  # the *version*, not the toolchain - newer GCC keeps turning previously-quiet
+  # ill-formed code into hard errors, and finding that out on the newest
+  # available compiler is cheaper than finding out when a runner image moves.
+  #
+  # Needs no submodules, same as test-shared: the `tests` preset is
+  # BUILD_CLIENT=OFF + BUILD_SERVER=OFF. Kept separate from test-shared rather
+  # than folded into a matrix, because that job's id is what branch protection
+  # and two `needs:` below refer to.
+  #
+  # Note -Werror (see the root CMakeLists) applies here too, so a warning that
+  # only GCC 14 emits fails this job even when every other build is green -
+  # which is the point.
+  test-gcc14:
+    runs-on: ubuntu-latest
+    env:
+      CC: gcc-14
+      CXX: g++-14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      - name: Install build deps
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends \
+            cmake ninja-build gcc-14 g++-14
+
+      - name: Report compiler version
+        run: g++-14 --version
+
+      - name: Build tests
+        run: |
+          cmake --preset tests
+          cmake --build --preset tests
+
+      - name: Run tests
+        run: ctest --preset tests
+
   build-client-linux:
     runs-on: ubuntu-latest
     steps:
