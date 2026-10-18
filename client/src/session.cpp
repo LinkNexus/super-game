@@ -85,7 +85,7 @@ shared::GameState OnlineSession::step(
 
   shared::PlayerInputs<shared::MAX_PLAYERS_PER_CLIENT> inputsToSend{};
 
-  for (auto i{0ul}; i < inputs.size() && i < inputsToSend.size(); ++i) {
+  for (std::size_t i{0}; i < inputs.size() && i < inputsToSend.size(); ++i) {
     inputsToSend[i] = inputs[i];
   }
 

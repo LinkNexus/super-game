@@ -143,9 +143,8 @@ void BossSimState::step(float dt,
     overflow = position.x - (SCREEN_WIDTH - WIDTH / 2);
   }
 
-  position += {
-      direction * (overflow ? (overflow.value() + 1) : CYCLE_SPEED * dt),
-  };
+  position +=
+      {direction * (overflow ? (overflow.value() + 1) : CYCLE_SPEED * dt), 0};
 
   if (current_phase < PHASES_COUNT &&
       health <= MIN_LP_PER_SWITCH[current_phase - 1] * max_health) {

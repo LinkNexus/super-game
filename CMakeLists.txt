@@ -24,6 +24,40 @@ else()
     target_compile_options(supergame-warnings INTERFACE -Wall -Wextra)
 endif()
 
+# Marks a vendored target's interface include directories as SYSTEM, so that
+# -Wall -Wextra (and, once L64 lands, -Werror) stay off *their* headers when
+# those headers are compiled as part of *our* translation units.
+#
+# supergame-warnings already keeps our flags off vendored *targets* - but a
+# vendored header pulled into one of our .cpp files is compiled with our flags,
+# so the suppression has to travel with the include path instead. Without this,
+# -Werror would fail on warnings in raylib.h or IXWebSocket.h that aren't ours
+# to fix.
+#
+# `add_subdirectory(... SYSTEM)` and the SYSTEM target property both do this in
+# one line, but they are CMake 3.25+ and this project's floor is 3.20 (see
+# cmake_minimum_required above), so copy the interface includes across by hand.
+# Targets we define ourselves (uwebsockets, nlohmann_json) pass SYSTEM straight
+# to target_include_directories and don't need this.
+function(supergame_mark_vendored_system target)
+    if(NOT TARGET ${target})
+        message(AUTHOR_WARNING
+            "supergame_mark_vendored_system: no target '${target}'")
+        return()
+    endif()
+
+    get_target_property(_aliased ${target} ALIASED_TARGET)
+    if(_aliased)
+        set(target ${_aliased})
+    endif()
+
+    get_target_property(_includes ${target} INTERFACE_INCLUDE_DIRECTORIES)
+    if(_includes)
+        set_target_properties(${target} PROPERTIES
+            INTERFACE_SYSTEM_INCLUDE_DIRECTORIES "${_includes}")
+    endif()
+endfunction()
+
 # Unit tests cover the two headless halves of the codebase: shared/ (the
 # simulation) and server/ (matchmaking and connection lifetime, via
 # supergame-server-lib). Neither needs raylib or a listening socket, so the
@@ -74,6 +108,7 @@ if(BUILD_CLIENT)
     set(BUILD_GAMES OFF CACHE BOOL "" FORCE)
 
     add_subdirectory(vendor/raylib)
+    supergame_mark_vendored_system(raylib)
 
     # IXWebSocket (client-side WebSocket connection)
     include(vendor/ixwebsocket.cmake)

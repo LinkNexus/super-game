@@ -11,6 +11,7 @@
 #include "shared/rnd_generator.h"
 #include "shared/wire.h"
 #include "types.h"
+#include <cstddef>
 #include <cstdio>
 #include <cstring>
 
@@ -81,8 +82,9 @@ int main(int, char *[]) {
                  auto initPlayers = [slotsCount,
                                      players = &data.players_data.players,
                                      &req]() {
-                   for (auto i{0ul};
-                        i < static_cast<unsigned long>(*slotsCount); ++i) {
+                   const auto slots = static_cast<std::size_t>(*slotsCount);
+
+                   for (std::size_t i{0}; i < slots; ++i) {
                      auto &[_, name] = (*players)[i].emplace();
                      auto reqName =
                          req->getQuery("name" + std::to_string(i + 1));

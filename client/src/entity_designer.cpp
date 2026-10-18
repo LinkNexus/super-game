@@ -8,6 +8,8 @@
 #include "shared/messages.h"
 #include "types.h"
 #include "utils.h"
+#include <cstddef>
+#include <utility>
 
 void EntityDesigner::loadTextures() {
   boss_texture_ = LoadTexture("assets/boss.png");
@@ -227,7 +229,7 @@ void EntityDesigner::drawPlayersForCoopGame(const shared::CoopGameState &state,
   auto yOffset = 10.0f;
   const auto playerIds = session->getPlayersIds();
 
-  for (auto idx{0ul}; idx < state.players.size(); ++idx) {
+  for (std::size_t idx{0}; idx < state.players.size(); ++idx) {
     const auto &player = state.players[idx];
 
     if (!player)
@@ -267,7 +269,7 @@ void EntityDesigner::drawPlayersForPvPGame(Session *session,
 
   std::size_t colorIdx{0};
 
-  for (auto teamIdx{0ul}; teamIdx < state.teams.size(); ++teamIdx) {
+  for (std::size_t teamIdx{0}; teamIdx < state.teams.size(); ++teamIdx) {
     const auto &team = state.teams[teamIdx];
 
     if (!team)
@@ -297,7 +299,8 @@ void EntityDesigner::drawPlayersForPvPGame(Session *session,
                     : PLAYER_COLORS[colorIdx++ % PLAYER_COLORS.size()];
       } else {
         if (thisMachineTeam != state.teams.end() &&
-            std::distance(state.teams.begin(), thisMachineTeam) == teamIdx) {
+            std::cmp_equal(std::distance(state.teams.begin(), thisMachineTeam),
+                           teamIdx)) {
           color = playerIdxOnThisMachine == 0
                       ? MAIN_PLAYER_COLOR
                       : PLAYER_COLORS[colorIdx++ % PLAYER_COLORS.size()];
