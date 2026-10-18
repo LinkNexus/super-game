@@ -14,14 +14,22 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 # aren't ours to fix and would bury our own - and the flag list lives in one
 # place instead of being repeated in every subdirectory's CMakeLists.
 #
-# Deliberately NOT -Werror yet: the existing sources still emit warnings, so
-# a hard error would block every build. Once that list is clear, adding
-# -Werror here turns any new warning into a build failure.
+# -Werror is on (L64): the warning list is clear, so any new warning in our own
+# code fails the build rather than scrolling past. Two things make that safe to
+# leave on. Vendored include paths are marked SYSTEM (see
+# supergame_mark_vendored_system below, plus the uwebsockets and nlohmann_json
+# targets), so a warning in raylib.h or json.hpp compiled inside one of our
+# translation units is not ours to fail on. And vendored *targets* never link
+# this interface, so raylib compiling its own stb_vorbis.c is unaffected.
+#
+# If a new warning ever has to be tolerated temporarily, suppress that one
+# diagnostic (-Wno-<name>) with a comment rather than dropping -Werror
+# globally - the whole value here is that the clean state stays clean.
 add_library(supergame-warnings INTERFACE)
 if(MSVC)
-    target_compile_options(supergame-warnings INTERFACE /W4)
+    target_compile_options(supergame-warnings INTERFACE /W4 /WX)
 else()
-    target_compile_options(supergame-warnings INTERFACE -Wall -Wextra)
+    target_compile_options(supergame-warnings INTERFACE -Wall -Wextra -Werror)
 endif()
 
 # Marks a vendored target's interface include directories as SYSTEM, so that
