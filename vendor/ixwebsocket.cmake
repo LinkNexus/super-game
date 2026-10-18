@@ -19,3 +19,8 @@ set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 set(IXWEBSOCKET_INSTALL OFF CACHE BOOL "" FORCE)
 
 add_subdirectory(vendor/ixwebsocket)
+
+# See supergame_mark_vendored_system in the root CMakeLists: IXWebSocket's
+# headers reach our translation units through client/src/network_client.cpp,
+# so its include path has to be SYSTEM or our warning flags apply to them.
+supergame_mark_vendored_system(ixwebsocket)
