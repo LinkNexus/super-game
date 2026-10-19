@@ -85,6 +85,17 @@
         "BUILD_CLIENT": "OFF",
         "BUILD_SERVER": "OFF"
       }
+    },
+    {
+      "name": "tests-asan",
+      "displayName": "Tests only (Debug, ASan + UBSan)",
+      "description": "The `tests` preset with AddressSanitizer and UndefinedBehaviorSanitizer on. -Werror cannot catch undefined behaviour, and UB is what diverged between clang and GCC in the test_lobby.cpp stack-use-after-scope (L64) - a throwaway -fsanitize=address build named it in seconds. Own build dir so it never shares an object file with the plain `tests` tree. -fno-sanitize-recover=all makes a UBSan finding exit non-zero instead of printing and continuing, which is what turns it into a CI gate; -fno-omit-frame-pointer keeps the reported stacks readable.",
+      "inherits": "tests",
+      "cacheVariables": {
+        "CMAKE_C_FLAGS": "-fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer",
+        "CMAKE_CXX_FLAGS": "-fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer",
+        "CMAKE_EXE_LINKER_FLAGS": "-fsanitize=address,undefined"
+      }
     }
   ],
   "buildPresets": [
@@ -120,6 +131,10 @@
     {
       "name": "tests",
       "configurePreset": "tests"
+    },
+    {
+      "name": "tests-asan",
+      "configurePreset": "tests-asan"
     }
   ],
   "testPresets": [
@@ -128,6 +143,17 @@
       "configurePreset": "tests",
       "output": {
         "outputOnFailure": true
+      }
+    },
+    {
+      "name": "tests-asan",
+      "configurePreset": "tests-asan",
+      "description": "print_stacktrace makes a UBSan report name the line rather than just the kind of UB. LeakSanitizer rides along with ASan on Linux and is deliberately left at its default (on): the suites allocate little and free it all, so a leak report here is a real finding, not noise.",
+      "output": {
+        "outputOnFailure": true
+      },
+      "environment": {
+        "UBSAN_OPTIONS": "print_stacktrace=1"
       }
     },
     {

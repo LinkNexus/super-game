@@ -9,8 +9,8 @@
 ## First-time setup
 
 ```bash
-git clone git@gitlab.rz.htw-berlin.de:s0594529/super_game.git
-cd super_game
+git clone git@github.com:LinkNexus/super-game.git
+cd super-game
 git submodule update --init vendor/raylib vendor/uWebSockets vendor/ixwebsocket vendor/mbedtls
 git -C vendor/uWebSockets submodule update --init uSockets
 git -C vendor/mbedtls submodule update --init framework

@@ -1,5 +1,5 @@
 .PHONY: all client server tests run run-client run-server \
-        clean rebuild test test-debug help debug release
+        clean rebuild test test-asan test-debug help debug release
 
 # Which module to build, and at which optimisation level. Every target below
 # resolves to a CMake preset named `<module>` (Debug) or `<module>-release`,
@@ -26,7 +26,7 @@ endif
 ALL_PRESET := $(if $(SUFFIX),release,debug)
 
 help:
-	@echo "Targets:  all client server tests   |   run-client run-server   |   test clean rebuild"
+	@echo "Targets:  all client server tests   |   run-client run-server   |   test test-asan clean rebuild"
 	@echo "Variable: BUILD=debug (default) | release"
 	@echo "Example:  make server BUILD=release"
 
@@ -78,6 +78,16 @@ run-server: server
 # Same configuration CI runs. Configures every time on purpose.
 test: tests
 	ctest --preset tests
+
+# The same suites under ASan + UBSan (the `tests-asan` preset, its own build
+# dir). Seconds to run and no submodules, same as `test` - worth reaching for
+# first on any "passes locally, fails in CI" test, which is exactly how L64's
+# stack-use-after-scope in test_lobby.cpp was found. Also a CI job
+# (test-asan-ubsan), so this is the local spelling of the same check.
+test-asan:
+	cmake --preset tests-asan
+	cmake --build --preset tests-asan
+	ctest --preset tests-asan
 
 # Same suites against the full debug tree, for when it's already built and a
 # second build dir isn't worth it.
