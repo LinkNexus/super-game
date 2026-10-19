@@ -36,6 +36,20 @@ struct PlayerConnection {
 
 class Game {
 public:
+  enum class ClientMessageResult : uint8_t {
+    OK,
+    NotJson,
+    BadEnvelope,
+    UnknownType
+  };
+
+  struct ClientMessageOutcome {
+    ClientMessageResult result{ClientMessageResult::OK};
+    std::string detail{};
+
+    explicit operator bool() const { return result == ClientMessageResult::OK; }
+  };
+
   GameId id{};
 
 public:
@@ -77,6 +91,10 @@ public:
   virtual shared::LobbyUpdate buildLobbyUpdate() const = 0;
 
   void broadcastLobbyUpdate() const;
+
+  Game::ClientMessageOutcome
+  handleClientMessage(const PerSocketPlayers &players_data,
+                      std::string_view message);
 
 protected:
   template <class Payload> void broadcast(const Payload &payload) const {

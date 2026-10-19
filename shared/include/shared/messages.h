@@ -54,6 +54,15 @@ enum class ServerMessageType : uint8_t {
 /// Envelope discriminator for client-to-server messages.
 enum class ClientMessageType : uint8_t { PLAYER_INPUT, READY };
 
+constexpr bool isClientMessageTypeValid(ClientMessageType type) {
+  switch (type) {
+  case ClientMessageType::PLAYER_INPUT:
+  case ClientMessageType::READY:
+    return true;
+  }
+  return false;
+}
+
 /// Sent once by the server right after a WebSocket connection completes,
 /// telling the client which player id it has been assigned.
 struct WelcomeMessage {

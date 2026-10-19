@@ -1,5 +1,6 @@
 #include "App.h"
 #include "Loop.h"
+#include "constants.h"
 #include "game.h"
 #include "game_manager.h"
 #include "internal/eventing/epoll_kqueue.h"
@@ -30,6 +31,8 @@ struct PerSocketData {
   GameId game_id{};
   PerSocketPlayers players_data{};
   UwsConnection connection{};
+  bool logged_decode_error{false};
+  uint32_t dropped_frames{0};
 };
 
 int main(int, char *[]) {
@@ -183,69 +186,30 @@ int main(int, char *[]) {
            // every other in-progress match.
            .message =
                [&manager](auto *ws, std::string_view message, uWS::OpCode) {
-                 auto *data = ws->getUserData();
+                 auto data = ws->getUserData();
+                 auto game = manager.findGameById(data->game_id);
 
-                 try {
-                   auto j = shared::decode(message);
-
-                   const auto type{
-                       j.at("type").get<shared::ClientMessageType>()};
-
-                   switch (type) {
-                   case shared::ClientMessageType::READY: {
-                     if (auto game = manager.findGameById(data->game_id)) {
-                       game->setPlayersReady(data->players_data.ws,
-                                             j.at("payload")
-                                                 .get<shared::ReadyMessage>()
-                                                 .is_ready);
-                       game->broadcastLobbyUpdate();
-                     }
-                     break;
-                   }
-
-                   case shared::ClientMessageType::PLAYER_INPUT:
-                     auto game = manager.findGameById(data->game_id);
-                     if (!game)
-                       return;
-
-                     auto inputs = j.at("payload")
-                                       .get<shared::PlayerInputs<
-                                           shared::MAX_PLAYERS_PER_CLIENT>>();
-
-                     for (const auto &input : inputs) {
-                       if (!input)
-                         continue;
-
-                       auto playerIt = std::find_if(
-                           data->players_data.players.begin(),
-                           data->players_data.players.end(),
-                           [&input](const auto &player) {
-                             return player && player->first == input->player_id;
-                           });
-                       if (playerIt == data->players_data.players.end())
-                         continue;
-
-                       const auto &player =
-                           game->findPlayerById((*playerIt)->first);
-                       if (!player)
-                         continue;
-
-                       bool shoot_now =
-                           input->buttons & shared::Button::BUTTON_SHOOT;
-                       if (shoot_now && !player->prev_shoot_held)
-                         player->pending_shots++;
-
-                       player->prev_shoot_held = shoot_now;
-                       player->pending_movement = static_cast<shared::Button>(
-                           input->buttons &
-                           (shared::BUTTON_LEFT | shared::BUTTON_RIGHT));
-                     }
-
-                     break;
-                   }
-                 } catch (const nlohmann::json::exception &) {
+                 if (!game)
                    return;
-                 }
+
+                 const auto outcome =
+                     game->handleClientMessage(data->players_data, message);
+
+                 if (outcome)
+                   return;
+
+                 data->dropped_frames++;
+                 if (!data->logged_decode_error)
+                   return;
+
+                 data->logged_decode_error = true;
+                 std::cerr << "[game " << data->game_id
+                           << "] dropped client frame: " << outcome.detail
+                           << "\n frame: "
+                           << message.substr(
+                                  0, std::min<std::size_t>(
+                                         message.size(), MAX_LOGGED_FRAME_SIZE))
+                           << '\n';
                },
            // Connection closed: frees this player's slot, and either tears
            // down the whole game (if it was the last player) or lets the
@@ -266,6 +230,11 @@ int main(int, char *[]) {
 
                  if (!game->isOver() && !game->isRunning())
                    game->broadcastLobbyUpdate();
+
+                 if (data->dropped_frames) {
+                   std::cerr << "[game " << data->game_id << "] closed after "
+                             << data->dropped_frames << " dropped frame(s)\n";
+                 }
                }})
       .listen("0.0.0.0", 9001,
               [](auto *token) {

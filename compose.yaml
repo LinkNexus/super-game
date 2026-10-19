@@ -20,10 +20,6 @@
 #     Package settings -> Change visibility -> Public), or
 #   - Dokploy is given a registry credential (a PAT with `read:packages`)
 # Without one of those, `docker compose up` fails with "denied".
-#
-# NOTE: .gitlab-ci.yml still pushes a Docker Hub copy
-# (levynkenenghtw/supergame-server). Nothing consumes it any more - it's a
-# mirror only. Retire that job, or repoint this file, if that changes.
 
 services:
   server:

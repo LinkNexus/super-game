@@ -414,3 +414,71 @@ shared::LobbyUpdate CoopGame::buildLobbyUpdate() const {
 void Game::broadcastLobbyUpdate() const {
   std::visit([this](const auto &u) { broadcast(u); }, buildLobbyUpdate());
 }
+
+Game::ClientMessageOutcome
+Game::handleClientMessage(const PerSocketPlayers &players_data,
+                          std::string_view message) {
+  try {
+    auto j = shared::decode(message);
+
+    const auto type = j.at("type").get<shared::ClientMessageType>();
+
+    if (!shared::isClientMessageTypeValid(type)) {
+      return {
+          ClientMessageResult::UnknownType,
+          "type out of range: " +
+              std::to_string(+static_cast<
+                             std::underlying_type_t<shared::ClientMessageType>>(
+                  type))};
+    }
+
+    switch (type) {
+    case shared::ClientMessageType::READY: {
+      setPlayersReady(players_data.ws,
+                      j.at("payload").get<shared::ReadyMessage>().is_ready);
+      broadcastLobbyUpdate();
+      break;
+    }
+
+    case shared::ClientMessageType::PLAYER_INPUT: {
+      auto inputs =
+          j.at("payload")
+              .get<shared::PlayerInputs<shared::MAX_PLAYERS_PER_CLIENT>>();
+
+      for (const auto &input : inputs) {
+        if (!input)
+          continue;
+
+        auto playerIt = std::find_if(
+            players_data.players.begin(), players_data.players.end(),
+            [&input](const auto &player) {
+              return player && player->first == input->player_id;
+            });
+
+        if (playerIt == players_data.players.end())
+          continue;
+
+        const auto &player = findPlayerById((*playerIt)->first);
+
+        if (!player)
+          continue;
+
+        bool shoot_now = input->buttons & shared::Button::BUTTON_SHOOT;
+        if (shoot_now && !player->prev_shoot_held)
+          player->pending_shots++;
+
+        player->prev_shoot_held = shoot_now;
+        player->pending_movement = static_cast<shared::Button>(
+            input->buttons & (shared::BUTTON_LEFT | shared::BUTTON_RIGHT));
+      }
+      break;
+    }
+    }
+  } catch (const nlohmann::json::parse_error &e) {
+    return {ClientMessageResult::NotJson, e.what()};
+  } catch (nlohmann::json::exception &e) {
+    return {ClientMessageResult::BadEnvelope, e.what()};
+  }
+
+  return {};
+}

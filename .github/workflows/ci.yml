@@ -113,6 +113,59 @@ jobs:
       - name: Run tests
         run: ctest --preset tests
 
+  # The same two suites a third time, under AddressSanitizer and
+  # UndefinedBehaviorSanitizer (the `tests-asan` preset).
+  #
+  # This is the job that covers what -Werror structurally cannot: undefined
+  # behaviour. L64's `test_lobby.cpp` break is the case in point - three cases
+  # bound a `std::get_if` pointer into a temporary that died at the semicolon,
+  # so every later read was use-after-scope. It passed on clang locally and
+  # failed on GCC in CI, because the two stack layouts happened to differ; no
+  # warning from either compiler, at any level. A throwaway -fsanitize=address
+  # build named it in seconds, with the exact line.
+  #
+  # Pinned to clang rather than the default g++, for two reasons beyond
+  # diagnostic quality: every other job in this file is GCC, so this is the
+  # only place a clang-only diagnostic surfaces at all, and local development
+  # is clang - a break that only reproduces under one of the two is cheaper to
+  # read when CI runs both.
+  #
+  # Needs no submodules, same as test-shared and test-gcc14: `tests-asan`
+  # inherits the `tests` preset, so BUILD_CLIENT=OFF + BUILD_SERVER=OFF.
+  #
+  # Not wired into docker-server's or publish-release's `needs:`, matching
+  # test-gcc14 - it reports as its own check. Worth reconsidering if it ever
+  # catches something: unlike a newest-compiler-only warning, a sanitizer
+  # finding is a real defect, and gating the deploy on it is a one-line change.
+  test-asan-ubsan:
+    runs-on: ubuntu-latest
+    env:
+      CC: clang
+      CXX: clang++
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      - name: Install build deps
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends \
+            cmake ninja-build clang
+
+      - name: Report compiler version
+        run: clang++ --version
+
+      - name: Build tests (ASan + UBSan)
+        run: |
+          cmake --preset tests-asan
+          cmake --build --preset tests-asan
+
+      # -fno-sanitize-recover=all (see the preset) means a UBSan finding exits
+      # non-zero here rather than printing and letting the run go green.
+      - name: Run tests (ASan + UBSan)
+        run: ctest --preset tests-asan
+
   build-client-linux:
     runs-on: ubuntu-latest
     steps:
