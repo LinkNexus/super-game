@@ -199,7 +199,7 @@ int main(int, char *[]) {
                    return;
 
                  data->dropped_frames++;
-                 if (!data->logged_decode_error)
+                 if (data->logged_decode_error)
                    return;
 
                  data->logged_decode_error = true;
