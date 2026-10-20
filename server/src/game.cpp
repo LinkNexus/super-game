@@ -164,12 +164,13 @@ void PvPGame::update(float dt) {
   inputs_.fill(std::nullopt);
   shared::iterateOverOptionals(
       team_ids_, [&](const auto &teamId, std::size_t teamIdx) {
+        std::size_t playerIdx = 0;
         shared::iterateOverOptionals(
-            players_, [&](PlayerConnection &player, std::size_t playerIdx) {
+            players_, [&](PlayerConnection &player, std::size_t) {
               if (player.team_id != teamId)
                 return;
 
-              inputs_[teamIdx * shared::MAX_PLAYERS_PER_TEAM + playerIdx] = {
+              inputs_[teamIdx * shared::MAX_PLAYERS_PER_TEAM + playerIdx++] = {
                   .buttons = getPlayerInput(player), .player_id = player.id};
             });
       });
@@ -200,13 +201,13 @@ void PvPGame::update(float dt) {
                   (*playerStateIt)->name = player.name;
                 }
               });
-
-              if (state.phase ==
-                  static_cast<uint8_t>(shared::PvPGameSim::Phase::END)) {
-                is_running_ = false;
-                is_over_ = true;
-              }
             });
+
+            if (state.phase ==
+                static_cast<uint8_t>(shared::PvPGameSim::Phase::END)) {
+              is_running_ = false;
+              is_over_ = true;
+            }
 
             broadcast(state);
           },
