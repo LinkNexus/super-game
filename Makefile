@@ -1,5 +1,5 @@
-.PHONY: all client server tests run run-client run-server \
-        clean rebuild test test-asan test-debug help debug release
+.PHONY: all client server server-asan tests run run-client run-server \
+        run-server-asan clean rebuild test test-asan test-debug help debug release
 
 # Which module to build, and at which optimisation level. Every target below
 # resolves to a CMake preset named `<module>` (Debug) or `<module>-release`,
@@ -26,7 +26,9 @@ endif
 ALL_PRESET := $(if $(SUFFIX),release,debug)
 
 help:
-	@echo "Targets:  all client server tests   |   run-client run-server   |   test test-asan clean rebuild"
+	@echo "Targets:  all client server server-asan tests"
+	@echo "          run-client run-server run-server-asan"
+	@echo "          test test-asan clean rebuild"
 	@echo "Variable: BUILD=debug (default) | release"
 	@echo "Example:  make server BUILD=release"
 
@@ -56,6 +58,12 @@ server:
 	cmake --preset server$(SUFFIX)
 	cmake --build --preset server$(SUFFIX)
 
+# The server binary with ASan + UBSan on (the `server-asan` preset, its own
+# build dir). Ignores BUILD: a sanitizer build is a Debug build.
+server-asan:
+	cmake --preset server-asan
+	cmake --build --preset server-asan
+
 tests:
 	cmake --preset tests
 	cmake --build --preset tests
@@ -70,6 +78,28 @@ run-client: client
 run-server: server
 	-lsof -ti:9001 | xargs kill 2>/dev/null
 	./build/server$(SUFFIX)/bin/supergame-server
+
+# The sanitized server, with the two options that matter for a long-running
+# process rather than a test binary:
+#
+#   detect_leaks=0     - uWS/uSockets hold their loop and socket-context
+#                        allocations until the process dies, so a Ctrl-C exit
+#                        reports them all as leaks. They are not the bug being
+#                        chased. Drop this (or set =1) when the bug *is* a
+#                        leak, and read past the uSockets frames.
+#   print_stacktrace=1 - makes a UBSan report name the line rather than just
+#                        the kind of UB. Same setting the tests-asan test
+#                        preset uses.
+#
+# Note the flags include -fno-sanitize-recover=all, so the first UBSan finding
+# ends the process instead of printing and continuing. That is what you want
+# while hunting one error; override with ASAN_OPTIONS/UBSAN_OPTIONS on the
+# command line if a vendored finding is in the way.
+run-server-asan: server-asan
+	-lsof -ti:9001 | xargs kill 2>/dev/null
+	ASAN_OPTIONS=detect_leaks=0:abort_on_error=0 \
+	UBSAN_OPTIONS=print_stacktrace=1 \
+	./build/server-asan/bin/supergame-server
 
 # --- Tests ----------------------------------------------------------------
 # Both suites (shared/ simulation + server/ rosters & broadcast) in a headless

@@ -15,6 +15,7 @@
 #include "shared/helpers.h"
 #include "shared/messages.h"
 #include "test_harness.h"
+#include <array>
 
 using testing::coopState;
 using testing::FakeConnection;
@@ -54,6 +55,34 @@ void startDuelMatch(PvPGame &game, FakeConnection &first,
   game.setPlayersReady(&first, true);
   game.setPlayersReady(&second, true);
   REQUIRE(game.isRunning());
+}
+
+/// A running 2v2, two players per team, one team per connection - the
+/// arrangement a pair of same-machine duos produces.
+///
+/// This is the shape L80 was about: the roster is flat since L67, so this
+/// team's players land on flat slots 0/1 and that team's on 2/3, and
+/// `PvPGame::update` has to turn those into a per-team input index rather
+/// than reusing the slot number. 1v1 cannot tell the two apart, which is why
+/// every case above it stayed green through the overflow.
+void startTeamMatch(PvPGame &game, FakeConnection &first,
+                    FakeConnection &second) {
+  REQUIRE(game.addPlayers(fakeConnection(first, {1, 2})));
+  REQUIRE(game.addPlayers(fakeConnection(second, {3, 4})));
+
+  game.setPlayersReady(&first, true);
+  game.setPlayersReady(&second, true);
+  REQUIRE(game.isRunning());
+}
+
+/// The x of @p id in @p connection's most recent frame. The 2v2 cases read
+/// four positions per assertion, and spelling out the `findPlayer` +
+/// `has_value` dance four times buries what each case is actually claiming.
+float playerX(const FakeConnection &connection, shared::PlayerId id) {
+  const auto player = findPlayer(pvpState(connection), id);
+  REQUIRE(player.has_value());
+
+  return player->position.x;
 }
 
 } // namespace
@@ -330,6 +359,80 @@ TEST(coop_consumes_one_pending_shot_per_tick) {
   CHECK_EQ(player->pending_shots, 0);
 }
 
+// --- 2v2 input packing (L80) -----------------------------------------------
+// `PvPGame::update` packs inputs at `teamIdx * MAX_PLAYERS_PER_TEAM + rank`,
+// where `rank` has to be the player's position *within its team*. Since L67
+// made the roster one flat array, the obvious-looking flat slot index is not
+// that: team 1's players sit at flat slots 2 and 3, so using them yields 4
+// and 5 in a four-entry array. That shipped as a stack-buffer-overflow and no
+// case caught it, because every PvP case before these was 1v1 - where the two
+// indices coincide - and the one 2v2 case in the suite
+// (`pvp_duo_on_one_connection_lands_on_a_single_team`, test_roster.cpp) stops
+// before the first tick.
+//
+// The sanitizer is not the lasting guard here: an index scheme that collided
+// *in bounds* would silently drop a player's input and leave ASan with
+// nothing to report. These cases assert on the ships instead, so a dropped
+// input fails them either way.
+
+/// Four distinct inputs in one tick, which is the tightest statement that no
+/// two players share an index: a collision overwrites one entry, and the
+/// player whose input was lost does not move.
+TEST(pvp_2v2_packs_a_distinct_input_for_every_player) {
+  FakeConnection a, b;
+  PvPGame game{/*team_size=*/2, /*team_count=*/2};
+  startTeamMatch(game, a, b);
+
+  game.update(shared::FIXED_DT);
+  const auto before = std::array{playerX(a, 1), playerX(a, 2), playerX(a, 3),
+                                 playerX(a, 4)};
+
+  // One of each direction per team, so a cross-team index collision shows up
+  // as a ship moving the wrong way rather than merely not moving.
+  const auto presses =
+      std::array{shared::Button::BUTTON_RIGHT, shared::Button::BUTTON_LEFT,
+                 shared::Button::BUTTON_RIGHT, shared::Button::BUTTON_LEFT};
+
+  for (shared::PlayerId id = 1; id <= 4; ++id) {
+    auto *player = game.findPlayerById(id);
+    REQUIRE(player != nullptr);
+    player->pending_movement = presses[id - 1];
+  }
+
+  game.update(shared::FIXED_DT);
+
+  CHECK(playerX(a, 1) > before[0]);
+  CHECK(playerX(a, 2) < before[1]);
+  CHECK(playerX(a, 3) > before[2]);
+  CHECK(playerX(a, 4) < before[3]);
+}
+
+/// The 2v2 reading of `coop_routes_a_held_movement_press_to_only_that_players_ship`:
+/// one press must move one ship, with the player's own teammate and both
+/// opponents untouched.
+TEST(pvp_2v2_routes_a_press_to_only_that_players_ship) {
+  FakeConnection a, b;
+  PvPGame game{/*team_size=*/2, /*team_count=*/2};
+  startTeamMatch(game, a, b);
+
+  game.update(shared::FIXED_DT);
+  const auto before = std::array{playerX(a, 1), playerX(a, 2), playerX(a, 3),
+                                 playerX(a, 4)};
+
+  // Player 3 deliberately: it is the first player of the *second* team, so it
+  // is the one whose flat slot (2) and in-team rank (0) disagree.
+  auto *player = game.findPlayerById(3);
+  REQUIRE(player != nullptr);
+  player->pending_movement = shared::Button::BUTTON_RIGHT;
+
+  game.update(shared::FIXED_DT);
+
+  CHECK(playerX(a, 3) > before[2]);
+  CHECK_EQ(playerX(a, 1), before[0]);
+  CHECK_EQ(playerX(a, 2), before[1]);
+  CHECK_EQ(playerX(a, 4), before[3]);
+}
+
 // --- Disconnect during a running match (L57) -------------------------------
 
 TEST(coop_disconnect_drops_the_player_from_the_broadcast_state) {
@@ -401,6 +504,88 @@ TEST(pvp_duel_ends_with_the_remaining_team_winning_after_a_disconnect) {
            static_cast<uint8_t>(shared::PvPGameSim::TeamOutcome::WON));
   CHECK_EQ(state.teams[0]->outcome,
            static_cast<uint8_t>(shared::PvPGameSim::TeamOutcome::LOST));
+  CHECK_EQ(game.isOver(), true);
+  CHECK_EQ(game.isRunning(), false);
+}
+
+/// Half a team leaving is not the team losing. Every case above this one has
+/// one slot per team, where "a player is gone" and "the team is gone" are the
+/// same fact - so nothing yet distinguishes `isTeamDead` returning true
+/// because a team emptied from it returning true because one slot did.
+TEST(pvp_2v2_keeps_the_match_running_when_a_team_loses_one_of_two) {
+  FakeConnection a, b, c;
+  PvPGame game{/*team_size=*/2, /*team_count=*/2};
+
+  // Three connections rather than two: a duo on one socket shares a close,
+  // so dropping exactly one player of a team needs that player to own its
+  // own connection. Auto-balance fills team 0 first, so c lands on team 1
+  // beside b.
+  REQUIRE(game.addPlayers(fakeConnection(a, {1, 2})));
+  REQUIRE(game.addPlayers(fakeConnection(b, {3})));
+  REQUIRE(game.addPlayers(fakeConnection(c, {4})));
+  game.setPlayersReady(&a, true);
+  game.setPlayersReady(&b, true);
+  game.setPlayersReady(&c, true);
+  REQUIRE(game.isRunning());
+
+  const auto &teamIds = game.getTeamIds();
+  REQUIRE(testing::countPlayersInTeam(teamIds[1], game.getPlayers()) == 2);
+
+  game.removePlayers(&b);
+  game.update(shared::FIXED_DT);
+
+  CHECK_EQ(testing::countPlayersInTeam(teamIds[1], game.getPlayers()), 1);
+  CHECK_EQ(game.isOver(), false);
+  CHECK_EQ(game.isRunning(), true);
+
+  // The survivor is still playing, and the departed player is gone from the
+  // frame rather than lingering as a shipless slot.
+  const auto state = pvpState(a);
+  CHECK_EQ(state.phase,
+           static_cast<uint8_t>(shared::PvPGameSim::Phase::PLAYERS_FIGHT));
+  CHECK(findPlayer(state, 4).has_value());
+  CHECK(findPlayer(state, 3).has_value() == false);
+  CHECK_EQ(livePlayers(state), 3u);
+}
+
+/// A whole team leaving ends the match with the other one winning - the 2v2
+/// reading of `pvp_duel_ends_with_the_remaining_team_winning_after_a_disconnect`,
+/// and the smallest case where the surviving team still holds two slots at
+/// the moment the other empties.
+///
+/// Note this does *not* pin L80's other half, the `Phase::END` check moving
+/// out of the per-team loop: with the check back inside the loop every case
+/// here still passes, because `teams_` always carries an engaged team whose
+/// state lookup succeeds, so the check does run. The hoist is right - it ran
+/// once per team and coop does the equivalent check outside - but its failure
+/// mode needs a roster/state divergence that cannot currently happen, so
+/// there is nothing honest for a test to assert.
+TEST(pvp_2v2_ends_once_a_whole_team_is_eliminated) {
+  FakeConnection a, b;
+  PvPGame game{/*team_size=*/2, /*team_count=*/2};
+  startTeamMatch(game, a, b);
+
+  REQUIRE(stepUntil(game, [&] {
+    return pvpState(a).phase ==
+           static_cast<uint8_t>(shared::PvPGameSim::Phase::PLAYERS_FIGHT);
+  }));
+
+  // Both of team 1's players sit on b's socket, so one close empties the team.
+  game.removePlayers(&b);
+  game.update(shared::FIXED_DT);
+
+  const auto state = pvpState(a);
+  CHECK_EQ(state.phase, static_cast<uint8_t>(shared::PvPGameSim::Phase::END));
+
+  const auto *winner = testing::teamById(state, 1);
+  const auto *loser = testing::teamById(state, 2);
+  REQUIRE(winner != nullptr);
+  REQUIRE(loser != nullptr);
+  CHECK_EQ(winner->outcome,
+           static_cast<uint8_t>(shared::PvPGameSim::TeamOutcome::WON));
+  CHECK_EQ(loser->outcome,
+           static_cast<uint8_t>(shared::PvPGameSim::TeamOutcome::LOST));
+
   CHECK_EQ(game.isOver(), true);
   CHECK_EQ(game.isRunning(), false);
 }
