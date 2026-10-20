@@ -3,6 +3,7 @@
 #include "fake_connection.h"
 #include "game.h"
 #include "game_manager.h"
+#include "helpers.h"
 #include "shared/constants.h"
 #include "shared/helpers.h"
 #include "test_harness.h"
@@ -66,12 +67,10 @@ TEST(coop_rejects_a_connection_that_would_exceed_the_slot_cap) {
 
   REQUIRE(game.addPlayers(fakeConnection(a, {1, 2})));
   REQUIRE(game.addPlayers(fakeConnection(b, {3, 4})));
-  CHECK_EQ(shared::count_optional(game.getPlayers()),
-           shared::MAX_PLAYERS_COOP);
+  CHECK_EQ(shared::count_optional(game.getPlayers()), shared::MAX_PLAYERS_COOP);
 
   CHECK_EQ(game.addPlayers(fakeConnection(c, {5})), false);
-  CHECK_EQ(shared::count_optional(game.getPlayers()),
-           shared::MAX_PLAYERS_COOP);
+  CHECK_EQ(shared::count_optional(game.getPlayers()), shared::MAX_PLAYERS_COOP);
 }
 
 TEST(coop_empties_once_every_connection_leaves) {
@@ -111,9 +110,11 @@ TEST(pvp_auto_balances_arrivals_across_teams) {
   REQUIRE(game.addPlayers(fakeConnection(a, {1})));
   REQUIRE(game.addPlayers(fakeConnection(b, {2})));
 
-  const auto &teams = game.getTeams();
-  CHECK_EQ(shared::count_optional(teams[0]->players), 1);
-  CHECK_EQ(shared::count_optional(teams[1]->players), 1);
+  const auto &teamIds = game.getTeamIds();
+  const auto &players = game.getPlayers();
+
+  CHECK_EQ(testing::countPlayersInTeam(teamIds[0], players), 1);
+  CHECK_EQ(testing::countPlayersInTeam(teamIds[1], players), 1);
   CHECK_EQ(game.thereIsEnoughPlayers(), true);
 }
 
@@ -123,9 +124,11 @@ TEST(pvp_duo_on_one_connection_lands_on_a_single_team) {
 
   REQUIRE(game.addPlayers(fakeConnection(a, {1, 2})));
 
-  const auto &teams = game.getTeams();
-  CHECK_EQ(shared::count_optional(teams[0]->players), 2);
-  CHECK_EQ(shared::count_optional(teams[1]->players), 0);
+  const auto &teamIds = game.getTeamIds();
+  const auto &players = game.getPlayers();
+
+  CHECK_EQ(testing::countPlayersInTeam(teamIds[0], players), 2);
+  CHECK_EQ(testing::countPlayersInTeam(teamIds[1], players), 0);
   CHECK_EQ(game.thereIsEnoughPlayers(), false);
 }
 

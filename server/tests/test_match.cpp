@@ -9,6 +9,7 @@
 #include "fake_connection.h"
 #include "game.h"
 #include "game_manager.h"
+#include "helpers.h"
 #include "match_support.h"
 #include "shared/constants.h"
 #include "shared/helpers.h"
@@ -364,9 +365,11 @@ TEST(pvp_disconnect_frees_both_the_team_slot_and_the_socket) {
 
   game.removePlayers(&a);
 
-  const auto &teams = game.getTeams();
-  CHECK_EQ(shared::count_optional(teams[0]->players), 0);
-  CHECK_EQ(shared::count_optional(teams[1]->players), 1);
+  const auto &teamIds = game.getTeamIds();
+  const auto &players = game.getPlayers();
+
+  CHECK_EQ(testing::countPlayersInTeam(teamIds[0], players), 0);
+  CHECK_EQ(testing::countPlayersInTeam(teamIds[1], players), 1);
   CHECK_EQ(game.getPlayerSockets().size(), 1u);
   CHECK(game.findPlayerById(1) == nullptr);
   CHECK(game.findPlayerById(2) != nullptr);
@@ -465,10 +468,12 @@ TEST(pvp_disconnect_after_the_match_is_over_still_frees_the_socket) {
   // Counted across engaged team slots rather than indexed: whether an
   // emptied team keeps its slot is the sim's business, not this case's.
   std::size_t rosterPlayers = 0;
-  for (const auto &team : game.getTeams()) {
-    if (team)
-      rosterPlayers += shared::count_optional(team->players);
+  const auto &players = game.getPlayers();
+  for (const auto &teamId : game.getTeamIds()) {
+    if (teamId)
+      rosterPlayers += testing::countPlayersInTeam(teamId, players);
   }
+
   CHECK_EQ(rosterPlayers, 0u);
   CHECK(game.findPlayerById(2) == nullptr);
   // With no socket left the game reports empty, which is the only thing that
@@ -485,7 +490,8 @@ TEST(manager_destroys_a_finished_duel_once_its_last_connection_closes) {
   GameManager manager;
 
   auto *game = manager.joinOrCreatePvPGame(fakeConnection(a, {1}), 1, 2);
-  const auto *joined = manager.joinOrCreatePvPGame(fakeConnection(b, {2}), 1, 2);
+  const auto *joined =
+      manager.joinOrCreatePvPGame(fakeConnection(b, {2}), 1, 2);
   REQUIRE(game != nullptr);
   REQUIRE(joined == game);
 
