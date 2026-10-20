@@ -54,10 +54,9 @@ void shared::PvPGameSim::start(const TeamRosters &ids) {
                   INITIAL_LIVES, team.orientation);
 
       positionX += PlayerSimState::SIZE + PLAYERS_SPACING;
-
-      isOnTop = !isOnTop;
     }
 
+    isOnTop = !isOnTop;
     phase_ = Phase::PLAYERS_FIGHT;
     bullets_pool_.fill(BulletSimState());
   }

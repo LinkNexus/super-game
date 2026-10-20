@@ -143,6 +143,97 @@ TEST(pvp_teams_start_at_opposite_ends_facing_each_other) {
   CHECK_NEAR(top->position.x, bottom->position.x, 0.001);
 }
 
+// --- Two players per team (L81) --------------------------------------------
+// Every case above this point gives each team a single player, so nothing in
+// the suite has ever asserted what a 2v2 start produces. These two are the
+// 2v2 readings of `pvp_teams_start_at_opposite_ends_facing_each_other` and
+// `pvp_opposing_fire_costs_lives_and_awards_points` directly above/below, and
+// they state what a 2v2 is *supposed* to do rather than what it currently
+// does.
+
+/// A team's side of the field is the team's property, not the player's: both
+/// of a team's players belong on that team's end, facing the opponents.
+TEST(pvp_2v2_puts_each_whole_team_on_its_own_end) {
+  PvPGameSim sim;
+  sim.start(rosters({1u, 2u}, {3u, 4u}));
+
+  PvPGameState state{};
+  const PvPInputs idle{};
+  sim.step(state, idle, FIXED_DT);
+
+  const auto *first = findPlayer(state, 1);
+  const auto *second = findPlayer(state, 2);
+  const auto *third = findPlayer(state, 3);
+  const auto *fourth = findPlayer(state, 4);
+  REQUIRE(first != nullptr);
+  REQUIRE(second != nullptr);
+  REQUIRE(third != nullptr);
+  REQUIRE(fourth != nullptr);
+
+  // Teammates share an end and an orientation.
+  CHECK_NEAR(first->position.y, second->position.y, 0.001);
+  CHECK_NEAR(third->position.y, fourth->position.y, 0.001);
+  CHECK_NEAR(first->orientation, second->orientation, 0.001);
+  CHECK_NEAR(third->orientation, fourth->orientation, 0.001);
+
+  // The two ends are opposite ones, and the two teams face each other - the
+  // same claim the 1v1 case makes, which is orientation-dependent: bullet
+  // velocity is rotated by the shooter's orientation, so two teams sharing an
+  // orientation can never fire at one another.
+  CHECK(first->position.y != third->position.y);
+  CHECK(first->orientation != third->orientation);
+
+  // No two players may occupy the same point. Opponents are deliberately
+  // aligned on x (that is what makes the combat case below deterministic), so
+  // this is a claim about y for cross-team pairs and about x for teammates.
+  CHECK(first->position.x != second->position.x);
+  CHECK(third->position.x != fourth->position.x);
+}
+
+/// The 2v2 reading of the duel's combat case: a 2v2 must be *contestable*.
+/// Both teams spawn their players from the same x formula, so each player
+/// faces an opponent on its own column - every one of the four should both
+/// deal and take damage.
+///
+/// This is the case that matters most of the two: "the teams spawn apart" is
+/// a weaker claim than "the match can be played to a result", and a 2v2 that
+/// cannot take a life can only ever end by disconnect.
+TEST(pvp_2v2_opposing_fire_costs_lives_on_both_teams) {
+  PvPGameSim sim;
+  sim.start(rosters({1u, 2u}, {3u, 4u}));
+
+  PvPGameState state{};
+  const PvPInputs idle{};
+  sim.step(state, idle, FIXED_DT);
+
+  const auto *before = findPlayer(state, 1);
+  REQUIRE(before != nullptr);
+  const auto initialLives = before->lives;
+  REQUIRE(initialLives > 1);
+
+  PvPInputs firing{};
+  firing[0] = PlayerInput{.buttons = BUTTON_SHOOT, .player_id = 1};
+  firing[1] = PlayerInput{.buttons = BUTTON_SHOOT, .player_id = 2};
+  firing[2] = PlayerInput{.buttons = BUTTON_SHOOT, .player_id = 3};
+  firing[3] = PlayerInput{.buttons = BUTTON_SHOOT, .player_id = 4};
+
+  // Same budget as the duel case, for the same reasons: ~66 ticks of travel
+  // and a 9-tick cooldown, so 100 ticks lands hits without emptying anyone.
+  for (int tick = 0; tick < 100; ++tick)
+    sim.step(state, firing, FIXED_DT);
+
+  for (const PlayerId id : {1u, 2u, 3u, 4u}) {
+    const auto *player = findPlayer(state, id);
+    REQUIRE(player != nullptr);
+
+    CHECK(player->lives < initialLives);
+    CHECK(player->points > 0u);
+    CHECK(player->lives > 0);
+  }
+
+  CHECK_EQ(phaseOf(state), Phase::PLAYERS_FIGHT);
+}
+
 /// Covers input routing end to end: an input is matched to a player by id,
 /// never by slot, so an input addressed to one player must leave every other
 /// player untouched.

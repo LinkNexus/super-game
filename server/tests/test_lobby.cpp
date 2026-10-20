@@ -184,6 +184,47 @@ TEST(pvp_lobby_lists_both_players_of_a_two_player_team) {
   CHECK_EQ((*lobby->teams[0])[1]->name, std::string("P2"));
 }
 
+/// The same claim for a *full* 2v2, which is the case the one above cannot
+/// make: it fills only team 0, so its players sit at flat roster slots 0 and
+/// 1 and any indexing mistake stays in bounds. Team 1's players are the ones
+/// at flat slots 2 and 3, and `(*tInfo)` holds only `MAX_PLAYERS_PER_TEAM`
+/// entries - so writing them at their flat slot index runs two entries off
+/// the end of the team's array. That is the third appearance of one mistake
+/// (after `PvPGame::update`'s input packing, L80, and the sim's per-team side
+/// assignment, L81): since L67 the roster is flat, so a slot index is not a
+/// rank within a team, and every array indexed per team needs the rank.
+TEST(pvp_lobby_lists_both_players_of_both_full_teams) {
+  FakeConnection a, b;
+  PvPGame game{/*team_size=*/2, /*team_count=*/2};
+
+  REQUIRE(game.addPlayers(fakeConnection(a, {1, 2})));
+  REQUIRE(game.addPlayers(fakeConnection(b, {3, 4})));
+
+  const auto update = game.buildLobbyUpdate();
+  const auto *lobby = pvpLobby(update);
+  REQUIRE(lobby != nullptr);
+
+  REQUIRE(lobby->teams[0].has_value());
+  REQUIRE(lobby->teams[1].has_value());
+  CHECK_EQ(shared::count_optional(*lobby->teams[0]), 2);
+  CHECK_EQ(shared::count_optional(*lobby->teams[1]), 2);
+
+  // Each team lists its own two players, in its own two slots. Asserted by
+  // id rather than only by count: a rank/slot mix-up can leave the right
+  // number of entries in the wrong team's array.
+  REQUIRE((*lobby->teams[0])[0].has_value());
+  REQUIRE((*lobby->teams[0])[1].has_value());
+  CHECK_EQ((*lobby->teams[0])[0]->id, 1u);
+  CHECK_EQ((*lobby->teams[0])[1]->id, 2u);
+
+  REQUIRE((*lobby->teams[1])[0].has_value());
+  REQUIRE((*lobby->teams[1])[1].has_value());
+  CHECK_EQ((*lobby->teams[1])[0]->id, 3u);
+  CHECK_EQ((*lobby->teams[1])[1]->id, 4u);
+  CHECK_EQ((*lobby->teams[1])[0]->name, std::string("P3"));
+  CHECK_EQ((*lobby->teams[1])[1]->name, std::string("P4"));
+}
+
 /// A team slot is vacant when the match has no such team, not when nobody has
 /// joined it yet: `PvPGame`'s constructor engages every configured team, and
 /// the lobby has to say so or the client's `if (!team) continue` silently drops

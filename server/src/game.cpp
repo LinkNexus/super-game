@@ -260,11 +260,12 @@ shared::LobbyUpdate PvPGame::buildLobbyUpdate() const {
     if (!tInfo)
       continue;
 
-    shared::iterateOverOptionals(players_, [&](const auto &player, auto idx) {
+    std::size_t playerIdx{0};
+    shared::iterateOverOptionals(players_, [&](const auto &player, auto) {
       if (player.team_id != teamId)
         return;
 
-      (*tInfo)[idx] = shared::PlayerInfo{
+      (*tInfo)[playerIdx++] = shared::PlayerInfo{
           .id = player.id, .name = player.name, .is_ready = player.is_ready};
     });
   }
