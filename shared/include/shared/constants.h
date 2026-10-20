@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <cstdint>
 
 /// Engine-agnostic core shared verbatim between the client's local mode and
@@ -23,4 +24,7 @@ static constexpr uint8_t MAX_TEAMS = 2;
 static constexpr uint8_t MAX_PLAYERS_PER_TEAM = 2;
 
 static constexpr uint8_t MAX_PLAYERS_PER_CLIENT = 2;
+
+static constexpr auto MAX_PLAYERS_PER_GAME =
+    std::max<uint8_t>(MAX_PLAYERS_COOP, MAX_TEAMS *MAX_PLAYERS_PER_TEAM);
 } // namespace shared

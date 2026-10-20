@@ -20,8 +20,11 @@ struct PvPGameType {
 };
 using GameType = std::variant<CoopGameType, PvPGameType>;
 
+using TeamId = shared::PvPGameSim::TeamId;
+
 struct PlayerConnection {
   ServerPlayerId id{};
+  std::optional<TeamId> team_id{};
   bool is_ready{false};
   /// Tracks whether SHOOT was already held last message, so held-down fire
   /// only counts as one shot per press rather than one per message.
@@ -50,6 +53,9 @@ public:
     explicit operator bool() const { return result == ClientMessageResult::OK; }
   };
 
+  using Players =
+      std::array<std::optional<PlayerConnection>, shared::MAX_PLAYERS_PER_GAME>;
+
   GameId id{};
 
 public:
@@ -66,15 +72,15 @@ public:
   virtual bool addPlayers(const PerSocketPlayers &players_data) = 0;
 
   /// Frees the slot belonging to @p ws, if present.
-  virtual void removePlayers(const WsConnection *ws) = 0;
+  void removePlayers(const WsConnection *ws);
+
+  const Players &getPlayers() const;
 
   bool isOver() const;
 
   /// Updates @p playerId's ready flag and attempts to start the match
   /// (see `tryStart()`).
-  virtual void setPlayersReady(const WsConnection *ws, bool ready) = 0;
-
-  virtual bool thereIsEnoughPlayers() const = 0;
+  void setPlayersReady(const WsConnection *ws, bool ready);
 
   bool isRunning() const;
 
@@ -82,11 +88,9 @@ public:
 
   bool isEmpty() const;
 
-  bool canStart() const;
+  virtual bool thereIsEnoughPlayers() const = 0;
 
-  virtual bool allPlayersReady() const = 0;
-
-  virtual PlayerConnection *findPlayerById(ServerPlayerId id) = 0;
+  PlayerConnection *findPlayerById(ServerPlayerId id);
 
   virtual shared::LobbyUpdate buildLobbyUpdate() const = 0;
 
@@ -97,6 +101,10 @@ public:
                       std::string_view message);
 
 protected:
+  bool canStart() const;
+
+  virtual void tryStart() = 0;
+
   template <class Payload> void broadcast(const Payload &payload) const {
     nlohmann::json envelope{};
     envelope["type"] = Payload::TYPE;
@@ -109,56 +117,43 @@ protected:
     }
   }
 
+  void insertPlayers(const PerSocketPlayers &player, WsConnection *ws,
+                     std::optional<TeamId> teamId = std::nullopt);
+
+private:
+  bool allPlayersReady() const;
+
 protected:
   bool is_running_{false};
   bool is_over_{false};
   std::vector<WsConnection *> player_sockets_{};
+  Players players_{};
+  shared::GameSim sim_;
+  shared::GameState state_{};
 };
 
 class CoopGame : public Game {
-public:
-  using Players =
-      std::array<std::optional<PlayerConnection>, shared::MAX_PLAYERS_COOP>;
-
 private:
-  void tryStart();
-  bool allPlayersReady() const override;
+  void tryStart() override;
 
 public:
   void update(float dt) override;
 
-  bool thereIsEnoughPlayers() const override;
-
-  const Players &getPlayers() const;
-
   bool addPlayers(const PerSocketPlayers &players_data) override;
 
-  void removePlayers(const WsConnection *ws) override;
-
-  void setPlayersReady(const WsConnection *ws, bool ready) override;
-
-  PlayerConnection *findPlayerById(ServerPlayerId id) override;
+  bool thereIsEnoughPlayers() const override;
 
   shared::LobbyUpdate buildLobbyUpdate() const override;
 
 private:
-  Players players_{};
   shared::PlayerInputs<shared::MAX_PLAYERS_COOP> inputs_{};
-
-  shared::CoopGameSim sim_;
-  shared::CoopGameState state_;
 };
 
 class PvPGame : public Game {
-  struct Team {
-    std::array<std::optional<PlayerConnection>, shared::MAX_PLAYERS_PER_TEAM>
-        players{};
-    shared::PvPGameSim::TeamId id{};
-  };
-  using Teams = std::array<std::optional<Team>, shared::MAX_TEAMS>;
+  using Teams = std::array<std::optional<TeamId>, shared::MAX_TEAMS>;
 
 private:
-  void tryStart();
+  void tryStart() override;
 
 public:
   PvPGame(shared::PlayerCount team_size, shared::PlayerCount team_count);
@@ -167,29 +162,17 @@ public:
 
   bool addPlayers(const PerSocketPlayers &players_data) override;
 
-  void removePlayers(const WsConnection *ws) override;
-
   bool thereIsEnoughPlayers() const override;
-
-  const Teams &getTeams() const;
-
-  void setPlayersReady(const WsConnection *ws, bool ready) override;
-
-  PlayerConnection *findPlayerById(ServerPlayerId id) override;
 
   shared::LobbyUpdate buildLobbyUpdate() const override;
 
-private:
-  bool allPlayersReady() const override;
+  const Teams &getTeamIds() const;
 
 private:
   shared::PlayerCount team_size_{};
   shared::PlayerCount team_count_{};
-  Teams teams_{};
+  Teams team_ids_{};
   std::array<std::optional<shared::PlayerInput>,
              shared::MAX_PLAYERS_PER_TEAM * shared::MAX_TEAMS>
       inputs_{};
-
-  shared::PvPGameSim sim_;
-  shared::PvPGameState state_;
 };
