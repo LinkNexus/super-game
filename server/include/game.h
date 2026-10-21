@@ -118,7 +118,8 @@ protected:
   }
 
   void insertPlayers(const PerSocketPlayers &player, WsConnection *ws,
-                     std::optional<TeamId> teamId = std::nullopt);
+                     const std::optional<std::pair<std::size_t, TeamId>>
+                         &teamId = std::nullopt);
 
 private:
   bool allPlayersReady() const;
@@ -130,6 +131,7 @@ protected:
   Players players_{};
   shared::GameSim sim_;
   shared::GameState state_{};
+  shared::PlayerInputs<shared::MAX_PLAYERS_PER_GAME> inputs_{};
 };
 
 class CoopGame : public Game {
@@ -144,9 +146,6 @@ public:
   bool thereIsEnoughPlayers() const override;
 
   shared::LobbyUpdate buildLobbyUpdate() const override;
-
-private:
-  shared::PlayerInputs<shared::MAX_PLAYERS_COOP> inputs_{};
 };
 
 class PvPGame : public Game {
@@ -172,7 +171,30 @@ private:
   shared::PlayerCount team_size_{};
   shared::PlayerCount team_count_{};
   Teams team_ids_{};
-  std::array<std::optional<shared::PlayerInput>,
-             shared::MAX_PLAYERS_PER_TEAM * shared::MAX_TEAMS>
-      inputs_{};
+
+private:
+  // forEachPlayerOfTeam's slot only works because insertPlayers places team
+  // members in that team's contiguous slots.
+
+  template <typename Fn>
+    requires(std::is_invocable_v<Fn, PlayerConnection &, std::size_t>)
+  void forEachPlayerOfTeam(TeamId id, Fn callback) {
+    shared::iterateOverOptionals(
+        players_, [&](PlayerConnection &player, std::size_t slot) {
+          if (player.team_id == id) {
+            callback(player, slot % shared::MAX_PLAYERS_PER_TEAM);
+          }
+        });
+  }
+
+  template <typename Fn>
+    requires(std::is_invocable_v<Fn, const PlayerConnection &, std::size_t>)
+  void forEachPlayerOfTeam(TeamId id, Fn callback) const {
+    shared::iterateOverOptionals(
+        players_, [&](const PlayerConnection &player, std::size_t slot) {
+          if (player.team_id == id) {
+            callback(player, slot % shared::MAX_PLAYERS_PER_TEAM);
+          }
+        });
+  }
 };
