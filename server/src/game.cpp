@@ -39,7 +39,9 @@ bool CoopGame::addPlayers(const PerSocketPlayers &players_data) {
 
 bool PvPGame::addPlayers(const PerSocketPlayers &players_data) {
   if (!is_running_ && !is_over_) {
-    for (const auto teamId : team_ids_) {
+    for (std::size_t teamIdx{0}; teamIdx < team_count_; ++teamIdx) {
+      const auto &teamId = team_ids_[teamIdx];
+
       if (!teamId)
         continue;
 
@@ -52,7 +54,8 @@ bool PvPGame::addPlayers(const PerSocketPlayers &players_data) {
           team_size_)
         continue;
 
-      insertPlayers(players_data, players_data.ws, teamId);
+      insertPlayers(players_data, players_data.ws,
+                    std::pair{teamIdx, teamId.value()});
 
       tryStart();
       return true;
@@ -93,12 +96,9 @@ void PvPGame::tryStart() {
         auto &[rId, rPlayers] = ids[idx].emplace();
         rId = id;
 
-        std::size_t playerIdx = 0;
-        shared::iterateOverOptionals(
-            players_, [&rPlayers, &playerIdx, &id](auto &player, std::size_t) {
-              if (player.team_id == id)
-                rPlayers[playerIdx++] = player.id;
-            });
+        forEachPlayerOfTeam(id, [&](const auto &player, std::size_t rank) {
+          rPlayers[rank] = player.id;
+        });
       });
 
   std::get<shared::PvPGameSim>(sim_).start(ids);
@@ -162,18 +162,10 @@ void PvPGame::update(float dt) {
     return;
 
   inputs_.fill(std::nullopt);
-  shared::iterateOverOptionals(
-      team_ids_, [&](const auto &teamId, std::size_t teamIdx) {
-        std::size_t playerIdx = 0;
-        shared::iterateOverOptionals(
-            players_, [&](PlayerConnection &player, std::size_t) {
-              if (player.team_id != teamId)
-                return;
-
-              inputs_[teamIdx * shared::MAX_PLAYERS_PER_TEAM + playerIdx++] = {
-                  .buttons = getPlayerInput(player), .player_id = player.id};
-            });
-      });
+  shared::iterateOverOptionals(players_, [this](PlayerConnection &player,
+                                                auto slot) {
+    inputs_[slot] = {.buttons = getPlayerInput(player), .player_id = player.id};
+  });
 
   std::visit(
       shared::overloaded{
@@ -260,12 +252,9 @@ shared::LobbyUpdate PvPGame::buildLobbyUpdate() const {
     if (!tInfo)
       continue;
 
-    std::size_t playerIdx{0};
-    shared::iterateOverOptionals(players_, [&](const auto &player, auto) {
-      if (player.team_id != teamId)
-        return;
-
-      (*tInfo)[playerIdx++] = shared::PlayerInfo{
+    forEachPlayerOfTeam(teamId.value(), [&](const auto &player,
+                                            std::size_t rank) {
+      (*tInfo)[rank] = shared::PlayerInfo{
           .id = player.id, .name = player.name, .is_ready = player.is_ready};
     });
   }
@@ -398,24 +387,33 @@ void Game::removePlayers(const WsConnection *ws) {
       player_sockets_.end());
 }
 
-void Game::insertPlayers(const PerSocketPlayers &players_data, WsConnection *ws,
-                         std::optional<TeamId> teamId) {
-  shared::iterateOverOptionals(players_data.players,
-                               [&](const auto &player, std::size_t) {
-                                 auto &[playerId, playerName] = player;
+void Game::insertPlayers(
+    const PerSocketPlayers &players_data, WsConnection *ws,
+    const std::optional<std::pair<std::size_t, TeamId>> &team) {
+  auto teamSlotRange = [](const std::size_t idx) {
+    return std::pair{idx * shared::MAX_PLAYERS_PER_TEAM,
+                     (idx + 1) * shared::MAX_PLAYERS_PER_TEAM};
+  };
 
-                                 for (auto &p : players_) {
-                                   if (p)
-                                     continue;
+  auto [begin, end] = team ? teamSlotRange((*team).first)
+                           : std::pair{std::size_t{0}, players_.size()};
 
-                                   auto &playerConnection = p.emplace();
-                                   playerConnection.id = playerId;
-                                   playerConnection.ws = ws;
-                                   playerConnection.name = playerName;
-                                   playerConnection.team_id = teamId;
-                                   break;
-                                 }
-                               });
+  auto slot = begin;
+  shared::iterateOverOptionals(
+      players_data.players, [&](const auto &incoming, std::size_t) {
+        while (slot < end && players_[slot])
+          slot++;
+
+        if (slot >= end)
+          return;
+
+        const auto &[playerId, playerName] = incoming;
+        auto &pc = players_[slot++].emplace();
+        pc.id = playerId;
+        pc.ws = ws;
+        pc.name = playerName;
+        pc.team_id = team ? std::optional((*team).second) : std::nullopt;
+      });
 
   player_sockets_.push_back(ws);
 }
