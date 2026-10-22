@@ -113,7 +113,8 @@ test: tests
 # dir). Seconds to run and no submodules, same as `test` - worth reaching for
 # first on any "passes locally, fails in CI" test, which is exactly how L64's
 # stack-use-after-scope in test_lobby.cpp was found. CI's test-shared job
-# runs exactly this preset (under g++-14), so this is the local spelling of it.
+# runs exactly this preset (GCC 14, Debian trixie), so this is the local
+# spelling of it.
 test-asan:
 	cmake --preset tests-asan
 	cmake --build --preset tests-asan

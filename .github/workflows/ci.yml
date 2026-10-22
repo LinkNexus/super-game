@@ -27,18 +27,25 @@ env:
   IS_MASTER_PUSH: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
   IS_RELEASE: ${{ startsWith(github.ref, 'refs/tags/v') }}
 
+# One toolchain for every Linux job: GCC 14.2 from Debian trixie, the same
+# base image the Dockerfile ships the server on (its DEBIAN_IMAGE default -
+# keep the two in sync). Native and MinGW come from the same distro, so the
+# test, client, Windows and server builds all use the same GCC. Bumping GCC
+# means changing `image:` below plus that one Dockerfile line. macOS stays on
+# Apple clang. The container runs as root (no sudo), git must exist before
+# checkout or submodules silently fail, and `safe.directory '*'` covers the
+# submodule repos, which the runner user owns rather than root.
 jobs:
   # Both test suites (shared/ simulation + the server's matchmaking/lifetime
-  # logic via supergame-server-lib and fake sockets), in one job: g++-14 with
+  # logic via supergame-server-lib and fake sockets), in one job: GCC 14 with
   # ASan + UBSan. Build and Run are separate steps so a red check says which
   # kind of failure it is.
   #
-  # - Build red: a compiler / C++-version problem. g++-14 rather than
-  #   ubuntu-latest's default (13) because newer GCC keeps turning quietly
-  #   ill-formed code into hard errors - e.g. -Wchanges-meaning rejecting a
-  #   member alias in PvPGameSim that named the unqualified namespace-scope
-  #   template ([basic.scope.class]), which clang accepted. The default g++
-  #   still compiles all project code in build-client-linux / build-server.
+  # - Build red: a compiler / C++-version problem. Newer GCC keeps turning
+  #   quietly ill-formed code into hard errors - e.g. GCC 14's
+  #   -Wchanges-meaning rejecting a member alias in PvPGameSim that named the
+  #   unqualified namespace-scope template ([basic.scope.class]), which clang
+  #   accepted. Same GCC as every other job (see the note above `jobs:`).
   # - Run red: a failing test, or undefined behaviour -Werror can't see, e.g.
   #   L64's test_lobby.cpp stack-use-after-scope (a std::get_if pointer into a
   #   dead temporary) that passed on clang and only differed on GCC by stack
@@ -51,28 +58,28 @@ jobs:
   #
   # No submodules: `tests-asan` inherits `tests` (BUILD_CLIENT=OFF,
   # BUILD_SERVER=OFF), and supergame-server-lib names no uWS type. The id stays
-  # `test-shared` because docker-server and publish-release `needs:` it - so
-  # a gcc-14-only warning or a sanitizer finding now blocks a deploy.
+  # `test-shared` because docker-server and publish-release `needs:` it, so a
+  # sanitizer finding blocks a deploy.
   test-shared:
     runs-on: ubuntu-latest
-    env:
-      CC: gcc-14
-      CXX: g++-14
+    # SYS_PTRACE: LeakSanitizer stops the world via ptrace at exit.
+    container: &toolchain
+      image: debian:trixie-slim
+      options: --cap-add=SYS_PTRACE
     steps:
+      - name: Install build deps
+        run: |
+          apt-get update -qq
+          apt-get install -y -qq --no-install-recommends \
+            git ca-certificates cmake ninja-build g++
+          git config --global --add safe.directory '*'
+          g++ --version
+
       - uses: actions/checkout@v4
         with:
           submodules: false
 
-      - name: Install build deps
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq --no-install-recommends \
-            cmake ninja-build gcc-14 g++-14
-
-      - name: Report compiler version
-        run: g++-14 --version
-
-      - name: Build tests (g++-14, ASan + UBSan)
+      - name: Build tests (GCC 14, ASan + UBSan)
         run: |
           cmake --preset tests-asan
           cmake --build --preset tests-asan
@@ -82,7 +89,17 @@ jobs:
 
   build-client-linux:
     runs-on: ubuntu-latest
+    container: *toolchain
     steps:
+      - name: Install build deps
+        run: |
+          apt-get update -qq
+          apt-get install -y -qq --no-install-recommends \
+            git ca-certificates cmake ninja-build g++ python3 \
+            libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
+            libgl1-mesa-dev libasound2-dev
+          git config --global --add safe.directory '*'
+
       - uses: actions/checkout@v4
         with:
           # Non-recursive top-level checkout, matching README.md: uWebSockets
@@ -99,14 +116,6 @@ jobs:
         run: |
           git -C vendor/mbedtls submodule update --init framework
 
-      - name: Install build deps
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq --no-install-recommends \
-            cmake ninja-build g++ python3 \
-            libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
-            libgl1-mesa-dev libasound2-dev
-
       - name: Cache build directories
         uses: actions/cache@v4
         with:
@@ -117,9 +126,10 @@ jobs:
           # CMake/submodule change must invalidate the cache (the old key
           # never did), while an ordinary source edit should still hit it.
           # restore-keys lets a PR warm from the newest existing cache -
-          # under the branch-name key, every PR started cold.
-          key: client-linux-${{ hashFiles('CMakeLists.txt', 'CMakePresets.json', 'client/CMakeLists.txt', 'server/CMakeLists.txt', 'shared/CMakeLists.txt', 'shared/tests/CMakeLists.txt', 'server/tests/CMakeLists.txt', 'tests/harness/CMakeLists.txt', 'cmake/**', 'vendor/*.cmake', '.gitmodules') }}
-          restore-keys: client-linux-
+          # under the branch-name key, every PR started cold. The `trixie`
+          # segment keeps objects from another compiler from being restored.
+          key: client-linux-trixie-${{ hashFiles('CMakeLists.txt', 'CMakePresets.json', 'client/CMakeLists.txt', 'server/CMakeLists.txt', 'shared/CMakeLists.txt', 'shared/tests/CMakeLists.txt', 'server/tests/CMakeLists.txt', 'tests/harness/CMakeLists.txt', 'cmake/**', 'vendor/*.cmake', '.gitmodules') }}
+          restore-keys: client-linux-trixie-
 
       - name: Build (debug, compile check)
         run: |
@@ -190,7 +200,21 @@ jobs:
 
   build-client-windows:
     runs-on: ubuntu-latest
+    container: *toolchain
     steps:
+      - name: Install cross-compile toolchain
+        run: |
+          apt-get update -qq
+          apt-get install -y -qq --no-install-recommends \
+            git ca-certificates cmake ninja-build python3 g++-mingw-w64-x86-64
+          git config --global --add safe.directory '*'
+          # Debian's mingw-w64 package ships both win32 and posix thread-model
+          # variants; win32 doesn't implement std::thread/mutex/condition_variable
+          # at all, which ixwebsocket needs.
+          update-alternatives --set x86_64-w64-mingw32-g++ /usr/bin/x86_64-w64-mingw32-g++-posix
+          update-alternatives --set x86_64-w64-mingw32-gcc /usr/bin/x86_64-w64-mingw32-gcc-posix
+          x86_64-w64-mingw32-g++ --version
+
       - uses: actions/checkout@v4
         with:
           submodules: true
@@ -203,23 +227,12 @@ jobs:
         run: |
           git -C vendor/mbedtls submodule update --init framework
 
-      - name: Install cross-compile toolchain
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq --no-install-recommends \
-            cmake ninja-build python3 g++-mingw-w64-x86-64
-          # Debian's mingw-w64 package ships both win32 and posix thread-model
-          # variants; win32 doesn't implement std::thread/mutex/condition_variable
-          # at all, which ixwebsocket needs.
-          sudo update-alternatives --set x86_64-w64-mingw32-g++ /usr/bin/x86_64-w64-mingw32-g++-posix
-          sudo update-alternatives --set x86_64-w64-mingw32-gcc /usr/bin/x86_64-w64-mingw32-gcc-posix
-
       - name: Cache build directory
         uses: actions/cache@v4
         with:
           path: build/windows-client-release
-          key: client-windows-${{ hashFiles('CMakeLists.txt', 'CMakePresets.json', 'client/CMakeLists.txt', 'server/CMakeLists.txt', 'shared/CMakeLists.txt', 'shared/tests/CMakeLists.txt', 'server/tests/CMakeLists.txt', 'tests/harness/CMakeLists.txt', 'cmake/**', 'vendor/*.cmake', '.gitmodules') }}
-          restore-keys: client-windows-
+          key: client-windows-trixie-${{ hashFiles('CMakeLists.txt', 'CMakePresets.json', 'client/CMakeLists.txt', 'server/CMakeLists.txt', 'shared/CMakeLists.txt', 'shared/tests/CMakeLists.txt', 'server/tests/CMakeLists.txt', 'tests/harness/CMakeLists.txt', 'cmake/**', 'vendor/*.cmake', '.gitmodules') }}
+          restore-keys: client-windows-trixie-
 
       - name: Build
         run: |
@@ -234,57 +247,19 @@ jobs:
           path: build/windows-client-release/bin/
           retention-days: 14
 
-  build-server:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          # Server build never touches raylib/ixwebsocket/mbedtls - only
-          # uWebSockets is needed, cloned selectively instead of the full
-          # top-level submodule set.
-          submodules: false
-
-      - name: Init uWebSockets submodule
-        run: |
-          git submodule update --init vendor/uWebSockets
-          git -C vendor/uWebSockets submodule update --init uSockets
-
-      - name: Install build deps
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq --no-install-recommends cmake ninja-build g++
-
-      - name: Cache build directories
-        uses: actions/cache@v4
-        with:
-          path: |
-            build/server
-            build/server-release
-          key: server-${{ hashFiles('CMakeLists.txt', 'CMakePresets.json', 'client/CMakeLists.txt', 'server/CMakeLists.txt', 'shared/CMakeLists.txt', 'shared/tests/CMakeLists.txt', 'server/tests/CMakeLists.txt', 'tests/harness/CMakeLists.txt', 'cmake/**', 'vendor/*.cmake', '.gitmodules') }}
-          restore-keys: server-
-
-      # The `server` presets are BUILD_CLIENT=OFF + BUILD_TESTS=OFF, so this
-      # no longer builds the two test binaries it never runs (test-shared
-      # owns those).
-      - name: Build (debug, compile check)
-        run: |
-          cmake --preset server
-          cmake --build --preset server
-
-      - name: Build (release)
-        run: |
-          cmake --preset server-release
-          cmake --build --preset server-release
-
+  # The only server build: the Dockerfile compiles it (Release, trixie GCC),
+  # so what CI checks is exactly what ships. Runs on every event so PRs get
+  # the compile check; pushing the image and the redeploy happen only on a
+  # master push or a version tag - never from a PR (which may come from a fork
+  # with no registry access anyway). Debug-only code (asserts) in shared/ and
+  # the server lib is still compiled by test-shared.
   docker-server:
     runs-on: ubuntu-latest
-    # Gated on the sim tests as well as the server build: this job is what
-    # fires the Dokploy redeploy webhook, so a failing test must not be able
-    # to reach production.
-    needs: [build-server, test-shared]
-    # Push an image on a master push or a version tag - never from a PR
-    # (which may come from a fork with no registry access anyway).
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v'))
+    # Gated on the tests: this job fires the Dokploy redeploy webhook, so a
+    # failing test must not be able to reach production.
+    needs: [test-shared]
+    env:
+      DEPLOY: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v')) }}
     permissions:
       contents: read
       packages: write
@@ -319,6 +294,7 @@ jobs:
           } >> "$GITHUB_ENV"
 
       - uses: docker/login-action@v3
+        if: env.DEPLOY == 'true'
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -331,7 +307,7 @@ jobs:
       - uses: docker/build-push-action@v6
         with:
           context: .
-          push: true
+          push: ${{ env.DEPLOY == 'true' }}
           tags: ${{ env.IMAGE_TAGS }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -342,6 +318,7 @@ jobs:
       # credential (anyone with it can trigger a redeploy), so it's a
       # secret, never a literal in this public repo.
       - name: Trigger Dokploy redeploy
+        if: env.DEPLOY == 'true'
         run: curl -fsS "${{ secrets.DOKPLOY_DEPLOY_WEBHOOK_URL }}"
 
   # Only runs on a version-tag push (v*) - bundles the artifacts the build
