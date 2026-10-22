@@ -5,7 +5,6 @@
 #include "shared/messages.h"
 #include "shared/sim/game_sim.h"
 #include "types.h"
-#include <cassert>
 #include <cstddef>
 
 const std::vector<WsConnection *> &Game::getPlayerSockets() const {
@@ -122,18 +121,9 @@ void CoopGame::update(float dt) {
   if (!is_running_)
     return;
 
-  // Indexed by the player's slot in the roster, which is `MAX_PLAYERS_PER_GAME`
-  // wide while `inputs_` is only `MAX_PLAYERS_COOP` wide - the two are equal
-  // today but need not stay so. What keeps this in bounds is `addPlayers`
-  // capping the roster at `MAX_PLAYERS_COOP` and `insertPlayers` filling the
-  // first free slot, so an occupied coop slot is always below the cap. Sizing
-  // cannot express that: `CoopGameSim::step` is constrained to
-  // `N <= MAX_PLAYERS_COOP`, so widening `inputs_` to the roster's width would
-  // fail its own `step`. Hence the assert.
   inputs_.fill(std::nullopt);
   shared::iterateOverOptionals(players_, [this](PlayerConnection &player,
                                                 std::size_t idx) {
-    assert(idx < inputs_.size());
     inputs_[idx] = {.buttons = getPlayerInput(player), .player_id = player.id};
   });
 
@@ -171,17 +161,10 @@ void PvPGame::update(float dt) {
   if (!is_running_)
     return;
 
-  // No team grouping here on purpose: with team-derived placement the roster
-  // slot already *is* `teamIdx * MAX_PLAYERS_PER_TEAM + rank`, so there is
-  // nothing left to reconstruct. That also means this is in bounds only while
-  // `insertPlayers` keeps a team's players inside `teamSlotRange(teamIdx)` -
-  // the slot is what bounds it, not the loop. As in coop, sizing cannot carry
-  // the guarantee: `PvPGameSim::step` is constrained to
-  // `N <= MAX_TEAMS * MAX_PLAYERS_PER_TEAM`.
+  // No team grouping needed: the slot already is teamIdx * PER_TEAM + rank.
   inputs_.fill(std::nullopt);
   shared::iterateOverOptionals(players_, [this](PlayerConnection &player,
                                                 auto slot) {
-    assert(slot < inputs_.size());
     inputs_[slot] = {.buttons = getPlayerInput(player), .player_id = player.id};
   });
 

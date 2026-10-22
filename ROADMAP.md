@@ -2,7 +2,7 @@
 
 **Start:** June 18 | **Course deadline:** August 12 (met — graded, passed) | Sole contributor: Levy
 
-A Space Invaders-style game in C++20 + raylib, built for a university module at HTW Berlin and
+A Space Invaders-style game in C++23 + raylib, built for a university module at HTW Berlin and
 continued past it. The approach throughout: local game first, then server, then multiplayer,
 then a second client.
 
@@ -32,13 +32,18 @@ client depends on it. Then **Phase 5**, the web client.
 **Not blocking anything:** L70, L78 (native client internals — the web client puts the sim in
 WASM and renders from TypeScript, so it inherits none of that structure), and L77.
 
-**Decided, not yet scheduled:** bump the project to **C++23** (`CMAKE_CXX_STANDARD 20` →
-`23` in `CMakeLists.txt`). C++26 is still only partly implemented across the compilers this
-project builds with — GCC 14, clang, and MinGW-w64 for the Windows cross-compile — so 23 is the
-newest standard all three support. Worth doing on its own branch and checking all four CI jobs,
-since the Windows cross-compile is the one most likely to object. Three places state the
-standard and all three need updating together: `CMakeLists.txt`, `README.md`'s build section
-(it said C++17 until L77 corrected it to C++20), and this file's own first paragraph.
+**Done (2026-10-22): C++23.** `CMAKE_CXX_STANDARD` 20 → 23. C++26 is still only partly
+implemented across the compilers this project builds with, so 23 is the newest all of them
+support. Four places stated the standard and all four moved together: `CMakeLists.txt:4`,
+`README.md:7`, this file's first paragraph, and `CLAUDE.md:7`. Verified locally: `tests`,
+`tests-asan`, `server` and `client` presets all build with zero errors and zero warnings under
+`-Wall -Wextra -Werror`, both suites green (68 server + 22 shared) plain and sanitized, and
+`compile_commands.json` confirms `-std=c++23` reaches every project target. (raylib still
+compiles at `c++11` in the client tree — it sets its own standard, unchanged by this.)
+`windows-client-release` also verified (2026-10-22) inside `nix develop .#mingw`: clean configure
+and build, `-std=c++23` on all project targets, and the `.exe` imports only Windows system DLLs
+(mcfgthread and the GCC runtime are linked statically). It has not been run yet. Wine isn't
+installed here, so a launch on a real Windows machine is still to do.
 
 ---
 

@@ -4,7 +4,7 @@
 
 - CMake ≥ 3.20
 - Ninja (`winget install Ninja-build.Ninja` on Windows)
-- A C++20 compiler (MSVC / Clang on Windows, GCC/Clang on Linux)
+- A C++23 compiler (MSVC / Clang on Windows, GCC/Clang on Linux)
 
 ## First-time setup
 
