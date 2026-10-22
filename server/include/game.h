@@ -148,6 +148,24 @@ public:
   shared::LobbyUpdate buildLobbyUpdate() const override;
 };
 
+/// The PvP roster's slot layout, as a pair of inverses - read them together.
+///
+/// `Game::insertPlayers` places a team's players inside `teamSlotRange(teamIdx)`,
+/// and `rankInTeam` recovers a player's position within its team from the slot
+/// it landed in. `PvPGame::forEachPlayerOfTeam` therefore hands out a rank that
+/// is correct *only while that placement holds* - change where `insertPlayers`
+/// puts a player and the rank silently becomes a different number, which is how
+/// L80 (input packed past the end of `inputs_`) and the lobby overflow both
+/// happened. Coop does not use either of these: it fills the first free slot.
+inline auto teamSlotRange(std::size_t teamIdx) {
+  return std::pair{teamIdx * shared::MAX_PLAYERS_PER_TEAM,
+                   (teamIdx + 1) * shared::MAX_PLAYERS_PER_TEAM};
+}
+
+inline auto rankInTeam(std::size_t slot) {
+  return slot % shared::MAX_PLAYERS_PER_TEAM;
+}
+
 class PvPGame : public Game {
   using Teams = std::array<std::optional<TeamId>, shared::MAX_TEAMS>;
 
@@ -182,7 +200,7 @@ private:
     shared::iterateOverOptionals(
         players_, [&](PlayerConnection &player, std::size_t slot) {
           if (player.team_id == id) {
-            callback(player, slot % shared::MAX_PLAYERS_PER_TEAM);
+            callback(player, rankInTeam(slot));
           }
         });
   }
@@ -193,7 +211,7 @@ private:
     shared::iterateOverOptionals(
         players_, [&](const PlayerConnection &player, std::size_t slot) {
           if (player.team_id == id) {
-            callback(player, slot % shared::MAX_PLAYERS_PER_TEAM);
+            callback(player, rankInTeam(slot));
           }
         });
   }
