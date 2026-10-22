@@ -112,8 +112,8 @@ test: tests
 # The same suites under ASan + UBSan (the `tests-asan` preset, its own build
 # dir). Seconds to run and no submodules, same as `test` - worth reaching for
 # first on any "passes locally, fails in CI" test, which is exactly how L64's
-# stack-use-after-scope in test_lobby.cpp was found. Also a CI job
-# (test-asan-ubsan), so this is the local spelling of the same check.
+# stack-use-after-scope in test_lobby.cpp was found. CI's test-shared job
+# runs exactly this preset (under g++-14), so this is the local spelling of it.
 test-asan:
 	cmake --preset tests-asan
 	cmake --build --preset tests-asan

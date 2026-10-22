@@ -28,65 +28,32 @@ env:
   IS_RELEASE: ${{ startsWith(github.ref, 'refs/tags/v') }}
 
 jobs:
-  # Both test suites: the shared/ simulation (headless and engine-agnostic)
-  # and the server's matchmaking/connection-lifetime logic, which is linkable
-  # as supergame-server-lib and drives its rosters with fake sockets rather
-  # than a listening port.
+  # Both test suites (shared/ simulation + the server's matchmaking/lifetime
+  # logic via supergame-server-lib and fake sockets), in one job: g++-14 with
+  # ASan + UBSan. Build and Run are separate steps so a red check says which
+  # kind of failure it is.
   #
-  # So this job needs **no submodules at all**: the `tests` preset sets
-  # BUILD_CLIENT=OFF (no raylib/ixwebsocket/mbedtls) and BUILD_SERVER=OFF,
-  # which skips `include(vendor/uWebSockets.cmake)` entirely - and
-  # supergame-server-lib names no uWS type, so the server's own tests still
-  # build. Verified by configuring and running both suites with
-  # vendor/uWebSockets physically absent.
+  # - Build red: a compiler / C++-version problem. g++-14 rather than
+  #   ubuntu-latest's default (13) because newer GCC keeps turning quietly
+  #   ill-formed code into hard errors - e.g. -Wchanges-meaning rejecting a
+  #   member alias in PvPGameSim that named the unqualified namespace-scope
+  #   template ([basic.scope.class]), which clang accepted. The default g++
+  #   still compiles all project code in build-client-linux / build-server.
+  # - Run red: a failing test, or undefined behaviour -Werror can't see, e.g.
+  #   L64's test_lobby.cpp stack-use-after-scope (a std::get_if pointer into a
+  #   dead temporary) that passed on clang and only differed on GCC by stack
+  #   layout. -fno-sanitize-recover=all (see the preset) makes a UBSan finding
+  #   exit non-zero.
   #
-  # Kept as its own fast job (rather than a step bolted onto a client build)
-  # so a logic regression reports as a distinct red check, and so `needs:`
-  # can gate on it. The job id stays `test-shared` despite now covering both,
-  # since it's what the branch-protection status check and two `needs:` below
-  # refer to.
+  # GCC, not clang: clang 18 + libstdc++ 14 wrongly rejects
+  # std::optional<Team>::emplace() (is_constructible_v<Team> false while the
+  # builtin says true) - a toolchain bug, absent with clang + libc++.
+  #
+  # No submodules: `tests-asan` inherits `tests` (BUILD_CLIENT=OFF,
+  # BUILD_SERVER=OFF), and supergame-server-lib names no uWS type. The id stays
+  # `test-shared` because docker-server and publish-release `needs:` it - so
+  # a gcc-14-only warning or a sanitizer finding now blocks a deploy.
   test-shared:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: false
-
-      - name: Install build deps
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq --no-install-recommends cmake ninja-build g++
-
-      - name: Build tests
-        run: |
-          cmake --preset tests
-          cmake --build --preset tests
-
-      - name: Run tests
-        run: ctest --preset tests
-
-  # The same two suites again, but pinned to g++-14 rather than whatever g++
-  # ubuntu-latest defaults to (13 on 24.04).
-  #
-  # This exists because of a specific break: GCC 14's -Wchanges-meaning
-  # rejected a member type alias in PvPGameSim whose initializer named the
-  # unqualified namespace-scope template, which is ill-formed per
-  # [basic.scope.class] and which GCC enforces as an *error by default* while
-  # clang silently accepts it. That built green on clang locally and failed the
-  # pipeline. The existing jobs are all GCC already, so the gap this closes is
-  # the *version*, not the toolchain - newer GCC keeps turning previously-quiet
-  # ill-formed code into hard errors, and finding that out on the newest
-  # available compiler is cheaper than finding out when a runner image moves.
-  #
-  # Needs no submodules, same as test-shared: the `tests` preset is
-  # BUILD_CLIENT=OFF + BUILD_SERVER=OFF. Kept separate from test-shared rather
-  # than folded into a matrix, because that job's id is what branch protection
-  # and two `needs:` below refer to.
-  #
-  # Note -Werror (see the root CMakeLists) applies here too, so a warning that
-  # only GCC 14 emits fails this job even when every other build is green -
-  # which is the point.
-  test-gcc14:
     runs-on: ubuntu-latest
     env:
       CC: gcc-14
@@ -105,68 +72,11 @@ jobs:
       - name: Report compiler version
         run: g++-14 --version
 
-      - name: Build tests
-        run: |
-          cmake --preset tests
-          cmake --build --preset tests
-
-      - name: Run tests
-        run: ctest --preset tests
-
-  # The same two suites a third time, under AddressSanitizer and
-  # UndefinedBehaviorSanitizer (the `tests-asan` preset).
-  #
-  # This is the job that covers what -Werror structurally cannot: undefined
-  # behaviour. L64's `test_lobby.cpp` break is the case in point - three cases
-  # bound a `std::get_if` pointer into a temporary that died at the semicolon,
-  # so every later read was use-after-scope. It passed on clang locally and
-  # failed on GCC in CI, because the two stack layouts happened to differ; no
-  # warning from either compiler, at any level. A throwaway -fsanitize=address
-  # build named it in seconds, with the exact line.
-  #
-  # Runs on the default g++, not clang. Clang was tried first (every other job
-  # here is GCC, and local dev is clang, so it looked like free toolchain
-  # diversity) and had to be reverted: `clang++ 18.1.3` against **libstdc++ 14**
-  # rejects `std::optional<T>::emplace()` for `PvPGameSim::Team` and
-  # `PvPGame::Team` with "requirement 'is_constructible_v<Team>' was not
-  # satisfied". That is a toolchain bug, not our code - in one translation unit
-  # that combination reports `is_constructible<Team>::value == 1` and the raw
-  # `__is_constructible(Team)` builtin `1`, while the *variable template*
-  # `is_constructible_v<Team>` yields `0`. Reproduced in an ubuntu:24.04
-  # container with no sanitizer flags at all, and absent under both clang +
-  # libc++ and g++ + libstdc++, i.e. every combination anyone actually builds
-  # this project with. Not worth bending `game_sim.cpp` around; if clang
-  # coverage is wanted later, `-stdlib=libc++` builds clean.
-  #
-  # Sanitizer coverage is what this job is for and it is identical under GCC,
-  # so nothing was lost in the swap.
-  #
-  # Needs no submodules, same as test-shared and test-gcc14: `tests-asan`
-  # inherits the `tests` preset, so BUILD_CLIENT=OFF + BUILD_SERVER=OFF.
-  #
-  # Not wired into docker-server's or publish-release's `needs:`, matching
-  # test-gcc14 - it reports as its own check. Worth reconsidering if it ever
-  # catches something: unlike a newest-compiler-only warning, a sanitizer
-  # finding is a real defect, and gating the deploy on it is a one-line change.
-  test-asan-ubsan:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: false
-
-      - name: Install build deps
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq --no-install-recommends cmake ninja-build g++
-
-      - name: Build tests (ASan + UBSan)
+      - name: Build tests (g++-14, ASan + UBSan)
         run: |
           cmake --preset tests-asan
           cmake --build --preset tests-asan
 
-      # -fno-sanitize-recover=all (see the preset) means a UBSan finding exits
-      # non-zero here rather than printing and letting the run go green.
       - name: Run tests (ASan + UBSan)
         run: ctest --preset tests-asan
 
