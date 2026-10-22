@@ -3,3 +3,6 @@ compile_commands.json
 docs/doxygen/
 .DS_Store
 presentation/*
+
+# nix-direnv evaluation cache
+.direnv/
