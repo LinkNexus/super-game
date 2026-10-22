@@ -1,6 +1,6 @@
 # Headless build of supergame-server only. BUILD_CLIENT=OFF skips the raylib
 # client entirely, so this needs none of raylib's GUI/graphics system deps
-# (X11, OpenGL, ALSA...) - just a C++20 toolchain. BUILD_TESTS=OFF likewise
+# (X11, OpenGL, ALSA...) - just a C++23 toolchain. BUILD_TESTS=OFF likewise
 # skips the unit-test target: tests run in CI, not in the shipped image.
 #
 # Build context must already have submodules populated the same way the
@@ -14,6 +14,8 @@
 # Single place to pin the base image for both stages. `trixie-slim` is a
 # rolling tag, so a rebuild months apart is not reproducible; override this
 # with a digest (--build-arg DEBIAN_IMAGE=debian@sha256:...) to pin exactly.
+# CI's Linux jobs run in this same image (`&toolchain` in ci.yml) so every
+# build uses the same GCC - change both together.
 ARG DEBIAN_IMAGE=debian:trixie-slim
 
 FROM ${DEBIAN_IMAGE} AS builder
