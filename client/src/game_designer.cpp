@@ -478,8 +478,13 @@ void GameDesigner::drawEndScreen(const shared::GameState &state,
 
             y += SECTION_GAP;
 
-            auto teamIdx{0u};
-            for (const auto &team : s.teams) {
+            // Indexed rather than a range-`for` with a counter alongside: the
+            // team's slot is what names and colours it, so it has to come from
+            // the loop. Kept as a counter, it was never incremented at all, and
+            // both teams came out as "Team 1" in TEAMS_COLORS[0].
+            for (std::size_t teamIdx{0}; teamIdx < s.teams.size(); ++teamIdx) {
+              const auto &team = s.teams[teamIdx];
+
               if (team) {
                 uint32_t total{};
                 for (const auto &player : team->players)
