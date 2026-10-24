@@ -87,6 +87,36 @@ jobs:
       - name: Run tests (ASan + UBSan)
         run: ctest --preset tests-asan
 
+  # shared/ compiled to wasm by Emscripten (the `web` preset), with the sim
+  # suite run under node: proves the simulation behaves the same on wasm32
+  # (32-bit size_t/long) as natively, and that supergame-web-sim links. Same
+  # emscripten as flake.nix's `web` shell - bump together. No submodules: the
+  # preset builds only shared/, its tests and the web target. Deploying the
+  # web client is L41; this is a check only, not in any `needs:`.
+  test-web:
+    runs-on: ubuntu-latest
+    container:
+      image: emscripten/emsdk:6.0.9
+    steps:
+      - name: Install build deps
+        run: |
+          apt-get update -qq
+          apt-get install -y -qq --no-install-recommends ninja-build
+          git config --global --add safe.directory '*'
+          emcc --version | head -1
+
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      - name: Build (Emscripten)
+        run: |
+          cmake --preset web
+          cmake --build --preset web
+
+      - name: Run shared tests (node)
+        run: ctest --preset web
+
   build-client-linux:
     runs-on: ubuntu-latest
     container: *toolchain
@@ -308,6 +338,7 @@ jobs:
         with:
           context: .
           push: ${{ env.DEPLOY == 'true' }}
+          build-args: GIT_SHA=${{ github.sha }}
           tags: ${{ env.IMAGE_TAGS }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -320,6 +351,24 @@ jobs:
       - name: Trigger Dokploy redeploy
         if: env.DEPLOY == 'true'
         run: curl -fsS "${{ secrets.DOKPLOY_DEPLOY_WEBHOOK_URL }}"
+
+      # The webhook returns before the redeploy finishes, so /health alone
+      # could be answered by the old container. Wait until prod reports this
+      # run's commit: catches both "site unreachable" (e.g. the 2026-10-24
+      # missing Dokploy domain) and "new container never came up".
+      - name: Wait for prod to serve this commit
+        if: env.DEPLOY == 'true'
+        run: |
+          for attempt in $(seq 1 30); do
+            served=$(curl -fsS -m 5 https://supergame.levynkeneng.dev/version || true)
+            if [ "$served" = "$GITHUB_SHA" ]; then
+              echo "prod serves $served"
+              exit 0
+            fi
+            echo "attempt $attempt: prod serves '${served:-<no answer>}', want $GITHUB_SHA"
+            sleep 10
+          done
+          exit 1
 
   # Only runs on a version-tag push (v*) - bundles the artifacts the build
   # jobs above already produced (per the IS_RELEASE gate on their upload

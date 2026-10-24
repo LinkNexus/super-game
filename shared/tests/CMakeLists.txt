@@ -9,6 +9,8 @@ target_link_libraries(supergame-shared-tests PRIVATE
     supergame-warnings
 )
 
+# Under Emscripten (the `web` preset) this runs in node, via the toolchain's
+# CROSSCOMPILING_EMULATOR; a non-zero return from main() is node's exit code.
 # One CTest entry for the whole binary rather than one per case: the harness
 # already reports per-case pass/fail on stdout, and a single test keeps
 # `ctest` output readable while still failing the build on any bad check.

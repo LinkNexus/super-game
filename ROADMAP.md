@@ -12,11 +12,29 @@ entries appear here as one-line stubs so the numbering stays readable.
 
 ---
 
-## Where things stand — 2026-10-22
+## Where things stand — 2026-10-24 (run on branch `l35`)
 
-**Next.** **Phase 5, starting at L35** (Emscripten toolchain + CMake wiring — same pattern as
-the `windows-client-release` cross-compile). L35–L38 are local mode only and touch no lobby
-protocol. **L74 is deferred to sit with L39** (online mode on web); see its entry for why.
+**Left for Levy this run:** the `GET /version` route in `server/src/main.cpp` (contract below).
+Everything else in the run is wired and verified locally; the run lands as one PR once
+`/version` exists, because the new CI step fails without it.
+
+**`/version` contract.** `GET /version` → `200`, body exactly the value of the environment
+variable `SUPERGAME_VERSION` (no trailing newline), or `unknown` if it is unset. The Dockerfile
+sets that variable to the commit SHA (`GIT_SHA` build arg, passed by CI), and `docker-server`'s
+last step polls `https://supergame.levynkeneng.dev/version` until it equals `$GITHUB_SHA` (30 ×
+10 s). Answered by the old container, `/health` alone would pass during a failed redeploy; this
+can't. Why it exists: on 2026-10-24 prod was unreachable after a redeploy (no domain set on the
+Compose project — Traefik's own 404) while CI stayed green.
+
+**Done this run (uncommitted):**
+- **macOS `tests-asan` hang fixed** — the Darwin shell now uses `llvmPackages_22`. A one-line
+  `-fsanitize=address` program hangs before `main` with nixpkgs' LLVM 20 and 21 (the old
+  default) and runs with 22 and 23; `tests-asan` passes inside `nix develop` again (0.8 s). Also
+  `stdenv.isLinux` → `stdenv.hostPlatform.isLinux` (deprecation).
+- **L35** — see its entry.
+
+**Next after this run:** **L36** (Embind shim, replaces the L35 stub), then L37/L38. L35–L38 are
+local mode only. **L74 is deferred to sit with L39** (online mode on web); see its entry.
 
 **Two manual checks left over from the last run** (nothing automated can cover them):
 - Launch `supergame-client.exe` from `windows-client-release` on a real Windows machine (no
@@ -201,13 +219,13 @@ All tasks below are Levy's.
 
 | # | Task | Notes |
 |---|------|-------|
-| L35 | **Emscripten toolchain + CMake wiring** | New `cmake/emscripten-toolchain.cmake` + CMake preset (mirrors the existing `windows-client-release`/`cmake/mingw-w64-toolchain.cmake` cross-compile pattern), new `web/wasm/CMakeLists.txt` producing `supergame-web-sim` — links `supergame-shared` unchanged, gated behind a `BUILD_WEB` option so normal desktop/server builds are unaffected. |
+| L35 | ✅ **Emscripten toolchain + CMake wiring** | **Done (2026-10-24), branch `l35`.** `nix develop .#web` (emscripten **6.0.9**, node 24, `EM_CACHE` pointed at `~/.cache` since the nix store is read-only); `cmake/emscripten-toolchain.cmake` is a thin wrapper that finds `emcc` and includes Emscripten's own `Emscripten.cmake` (beside `emcc` in emsdk, under `../share/emscripten` in nix) with the same "enter the shell" error as the MinGW file; `BUILD_WEB` option (fatal outside Emscripten; under Emscripten client/server must be off and `server/` is skipped); `web` configure/build/test preset; `web/wasm/` with `supergame-web-sim` linking `supergame-shared` from a **stub** `main()` that L36 replaces. **Whole project builds with `-fwasm-exceptions`** under Emscripten: the test harness catches `FatalCheck` and nlohmann throws on bad JSON, and Emscripten's default is "throwing aborts". **The shared suite runs under node** (ctest via the toolchain's CROSSCOMPILING_EMULATOR): 22 tests / 114 checks, identical to native — so the sim behaves the same on wasm32, where `size_t`/`long` are 32-bit. A non-zero `main()` already becomes node's exit code in 6.0.9 (checked; no `EXIT_RUNTIME` needed). **CI:** new `test-web` job in `emscripten/emsdk:6.0.9` (same version as nix — bump together), no submodules needed, not in any `needs:`; verified locally in that image. <br><br>*Original entry:* New `cmake/emscripten-toolchain.cmake` + CMake preset (mirrors the existing `windows-client-release`/`cmake/mingw-w64-toolchain.cmake` cross-compile pattern), new `web/wasm/CMakeLists.txt` producing `supergame-web-sim` — links `supergame-shared` unchanged, gated behind a `BUILD_WEB` option so normal desktop/server builds are unaffected. |
 | L36 | **WASM binding shim (JSON in/out over the wire format)** | Thin C++ layer exposing `GameSim::start()`/`step()` to JS (via Embind), taking a `PlayerInput` JSON string in and returning a `GameState` JSON string out — reusing `messages.h`'s existing `to_json`/`from_json`, no second marshaling scheme invented. |
 | L37 | **`web/frontend/` scaffold** | TS project (Vite or similar) with Canvas2D rendering and keyboard→`PlayerInput` JSON input handling, structured to mirror the input/render split already established in `client/`. |
 | L38 | **Unified `draw(gameState)` on the TS side** | One render function for both local (WASM `step()` output) and online (server message) `GameState` JSON — same source-agnostic principle as the desktop client's `draw()`. |
 | L39 | **Online mode via native browser `WebSocket`** | TS client speaking the existing wire protocol directly to `supergame-server` (same `?name=`/`?players=` handshake as desktop, once L28/L29 land), plus a TS port of `OnlineSession`'s client-side interpolation lerp. **Do L74 with this** (team select + ready display: server half first, UI here only — see L74). |
 | L40 | **Web asset pipeline** | Lazy-load audio behind a user-gesture "Play" button (browsers block autoplay pre-interaction anyway, so this is required, not optional), and re-encode `Backgroundsound.wav` (48MB) to a compressed web-friendly format — bundling the raw wav would make first load brutal. |
-| L41 | **CI: build + deploy the web target** | New GitHub Actions job building the `web-sim` WASM preset + frontend bundle, mirroring the existing cross-compile job pattern — artifact upload/deploy gated to master pushes only, consistent with the rest of the pipeline's storage-conscious triggers. |
+| L41 | **CI: build + deploy the web target** | New GitHub Actions job building the `web-sim` WASM preset + frontend bundle, mirroring the existing cross-compile job pattern — artifact upload/deploy gated to master pushes only, consistent with the rest of the pipeline's storage-conscious triggers. <br><br>**Decided (2026-10-24): hosting + routing.** The frontend is static files served by a Caddy/nginx container on the Dokploy VPS (multi-stage image: build WASM + TS bundle, serve `dist/`; `.wasm` must go out as `application/wasm`), not by `supergame-server`. **One domain, routed by path**: `supergame.levynkeneng.dev/ws` → game server, `/api` → the Phase 7 service, `/` → the static container (Traefik prefers the longer rule, so `/` is a safe catch-all). Same origin means Phase 7 auth needs no CORS and can use a plain `HttpOnly`/`SameSite=Strict` cookie. No server change needed: its WS route is `"/*"` (`server/src/main.cpp:70`); the client URL (`client/include/constants.h:14`) becomes `.../ws`. **Two things to handle at the switch:** `/health` and `/version` are exact routes, so give them their own rule to the game server (`/version` is what the post-deploy check polls); and v2.0.0 desktop clients connect to `/`, so either ship a new desktop build or add a `/` + `Upgrade: websocket` header rule. **Not two-level subdomains** (`game.supergame.…`): the domain is Cloudflare-proxied, so browsers get Cloudflare's Universal SSL certificate (`levynkeneng.dev` + `*.levynkeneng.dev` only, verified 2026-10-24) — the Nginx Proxy Manager cert only covers the Cloudflare→origin hop. Two-level names would need DNS-only (grey cloud) or a paid Advanced Certificate. |
 
 ---
 
