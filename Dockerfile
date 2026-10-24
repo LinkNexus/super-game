@@ -63,6 +63,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY --from=builder /app/build/bin/supergame-server /usr/local/bin/supergame-server
 
+# The commit this image was built from, served at GET /version so CI can tell
+# the redeployed container from the old one. Declared this late so a new SHA
+# only changes this layer - the builder stage stays cached.
+ARG GIT_SHA=unknown
+ENV SUPERGAME_VERSION=${GIT_SHA}
+
 USER supergame
 EXPOSE 9001
 

@@ -104,6 +104,30 @@ endif()
 option(BUILD_SERVER "Build the headless game server"
        ${SUPERGAME_BUILD_SERVER_DEFAULT})
 
+# The WASM simulation module for the web client (Phase 5): shared/ compiled by
+# Emscripten, nothing else. Only meaningful under the Emscripten toolchain
+# (the `web` preset), where client and server are off - raylib and uWS have no
+# business in a browser build.
+option(BUILD_WEB "Build the WASM simulation module (Emscripten only)" OFF)
+
+if(BUILD_WEB AND NOT EMSCRIPTEN)
+    message(FATAL_ERROR
+        "BUILD_WEB needs the Emscripten toolchain - use the `web` preset")
+endif()
+
+if(EMSCRIPTEN)
+    if(BUILD_CLIENT OR BUILD_SERVER)
+        message(FATAL_ERROR
+            "BUILD_CLIENT/BUILD_SERVER can't target Emscripten - use the `web` preset")
+    endif()
+
+    # Native wasm exceptions for every target: the test harness catches
+    # FatalCheck, and nlohmann throws on bad JSON. Emscripten's default is
+    # "throwing aborts", which would turn a failed check into a crash.
+    add_compile_options(-fwasm-exceptions)
+    add_link_options(-fwasm-exceptions)
+endif()
+
 if(WIN32 AND NOT BUILD_SERVER)
     message(STATUS
         "supergame-server: skipped (Windows target - uSockets would need "
@@ -141,8 +165,13 @@ endif()
 # on the add_executable there. That is why BUILD_TESTS alone is enough to want
 # this subdirectory: the `tests` preset builds the server's tests with
 # BUILD_SERVER=OFF and so needs no vendored submodule at all.
-if(BUILD_SERVER OR BUILD_TESTS)
+# Not under Emscripten: the server never runs in a browser, so the web build
+# carries only shared/ and its tests.
+if((BUILD_SERVER OR BUILD_TESTS) AND NOT EMSCRIPTEN)
     add_subdirectory(server)
+endif()
+if(BUILD_WEB)
+    add_subdirectory(web/wasm)
 endif()
 
 if(BUILD_TESTS)
@@ -156,5 +185,7 @@ if(BUILD_TESTS)
     # Not gated on BUILD_SERVER: these link supergame-server-lib, which is
     # free of uSockets, so they build and run even where the server executable
     # can't (Windows/MinGW).
-    add_subdirectory(server/tests)
+    if(NOT EMSCRIPTEN)
+        add_subdirectory(server/tests)
+    endif()
 endif()

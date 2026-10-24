@@ -107,6 +107,20 @@
         "CMAKE_CXX_FLAGS": "-fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer",
         "CMAKE_EXE_LINKER_FLAGS": "-fsanitize=address,undefined"
       }
+    },
+    {
+      "name": "web",
+      "displayName": "Web: WASM sim + shared tests (Debug, Emscripten)",
+      "description": "Needs `nix develop .#web` (or CI's emsdk image). Client and server are off: only shared/, its tests (run under node by ctest) and supergame-web-sim are built.",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/emscripten-toolchain.cmake",
+        "BUILD_WEB": "ON",
+        "BUILD_CLIENT": "OFF",
+        "BUILD_SERVER": "OFF",
+        "BUILD_TESTS": "ON"
+      }
     }
   ],
   "buildPresets": [
@@ -150,6 +164,10 @@
     {
       "name": "tests-asan",
       "configurePreset": "tests-asan"
+    },
+    {
+      "name": "web",
+      "configurePreset": "web"
     }
   ],
   "testPresets": [
@@ -174,6 +192,13 @@
     {
       "name": "debug",
       "configurePreset": "debug",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "web",
+      "configurePreset": "web",
       "output": {
         "outputOnFailure": true
       }

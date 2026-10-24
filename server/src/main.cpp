@@ -14,6 +14,7 @@
 #include "types.h"
 #include <cstddef>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 
 struct PerSocketData;
@@ -66,6 +67,12 @@ int main(int, char *[]) {
 
   uWS::App()
       .get("/health", [](auto *res, auto *) { res->end("OK"); })
+      .get("/version",
+           [](auto *res, auto *) {
+             auto version = std::getenv("SUPERGAME_VERSION");
+
+             version ? res->end(version) : res->end("unknown");
+           })
       .ws<PerSocketData>(
           "/*",
           {// The one WebSocket callback that still sees the raw HTTP
