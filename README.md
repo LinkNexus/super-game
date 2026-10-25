@@ -61,6 +61,22 @@ any other combination works too:
 cmake -S . -B build/mine -G Ninja -DBUILD_CLIENT=OFF -DBUILD_TESTS=OFF
 ```
 
+## Web (in progress)
+
+The browser version lives in `web/`: `web/wasm/` compiles `shared/` to WebAssembly
+(Emscripten) and `web/frontend/` is a TypeScript + Vite app. Both need Emscripten and
+node, which the repo's nix flake provides; no submodules needed.
+
+```bash
+nix develop .#web       # then, inside that shell:
+make web-dev            # build the wasm module, then the Vite dev server on :5173
+make web-dist           # type-check + production bundle in web/frontend/dist
+make test-web           # shared/ suite + the WebSim binding test, under node
+```
+
+The frontend imports the module from `build/web/bin` (the `web` CMake preset's output),
+so the wasm must be built before `npm run dev`/`npm run build`; the make targets do that.
+
 ## Tests
 
 ```bash

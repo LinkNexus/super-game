@@ -1,5 +1,6 @@
 .PHONY: all client server server-asan tests run run-client run-server \
-        run-server-asan clean rebuild test test-asan test-debug help debug release
+        run-server-asan clean rebuild test test-asan test-debug help debug release \
+        web web-dev web-dist test-web
 
 # Which module to build, and at which optimisation level. Every target below
 # resolves to a CMake preset named `<module>` (Debug) or `<module>-release`,
@@ -29,6 +30,7 @@ help:
 	@echo "Targets:  all client server server-asan tests"
 	@echo "          run-client run-server run-server-asan"
 	@echo "          test test-asan clean rebuild"
+	@echo "          web web-dev web-dist test-web  (inside nix develop .#web)"
 	@echo "Variable: BUILD=debug (default) | release"
 	@echo "Example:  make server BUILD=release"
 
@@ -67,6 +69,31 @@ server-asan:
 tests:
 	cmake --preset tests
 	cmake --build --preset tests
+
+# --- Web (Phase 5) ---------------------------------------------------------
+# All of these need Emscripten and node: run them inside `nix develop .#web`.
+# The frontend imports the wasm module from build/web/bin (vite.config.ts's
+# @wasm alias), so each frontend target builds it first.
+
+web:
+	cmake --preset web
+	cmake --build --preset web
+
+web/frontend/node_modules: web/frontend/package-lock.json
+	cd web/frontend && npm ci
+	@touch $@
+
+# Vite dev server with hot reload, on http://localhost:5173.
+web-dev: web web/frontend/node_modules
+	cd web/frontend && npm run dev
+
+# Type-check + production bundle into web/frontend/dist (what L41 deploys).
+web-dist: web web/frontend/node_modules
+	cd web/frontend && npm run build
+
+# shared/ suite and the WebSim binding test, under node. CI's test-web job.
+test-web: web
+	ctest --preset web
 
 # --- Running --------------------------------------------------------------
 

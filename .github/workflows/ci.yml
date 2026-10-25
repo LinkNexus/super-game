@@ -117,6 +117,14 @@ jobs:
       - name: Run shared tests (node)
         run: ctest --preset web
 
+      # Type-checks against the .d.mts the build above just generated, then
+      # bundles; uses the image's own node/npm (emsdk ships node 24).
+      - name: Frontend type-check + build
+        working-directory: web/frontend
+        run: |
+          npm ci --no-fund --no-audit
+          npm run build
+
   build-client-linux:
     runs-on: ubuntu-latest
     container: *toolchain

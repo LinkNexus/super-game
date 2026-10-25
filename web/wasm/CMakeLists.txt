@@ -22,6 +22,7 @@ target_link_options(supergame-web-sim PRIVATE
     -sENVIRONMENT=web,node
     -sALLOW_MEMORY_GROWTH=1
     # TS types for the module + the Embind API (WebSim), for web/frontend.
-    # The JSON payloads stay strings here; their TS types are hand-written.
-    "SHELL:--emit-tsd $<TARGET_FILE_DIR:supergame-web-sim>/supergame-web-sim.d.ts"
+    # .d.mts: TS only pairs an .mjs import with a .d.mts. The JSON payloads
+    # stay strings here; their TS types are web/frontend/src/messages.ts.
+    "SHELL:--emit-tsd $<TARGET_FILE_DIR:supergame-web-sim>/supergame-web-sim.d.mts"
 )
