@@ -1,3 +1,1 @@
-#include <cstdint>
-
 namespace shared {}

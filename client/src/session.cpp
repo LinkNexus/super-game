@@ -58,15 +58,16 @@ LocalSession::LocalSession(const GameMode *mode,
 shared::GameState LocalSession::step(
     const shared::PlayerInputs<MAX_PLAYERS_ON_THIS_MACHINE> &inputs, float dt) {
   std::visit(shared::overloaded{
-                 [&](const CoopMode &) {
-                   auto &s = std::get<shared::CoopGameSim>(sim_);
-                   s.step(std::get<shared::CoopGameState>(state_), inputs, dt);
+                 [&](shared::CoopGameSim &sim, shared::CoopGameState &state) {
+                   sim.step(state, inputs, dt);
                  },
-                 [&](const PvPMode &) {
-                   auto &s = std::get<shared::PvPGameSim>(sim_);
-                   s.step(std::get<shared::PvPGameState>(state_), inputs, dt);
+                 [&](shared::PvPGameSim &sim, shared::PvPGameState &state) {
+                   sim.step(state, inputs, dt);
+                 },
+                 [](auto &, auto &) {
+                   throw std::runtime_error("Invalid sim/state variant");
                  }},
-             *mode_);
+             sim_, state_);
 
   return state_;
 }
