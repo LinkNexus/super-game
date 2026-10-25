@@ -10,3 +10,10 @@ CompileFlags:
     - -Ivendor/uWebSockets/uSockets/src
     - -DUWS_NO_ZLIB
     - -DLIBUS_NO_SSL
+---
+# web/ only builds under Emscripten, so it isn't in the root
+# compile_commands.json (build/debug); use the `web` preset's database.
+If:
+  PathMatch: web/.*
+CompileFlags:
+  CompilationDatabase: build/web

@@ -1,5 +1,8 @@
+#pragma once
+
 #include <random>
 
+namespace shared {
 /// Process-wide random number source for gameplay randomness (enemy shot
 /// timing, etc.). A single shared Mersenne Twister rather than per-caller
 /// engines, seeded once via seed().
@@ -19,3 +22,4 @@ public:
   /// [min, max].
   static float getRandomFloat(float min, float max);
 };
+} // namespace shared

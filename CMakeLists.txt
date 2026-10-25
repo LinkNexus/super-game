@@ -182,6 +182,10 @@ if(BUILD_TESTS)
 
     add_subdirectory(shared/tests)
 
+    if(BUILD_WEB)
+        add_subdirectory(web/wasm/tests)
+    endif()
+
     # Not gated on BUILD_SERVER: these link supergame-server-lib, which is
     # free of uSockets, so they build and run even where the server executable
     # can't (Windows/MinGW).

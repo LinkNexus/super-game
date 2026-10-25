@@ -12,28 +12,13 @@ entries appear here as one-line stubs so the numbering stays readable.
 
 ---
 
-## Where things stand — 2026-10-24 (run on branch `l35`)
+## Where things stand — 2026-10-25 (run on branch `l36`)
 
-**Left for Levy this run:** the `GET /version` route in `server/src/main.cpp` (contract below).
-Everything else in the run is wired and verified locally; the run lands as one PR once
-`/version` exists, because the new CI step fails without it.
+**This run: L36 done** (Embind shim + `web-sim-binding` test; see its entry), uncommitted.
+The L35 run (Emscripten toolchain, `test-web`, the `/version` post-deploy check) merged as PR
+#26; the `/version` check passed on its first master run.
 
-**`/version` contract.** `GET /version` → `200`, body exactly the value of the environment
-variable `SUPERGAME_VERSION` (no trailing newline), or `unknown` if it is unset. The Dockerfile
-sets that variable to the commit SHA (`GIT_SHA` build arg, passed by CI), and `docker-server`'s
-last step polls `https://supergame.levynkeneng.dev/version` until it equals `$GITHUB_SHA` (30 ×
-10 s). Answered by the old container, `/health` alone would pass during a failed redeploy; this
-can't. Why it exists: on 2026-10-24 prod was unreachable after a redeploy (no domain set on the
-Compose project — Traefik's own 404) while CI stayed green.
-
-**Done this run (uncommitted):**
-- **macOS `tests-asan` hang fixed** — the Darwin shell now uses `llvmPackages_22`. A one-line
-  `-fsanitize=address` program hangs before `main` with nixpkgs' LLVM 20 and 21 (the old
-  default) and runs with 22 and 23; `tests-asan` passes inside `nix develop` again (0.8 s). Also
-  `stdenv.isLinux` → `stdenv.hostPlatform.isLinux` (deprecation).
-- **L35** — see its entry.
-
-**Next after this run:** **L36** (Embind shim, replaces the L35 stub), then L37/L38. L35–L38 are
+**Next after this run:** **L37** (`web/frontend/` scaffold), then L38. L35–L38 are
 local mode only. **L74 is deferred to sit with L39** (online mode on web); see its entry.
 
 **Two manual checks left over from the last run** (nothing automated can cover them):
@@ -220,7 +205,7 @@ All tasks below are Levy's.
 | # | Task | Notes |
 |---|------|-------|
 | L35 | ✅ **Emscripten toolchain + CMake wiring** | **Done (2026-10-24), branch `l35`.** `nix develop .#web` (emscripten **6.0.9**, node 24, `EM_CACHE` pointed at `~/.cache` since the nix store is read-only); `cmake/emscripten-toolchain.cmake` is a thin wrapper that finds `emcc` and includes Emscripten's own `Emscripten.cmake` (beside `emcc` in emsdk, under `../share/emscripten` in nix) with the same "enter the shell" error as the MinGW file; `BUILD_WEB` option (fatal outside Emscripten; under Emscripten client/server must be off and `server/` is skipped); `web` configure/build/test preset; `web/wasm/` with `supergame-web-sim` linking `supergame-shared` from a **stub** `main()` that L36 replaces. **Whole project builds with `-fwasm-exceptions`** under Emscripten: the test harness catches `FatalCheck` and nlohmann throws on bad JSON, and Emscripten's default is "throwing aborts". **The shared suite runs under node** (ctest via the toolchain's CROSSCOMPILING_EMULATOR): 22 tests / 114 checks, identical to native — so the sim behaves the same on wasm32, where `size_t`/`long` are 32-bit. A non-zero `main()` already becomes node's exit code in 6.0.9 (checked; no `EXIT_RUNTIME` needed). **CI:** new `test-web` job in `emscripten/emsdk:6.0.9` (same version as nix — bump together), no submodules needed, not in any `needs:`; verified locally in that image. <br><br>*Original entry:* New `cmake/emscripten-toolchain.cmake` + CMake preset (mirrors the existing `windows-client-release`/`cmake/mingw-w64-toolchain.cmake` cross-compile pattern), new `web/wasm/CMakeLists.txt` producing `supergame-web-sim` — links `supergame-shared` unchanged, gated behind a `BUILD_WEB` option so normal desktop/server builds are unaffected. |
-| L36 | **WASM binding shim (JSON in/out over the wire format)** | Thin C++ layer exposing `GameSim::start()`/`step()` to JS (via Embind), taking a `PlayerInput` JSON string in and returning a `GameState` JSON string out — reusing `messages.h`'s existing `to_json`/`from_json`, no second marshaling scheme invented. |
+| L36 | ✅ **WASM binding shim (JSON in/out over the wire format)** | **Done (2026-10-25), branch `l36`.** `web/wasm/src/web_sim.cpp` (Levy): Embind class `WebSim` — `startCoop(n)`, `startPvP(teams, size)`, `step(inputsJson) → string` (the **server's `{type, payload}` envelope**, `server/include/game.h:110`, so L38's `draw()` parses one format from wasm and socket; steps with `FIXED_DT`, JS runs the accumulator), `getPlayerIds() → string` (null-padded `PlayerIds<MAX_PLAYERS_ON_THIS_MACHINE>`, like `WELCOME`'s `players_ids`). Also bound: constants (`MAX_PLAYERS_ON_THIS_MACHINE`, `FIXED_DT`, mode caps), `rndGeneratorSeed()` (**the frontend must call it once**, or every game repeats the same enemy timing), and the phase/message enums as `enum_value_type::number` so they compare to the JSON's plain numbers. **Why strings, not Embind objects:** one serialization scheme (nlohmann's, from `messages.h`) instead of a hand-synced `value_object` per struct, and the same JSON the socket delivers. **Machine seats vs wire slots:** the shim's `MAX_PLAYERS_ON_THIS_MACHINE` is deliberately separate from `MAX_PLAYERS_PER_CLIENT` (local seats may outgrow online ones, e.g. gamepads); the TS `OnlineSession` (L39) copies at most `MAX_PLAYERS_PER_CLIENT` inputs, as desktop's does. `start*` validate counts themselves (incl. `teams × size ≤ seats`: an out-of-bounds `[]` write in wasm corrupts memory silently) and reset `player_ids_`. Side changes: `RndGenerator` moved into `namespace shared`; `LocalSession::step` visits `(sim_, state_)`; coop's too-few-players message fixed. **Build:** `-lembind`, `MODULARIZE` + `EXPORT_ES6`, `ENVIRONMENT=web,node` → `build/web/bin/supergame-web-sim.mjs` + `.wasm`, and `--emit-tsd` → `supergame-web-sim.d.ts` (factory, `WebSim`, constants, enums; payloads stay `string` — their TS types are L37's to hand-write). `.clangd` points `web/` at `build/web`'s compile database. **Test:** `web-sim-binding` (node, `ctest --preset web`, so CI's `test-web` runs it): envelope shape, coop entrance progresses, ids incl. restart, seat overflow throws (only *that* it throws — wasm exceptions reach JS opaque), PvP 1v1. **Open:** node rarely hung in `process.exit()` *after* all checks passed (~3 in 600 local runs, macOS, cause not found); the test has a 60 s ctest `TIMEOUT` so CI fails fast rather than stalling. If it shows up in CI, sample the hung process (`sample <pid>`) next time. <br><br>*Original entry:* Thin C++ layer exposing `GameSim::start()`/`step()` to JS (via Embind), taking a `PlayerInput` JSON string in and returning a `GameState` JSON string out — reusing `messages.h`'s existing `to_json`/`from_json`, no second marshaling scheme invented. |
 | L37 | **`web/frontend/` scaffold** | TS project (Vite or similar) with Canvas2D rendering and keyboard→`PlayerInput` JSON input handling, structured to mirror the input/render split already established in `client/`. |
 | L38 | **Unified `draw(gameState)` on the TS side** | One render function for both local (WASM `step()` output) and online (server message) `GameState` JSON — same source-agnostic principle as the desktop client's `draw()`. |
 | L39 | **Online mode via native browser `WebSocket`** | TS client speaking the existing wire protocol directly to `supergame-server` (same `?name=`/`?players=` handshake as desktop, once L28/L29 land), plus a TS port of `OnlineSession`'s client-side interpolation lerp. **Do L74 with this** (team select + ready display: server half first, UI here only — see L74). |
@@ -259,6 +244,19 @@ rendering experience" goal doesn't.
 become an additional selectable mode alongside it (extending Phase 4's mode-select step with
 a dimensionality axis, not just Coop/PvP)? Affects whether `Vec2D` and the current 2D
 collision/rendering path get deleted outright or kept around for a 2D mode.
+
+**Idea (2026-10-25), not yet a task: player counts from formulas, not tables.** Today the caps
+are fixed (`MAX_PLAYERS_COOP`, `MAX_TEAMS × MAX_PLAYERS_PER_TEAM`) and enemy count/difficulty
+come from per-count values. Idea: scale difficulty with formulas in n, and let each consumer
+choose its maximum, which the `N` of `start<N>`/`step<N>` already half-does. 3D is the natural
+time for it: per-player cameras or split screen remove the 2D screen-width limit (PvP lines a
+team up side by side, `game_sim.cpp:34`). **Keep the fixed caps and raise them deliberately**
+rather than going to dynamic containers. The heap isn't the concern (one allocation in
+`start()`, none per tick); the limits that remain are the fixed `BulletsPool`, wire state
+growing per player per tick, balance at untested n, and split screen's n renders per frame.
+**Constraint to keep:** local seats (`MAX_PLAYERS_ON_THIS_MACHINE`, e.g. 5 with gamepads) can
+exceed a mode's cap; that's already a compile error at `start`/`step` (`requires(N <= …)`), so
+the menu offers only the counts the mode allows and copies that many ids into the sim's array.
 
 All tasks below are Levy's.
 

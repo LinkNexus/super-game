@@ -2,7 +2,7 @@
 #include "shared/rnd_generator.h"
 
 int main(int argc, char *argv[]) {
-  RndGenerator::seed();
+  shared::RndGenerator::seed();
 
   auto server_url = default_server_url;
   if (argc > 1)

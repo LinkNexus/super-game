@@ -37,7 +37,7 @@ struct PerSocketData {
 };
 
 int main(int, char *[]) {
-  RndGenerator::seed();
+  shared::RndGenerator::seed();
 
   GameManager manager{};
   auto manager_ptr = &manager;

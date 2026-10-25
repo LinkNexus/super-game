@@ -57,8 +57,7 @@ public:
 
     if (count < 1)
       throw std::runtime_error(
-          "Too many players for CoopGameSim, given: " + std::to_string(count) +
-          ", max: " + std::to_string(MAX_PLAYERS_COOP));
+          "At least one player is required to start a coop game");
 
     initial_player_count_ = count;
 
