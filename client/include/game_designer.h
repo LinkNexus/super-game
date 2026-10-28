@@ -52,8 +52,9 @@ private:
   /// Draws a two-column roster row: @p label left of centre, @p status
   /// right of it. Used by both lobby branches and the end screen so every
   /// player list lines up identically.
-  static float drawRosterRow(const std::string &label, const std::string &status,
-                             Color statusColor, float y);
+  static float drawRosterRow(const std::string &label,
+                             const std::string &status, Color statusColor,
+                             float y);
 
   /// @return @p state's display name, falling back to "Player N" when the
   /// server sent none, suffixed with " (You)" when @p markAsYours.

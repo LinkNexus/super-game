@@ -8,11 +8,8 @@ const { default: createModule } = await import(
 );
 const Module = await createModule();
 
-// shared::ServerMessageType / CoopGameSim::Phase, as numbers on the wire.
-const PVP_GAME_STATE = 3;
-const COOP_GAME_STATE = 4;
-const ENEMIES_ENTRANCE = 0;
-const BUTTON_SHOOT = 1 << 2;
+const { ENEMIES_ENTRANCE } = Module.CoopGamePhase;
+const { BUTTON_SHOOT } = Module.Button;
 
 let failures = 0;
 function test(name, fn) {
@@ -35,33 +32,35 @@ function step(sim, inputs) {
   return JSON.parse(sim.step(JSON.stringify(inputs)));
 }
 
-test("coop: step returns the server's envelope", () => {
+// step() returns the bare CoopGameState/PvPGameState (no {type, payload}
+// envelope): the TS LocalSession tags it with the mode it started.
+test("coop: step returns a CoopGameState", () => {
   const sim = new Module.WebSim();
   sim.startCoop(1);
-  const msg = step(sim, NO_INPUT);
+  const state = step(sim, NO_INPUT);
 
-  assert.equal(msg.type, COOP_GAME_STATE);
-  assert.ok(msg.payload, "no payload");
-  assert.equal(msg.payload.phase, ENEMIES_ENTRANCE);
-  assert.equal(msg.payload.players.filter((p) => p !== null).length, 1);
+  assert.equal(state.type, undefined, "got an envelope");
+  assert.equal(state.phase, ENEMIES_ENTRANCE);
+  assert.equal(state.players.filter((p) => p !== null).length, 1);
+  assert.ok(Array.isArray(state.enemies), "no enemies grid");
   sim.delete();
 });
 
 test("coop: the entrance ends within 60 s of ticks", () => {
   const sim = new Module.WebSim();
   sim.startCoop(2);
-  let msg;
+  let state;
   for (let i = 0; i < 60 * 60; i++) {
-    msg = step(
+    state = step(
       sim,
       padded([
         { buttons: BUTTON_SHOOT, player_id: 1 },
         { buttons: 0, player_id: 2 },
       ]),
     );
-    if (msg.payload.phase !== ENEMIES_ENTRANCE) break;
+    if (state.phase !== ENEMIES_ENTRANCE) break;
   }
-  assert.notEqual(msg.payload.phase, ENEMIES_ENTRANCE);
+  assert.notEqual(state.phase, ENEMIES_ENTRANCE);
   sim.delete();
 });
 
@@ -95,13 +94,13 @@ test("pvp: more players than this machine's seats throws", () => {
   sim.delete();
 });
 
-test("pvp: 1v1 returns a PvP envelope with two teams", () => {
+test("pvp: 1v1 returns a PvPGameState with two teams", () => {
   const sim = new Module.WebSim();
   sim.startPvP(2, 1);
-  const msg = step(sim, NO_INPUT);
+  const state = step(sim, NO_INPUT);
 
-  assert.equal(msg.type, PVP_GAME_STATE);
-  assert.equal(msg.payload.teams.filter((t) => t !== null).length, 2);
+  assert.equal(state.type, undefined, "got an envelope");
+  assert.equal(state.teams.filter((t) => t !== null).length, 2);
   sim.delete();
 });
 

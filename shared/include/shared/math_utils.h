@@ -6,7 +6,10 @@ namespace shared {
 /// 2D vector used throughout the simulation for position/velocity, and sent
 /// verbatim over the wire (JSON-serializable via the macro below).
 struct Vec2D {
-  float x, y;
+  float x{}, y{};
+
+  Vec2D() : x(0), y(0) {}
+  Vec2D(float x, float y) : x(x), y(y) {}
 
   Vec2D operator+(const Vec2D &other) const;
 

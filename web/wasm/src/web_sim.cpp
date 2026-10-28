@@ -1,7 +1,11 @@
 #include "shared/aliases.h"
+#include "shared/constants.h"
+#include "shared/math_utils.h"
 #include "shared/messages.h"
 #include "shared/rnd_generator.h"
+#include "shared/sim/bullet_sim.h"
 #include "shared/sim/game_sim.h"
+#include "shared/sim/player_sim.h"
 #include "shared/wire.h"
 #include <emscripten/bind.h>
 
@@ -77,29 +81,25 @@ public:
     auto inputs = shared::decode(inputPayload)
                       .get<shared::PlayerInputs<MAX_PLAYERS_ON_THIS_MACHINE>>();
 
-    nlohmann::json envelope;
+    std::string envelope;
 
     std::visit(shared::overloaded{
                    [&inputs, &envelope](shared::CoopGameSim &sim,
                                         shared::CoopGameState &state) {
                      sim.step(state, inputs, shared::FIXED_DT);
-                     envelope["type"] =
-                         shared::ServerMessageType::COOP_GAME_STATE;
-                     envelope["payload"] = state;
+                     envelope = shared::encode(state);
                    },
                    [&inputs, &envelope](shared::PvPGameSim &sim,
                                         shared::PvPGameState &state) {
                      sim.step(state, inputs, shared::FIXED_DT);
-                     envelope["type"] =
-                         shared::ServerMessageType::PVP_GAME_STATE;
-                     envelope["payload"] = state;
+                     envelope = shared::encode(state);
                    },
                    [](auto &, auto &) {
                      throw std::runtime_error("Invalid sim/state variant");
                    }},
                sim_, state_);
 
-    return shared::encode(envelope);
+    return envelope;
   }
 
   std::string getPlayerIds() const { return shared::encode(player_ids_); }
@@ -112,6 +112,28 @@ EMSCRIPTEN_BINDINGS(supergame) {
   emscripten::constant("MAX_PLAYERS_COOP", shared::MAX_PLAYERS_COOP);
   emscripten::constant("MAX_TEAMS", shared::MAX_TEAMS);
   emscripten::constant("MAX_PLAYERS_PER_TEAM", shared::MAX_PLAYERS_PER_TEAM);
+
+  emscripten::constant("SCREEN_WIDTH", shared::SCREEN_WIDTH);
+  emscripten::constant("SCREEN_HEIGHT", shared::SCREEN_HEIGHT);
+
+  emscripten::constant("SIM_PLAYER_SIZE", shared::PlayerSimState::SIZE);
+
+  emscripten::constant("SIM_BULLET_HEIGHT", shared::BulletSimState::HEIGHT);
+  emscripten::constant("SIM_BULLET_WIDTH", shared::BulletSimState::WIDTH);
+
+  emscripten::constant("SIM_ENEMY_HEIGHT", shared::EnemySimState::HEIGHT);
+  emscripten::constant("SIM_ENEMY_WIDTH", shared::EnemySimState::WIDTH);
+  emscripten::constant("SIM_ENEMIES_POOL_SPACING_X",
+                       shared::EnemiesPoolSimState::SPACING_X);
+  emscripten::constant("SIM_ENEMIES_POOL_SPACING_Y",
+                       shared::EnemiesPoolSimState::SPACING_Y);
+  emscripten::constant("SIM_ENEMIES_POOL_COLS",
+                       shared::EnemiesPoolSimState::COLS);
+  emscripten::constant("SIM_ENEMIES_POOL_MAX_ROWS",
+                       shared::EnemiesPoolSimState::MAX_ROWS);
+
+  emscripten::constant("SIM_BOSS_HEIGHT", shared::BossSimState::HEIGHT);
+  emscripten::constant("SIM_BOSS_WIDTH", shared::BossSimState::WIDTH);
 
   // To be called once at the TS code entry point
   emscripten::function("rndGeneratorSeed", &shared::RndGenerator::seed);
@@ -145,10 +167,23 @@ EMSCRIPTEN_BINDINGS(supergame) {
       .value("PLAYER_INPUT", shared::ClientMessageType::PLAYER_INPUT)
       .value("READY", shared::ClientMessageType::READY);
 
+  emscripten::enum_<shared::Button>("Button",
+                                    emscripten::enum_value_type::number)
+      .value("BUTTON_NONE", shared::Button::BUTTON_NONE)
+      .value("BUTTON_LEFT", shared::Button::BUTTON_LEFT)
+      .value("BUTTON_RIGHT", shared::Button::BUTTON_RIGHT)
+      .value("BUTTON_SHOOT", shared::Button::BUTTON_SHOOT);
+
   emscripten::class_<WebSim>("WebSim")
       .constructor<>()
       .function("startCoop", &WebSim::startCoop)
       .function("startPvP", &WebSim::startPvP)
       .function("step", &WebSim::step)
       .function("getPlayerIds", &WebSim::getPlayerIds);
+
+  emscripten::class_<shared::Vec2D>("Vec2D")
+      .constructor<float, float>()
+      .property("x", &shared::Vec2D::x)
+      .property("y", &shared::Vec2D::y)
+      .function("rotated", &shared::Vec2D::rotated);
 }

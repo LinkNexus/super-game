@@ -210,10 +210,9 @@ void EntityDesigner::drawPlayer(const shared::PlayerState &state, Color color,
                   2.0f
             : size * 0.7f;
 
-    auto markerPos =
-        toScreen(state.position +
-                 shared::Vec2D({.x = 0, .y = -(drawnHalfHeight + MARKER_GAP)})
-                     .rotated(state.orientation));
+    auto markerPos = toScreen(state.position +
+                              shared::Vec2D(0, -(drawnHalfHeight + MARKER_GAP))
+                                  .rotated(state.orientation));
     auto marker = std::string("P") + std::to_string(playerIdx + 1);
 
     DrawText(marker.c_str(),
