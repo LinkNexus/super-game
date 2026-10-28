@@ -146,12 +146,20 @@ export type ServerMessage =
   | Envelope<ServerMessageType["COOP_GAME_STATE"], CoopGameState>
   | Envelope<ServerMessageType["PVP_GAME_STATE"], PvPGameState>;
 
-/// What WebSim.step() returns, and the in-game subset of ServerMessage:
-/// narrow on `type` to get the payload's type.
+/// The in-game subset of ServerMessage, which the online session unwraps.
 export type GameStateMessage = Extract<
   ServerMessage,
   { type: ServerMessageType["COOP_GAME_STATE" | "PVP_GAME_STATE"] }
 >;
+
+/// What every session's step() hands the UI: the TS stand-in for
+/// shared::GameState (a std::variant, which carries its own tag). The JSON
+/// payloads don't, so the session adds `mode`: LocalSession from the sim it
+/// started (WebSim.step() returns the bare state), OnlineSession from the
+/// envelope's `type`. Narrow on `mode`, as std::visit does on desktop.
+export type GameState =
+  | { mode: "coop"; state: CoopGameState }
+  | { mode: "pvp"; state: PvPGameState };
 
 export type ClientMessage =
   | Envelope<ClientMessageType["PLAYER_INPUT"], PlayerInputs>
