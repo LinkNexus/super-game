@@ -1,6 +1,3 @@
-import { FONT_FAMILY } from "./constants";
-import { stripFileExtension } from "./helpers";
-
 const FILENAMES = [
   "boss",
   "playerShip",
@@ -27,13 +24,6 @@ export async function loadAssets() {
   FILENAMES.forEach((filename, i) => {
     images[filename] = promises[i]!;
   });
-
-  document.fonts.add(
-    await new FontFace(
-      stripFileExtension(FONT_FAMILY),
-      `url(${FONT_FAMILY})`,
-    ).load(),
-  );
 }
 
 export function getAsset(name: ImageName) {

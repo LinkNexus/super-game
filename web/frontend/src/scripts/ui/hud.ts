@@ -37,7 +37,7 @@ export class PlayerHud {
     if (player.lives !== this.last.lives) {
       this.last.lives = player.lives;
       this.livesEl.textContent = String(player.lives);
-      this.livesEl.classList.toggle("dead", player.lives <= 0);
+      this.root.classList.toggle("dead", player.lives <= 0);
     }
 
     if (player.points !== this.last.points) {

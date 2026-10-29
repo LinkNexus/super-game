@@ -10,6 +10,7 @@ import type {
   PlayerState,
   PvPGameState,
 } from "../messages";
+import type { GameType } from "../types";
 import { drawParticles } from "./particles";
 
 const STATUS_FONT_SIZE = 30;
@@ -96,8 +97,15 @@ export function clearScreen() {
 export function drawCoopGame(state: CoopGameState, myIds: PlayerIds) {
   for (let i = 0; i < state.players.length; ++i) {
     const player = state.players[i];
-    if (!player) continue;
-    drawPlayer(player, myIds.indexOf(player.id));
+    if (!player || player.lives < 1) continue;
+    const playerIdx = myIds.indexOf(player.id);
+    drawPlayer(
+      player,
+      playerIdx,
+      playerIdx === 0
+        ? PLAYER_COLORS.mainPlayer
+        : PLAYER_COLORS.players[playerIdx % PLAYER_COLORS.players.length]!,
+    );
   }
 
   drawBullets(state.bullets);
@@ -106,14 +114,46 @@ export function drawCoopGame(state: CoopGameState, myIds: PlayerIds) {
   drawBoss(state.boss);
 }
 
-export function drawPvPGame(state: PvPGameState, myIds: PlayerIds) {}
+export function drawPvPGame(
+  state: PvPGameState,
+  myIds: PlayerIds,
+  gameType: GameType,
+) {
+  const isOnThisMachine = (player: PlayerState) => {
+    return player.id !== 0 && myIds.includes(player.id);
+  };
+  const thisMachineTeamIdx = state.teams.findIndex((t) => {
+    return t?.players.some((p) => p && isOnThisMachine(p));
+  });
 
-function drawPlayer(player: PlayerState, playerIdx: number) {
+  let colorIdx = 0;
+  for (let teamIdx = 0; teamIdx < state.teams.length; ++teamIdx) {
+    const team = state.teams[teamIdx];
+    if (!team) continue;
+
+    team.players.forEach((p) => {
+      if (!p || p.lives < 1) return;
+
+      let color = PLAYER_COLORS.playerEnemy;
+      const playerIdxOnThisMachine = myIds.indexOf(p.id);
+
+      if (gameType === "local" || thisMachineTeamIdx === teamIdx) {
+        color =
+          playerIdxOnThisMachine === 0
+            ? PLAYER_COLORS.mainPlayer
+            : PLAYER_COLORS.players[colorIdx++ % PLAYER_COLORS.players.length]!;
+      }
+
+      drawPlayer(p, playerIdxOnThisMachine, color);
+    });
+  }
+
+  drawBullets(state.bullets);
+  drawParticles();
+}
+
+function drawPlayer(player: PlayerState, playerIdx: number, color: string) {
   const playerShipImage = getAsset("playerShip");
-  const color =
-    playerIdx === 0
-      ? PLAYER_COLORS.mainPlayer
-      : PLAYER_COLORS.players[playerIdx % PLAYER_COLORS.players.length];
   const size = appModule.SIM_PLAYER_SIZE;
   const scale = (size * 2) / playerShipImage.naturalWidth;
 

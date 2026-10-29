@@ -1,4 +1,4 @@
-import { appModule, canvasCtx, FONT_FAMILY } from "./constants";
+import { appModule, canvasCtx } from "./constants";
 import type { GameScreen } from "./types";
 
 export function assertNeverForScreen(screen: GameScreen) {
@@ -10,7 +10,7 @@ export function stripFileExtension(filename: string): string {
 }
 
 export function setFont(size: number) {
-  canvasCtx.font = `${size}px ${stripFileExtension(FONT_FAMILY)}`;
+  canvasCtx.font = `${size}px "PackMan"`;
 }
 
 export function countOptional<T>(arr: (T | null)[]): number {

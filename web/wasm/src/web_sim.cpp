@@ -108,6 +108,8 @@ public:
 EMSCRIPTEN_BINDINGS(supergame) {
   emscripten::constant("MAX_PLAYERS_ON_THIS_MACHINE",
                        MAX_PLAYERS_ON_THIS_MACHINE);
+  emscripten::constant("MAX_PLAYERS_PER_CLIENT",
+                       shared::MAX_PLAYERS_PER_CLIENT);
   emscripten::constant("FIXED_DT", shared::FIXED_DT);
   emscripten::constant("MAX_PLAYERS_COOP", shared::MAX_PLAYERS_COOP);
   emscripten::constant("MAX_TEAMS", shared::MAX_TEAMS);
@@ -134,6 +136,8 @@ EMSCRIPTEN_BINDINGS(supergame) {
 
   emscripten::constant("SIM_BOSS_HEIGHT", shared::BossSimState::HEIGHT);
   emscripten::constant("SIM_BOSS_WIDTH", shared::BossSimState::WIDTH);
+
+  emscripten::constant("MAX_USERNAME_LENGTH", shared::MAX_NAME_LENGTH);
 
   // To be called once at the TS code entry point
   emscripten::function("rndGeneratorSeed", &shared::RndGenerator::seed);

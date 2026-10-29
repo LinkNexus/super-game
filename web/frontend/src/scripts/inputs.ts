@@ -1,5 +1,5 @@
 import { appModule, CONTROLS } from "./constants";
-import type { PlayerIds, PlayerInput } from "./messages";
+import type { PlayerIds, PlayerInput, PlayerInputs } from "./messages";
 
 let gameHasKeyboard = false;
 export const setGameHasKeyboard = (v: boolean) => (gameHasKeyboard = v);
@@ -33,7 +33,7 @@ export function pollPlayerInputsInGame(playerIds: PlayerIds) {
   )
     throw new Error(`Too many players on this machine: ${playerIds.length}`);
 
-  const inputs: PlayerInput[] = Array(
+  const inputs: PlayerInputs = Array(
     appModule.MAX_PLAYERS_ON_THIS_MACHINE,
   ).fill(null);
 

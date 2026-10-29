@@ -92,18 +92,32 @@ int main(int, char *[]) {
                  auto initPlayers = [slotsCount,
                                      players = &data.players_data.players,
                                      &req]() {
+                   std::array<std::string, shared::MAX_PLAYERS_PER_CLIENT>
+                       names;
+
                    const auto slots = static_cast<std::size_t>(*slotsCount);
 
                    for (std::size_t i{0}; i < slots; ++i) {
-                     auto &[_, name] = (*players)[i].emplace();
                      auto reqName =
                          req->getQuery("name" + std::to_string(i + 1));
-                     name = std::string(reqName);
+
+                     if (!shared::isNameValid(reqName))
+                       return false;
+
+                     names[i] = std::string(reqName);
                    }
+
+                   for (std::size_t i{0}; i < slots; ++i) {
+                     auto &[_, name] = (*players)[i].emplace();
+                     name = names[i];
+                   }
+
+                   return true;
                  };
 
                  if (!teamSize && slotsCountIsValid) {
-                   initPlayers();
+                   if (!initPlayers())
+                     goto bad_request;
                    data.game_type = CoopGameType{};
                  } else if (teamSize && slotsCountIsValid) {
                    auto teamCount = shared::toInt(req->getQuery("team_count"));
@@ -115,7 +129,8 @@ int main(int, char *[]) {
 
                    if (teamSizeIsValid && teamCountIsValid &&
                        *slotsCount <= *teamSize) {
-                     initPlayers();
+                     if (!initPlayers())
+                       goto bad_request;
                      data.game_type = PvPGameType{
                          .team_size =
                              static_cast<shared::PlayerCount>(*teamSize),
