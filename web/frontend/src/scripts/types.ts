@@ -1,22 +1,17 @@
 import type { GAME_TYPES } from "./constants";
-import type {
-  CoopGameState,
-  GameState,
-  GameStateMessage,
-  PvPGameState,
-} from "./messages";
+import type { GameState } from "./messages";
 import type { GameSession } from "./session";
 
-export type Config =
+export type Config = { playerCount: number } & (
   | {
       kind: "coop";
-      playerCount: number;
     }
   | {
       kind: "pvp";
-      matchUps: [number, number][];
-      selectedMatchUpIdx: number;
-    };
+      teamSize: number;
+      teamCount: number;
+    }
+);
 
 type Match = {
   session: GameSession;
@@ -30,26 +25,13 @@ export type GameType = (typeof GAME_TYPES)[number];
 export type GameScreen =
   | {
       kind: "menu";
-      selectedGameType: GameType;
     }
   | { kind: "playing"; match: Match }
   | {
-      kind: "playMenu";
+      kind: "pause";
       match: Match;
     }
   | {
       kind: "end";
       match: Omit<Match, "prevState">;
     };
-
-// export type GameScreen =
-//   | "menu"
-//   | "selectMode"
-//   | "selectPlayerCount"
-//   | "selectPlayerCountOnThisMachine"
-//   | "enterPlayerNames"
-//   | "connectingToServer"
-//   | "lobby"
-//   | "playing"
-//   | "paused"
-//   | "end";

@@ -74,6 +74,15 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(WelcomeMessage, players_ids);
 /// the null terminator on the server's fixed-size storage buffer).
 constexpr std::size_t MAX_NAME_LENGTH = 9;
 
+static inline auto isNameValid(const std::string_view name) {
+  for (const auto &c : name) {
+    if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_'))
+      return false;
+  }
+
+  return name.size() <= MAX_NAME_LENGTH;
+}
+
 /// Client-to-server message toggling the sender's ready state while waiting
 /// in the lobby. A match only starts once every connected player is ready.
 struct ReadyMessage {

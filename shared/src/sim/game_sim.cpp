@@ -4,7 +4,6 @@
 #include "shared/helpers.h"
 #include "shared/math_utils.h"
 #include "shared/messages.h"
-#include "shared/rnd_generator.h"
 #include "shared/sim/boss_sim.h"
 #include "shared/sim/bullet_sim.h"
 #include "shared/sim/enemy_sim.h"

@@ -46,7 +46,11 @@ body::after {
     text-transform: uppercase;
     background: transparent;
     border: var(--px) solid var(--accent);
-    padding: calc(var(--px) * 3) calc(var(--px) * 6);
+    /* Room for the ▶ ◀ focus indicators, as padding so a long label can
+       never run into them: the button widens instead. */
+    --gutter: calc(var(--px) * 10);
+    padding: calc(var(--px) * 3) var(--gutter);
+    white-space: nowrap;
     min-width: 260px;
     cursor: pointer;
     position: relative;
@@ -66,12 +70,23 @@ body::after {
         text-shadow: 0 0 8px var(--accent);
     }
 
-    &:focus-visible::before {
-        content: "▶";
+    &:focus-visible::before,
+    &:focus-visible::after {
         position: absolute;
-        left: calc(var(--px) * 8);
+        top: 50%;
+        translate: 0 -50%;
         color: var(--accent);
         animation: blink 1s steps(2) infinite;
+    }
+
+    &:focus-visible::before {
+        content: "▶";
+        left: calc(var(--gutter) / 3);
+    }
+
+    &:focus-visible::after {
+        content: "◀";
+        right: calc(var(--gutter) / 3);
     }
 
     &:active {
@@ -84,6 +99,27 @@ body::after {
     &.secondary {
         --accent: var(--neon-pink);
     }
+
+    /* Greyed out, no glow, no press; MenuNav skips it too. */
+    &:disabled {
+        --accent: var(--ink-dim);
+        color: var(--ink-dim);
+        cursor: not-allowed;
+        opacity: 0.6;
+        background: transparent;
+        box-shadow: none;
+        text-shadow: none;
+        transform: none;
+    }
+
+    /* Small second line under the label, e.g. "soon". */
+    & .btn-hint {
+        display: block;
+        margin-top: var(--px);
+        font-size: 11px;
+        letter-spacing: 0.1em;
+        color: var(--ink-dim);
+    }
 }
 
 @keyframes blink {
@@ -93,7 +129,10 @@ body::after {
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .btn {
+
+    .btn,
+    .btn::before,
+    .btn::after {
         transition: none;
         animation: none;
     }
@@ -102,5 +141,60 @@ body::after {
 .menu {
     display: grid;
     gap: calc(var(--px) * 4);
-    justify-items: center;
+    /* Every button in a column takes the widest one's width. */
+    justify-content: center;
+    justify-items: stretch;
+}
+
+/* Text fields (menu forms): same chunky border as .btn, dark inside. */
+.menu-form {
+    justify-items: stretch;
+}
+
+.field {
+    display: grid;
+    gap: var(--px);
+    text-align: left;
+
+    & .field-label {
+        font-size: 14px;
+        color: var(--ink-dim);
+        text-transform: uppercase;
+    }
+
+    & input {
+        --accent: var(--neon-cyan);
+        font: inherit;
+        font-size: 20px;
+        color: var(--ink);
+        caret-color: var(--accent);
+        background: rgba(0, 0, 0, 0.55);
+        border: var(--px) solid color-mix(in srgb, var(--accent) 55%, black);
+        padding: calc(var(--px) * 2) calc(var(--px) * 3);
+        box-shadow: inset var(--px) var(--px) 0 0 rgba(0, 0, 0, 0.6);
+
+        &::placeholder {
+            color: var(--ink-dim);
+            opacity: 0.6;
+        }
+
+        &:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow:
+                inset var(--px) var(--px) 0 0 rgba(0, 0, 0, 0.6),
+                0 0 14px var(--accent);
+        }
+    }
+
+    & .field-error {
+        min-height: 1em; /* keeps the layout still when a message appears */
+        font-size: 12px;
+        color: var(--neon-red);
+    }
+
+    &.invalid input {
+        --accent: var(--neon-red);
+        border-color: var(--accent);
+    }
 }

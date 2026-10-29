@@ -10,9 +10,6 @@ const dpr = window.devicePixelRatio || 1;
 
 canvas.width = appModule.SCREEN_WIDTH * dpr;
 canvas.height = appModule.SCREEN_HEIGHT * dpr;
-// canvas.style.width = `${appModule.SCREEN_WIDTH}px`;
-// canvas.style.height = `${appModule.SCREEN_HEIGHT}px`;
-// canvas.style.aspectRatio = `${appModule.SCREEN_WIDTH} / ${appModule.SCREEN_HEIGHT}`;
 
 export const canvasCtx = canvas.getContext("2d") as CanvasRenderingContext2D;
 canvasCtx.scale(dpr, dpr);
@@ -31,5 +28,3 @@ export const CONTROLS = [
     KeyW: appModule.Button.BUTTON_SHOOT,
   },
 ] as const;
-
-export const FONT_FAMILY = "PackMan.ttf";

@@ -10,7 +10,7 @@
 <body>
   <canvas id="stars"></canvas>
 
-  <main id="layout" data-screen="playing">
+  <main id="layout" data-screen="menu">
 
     <aside id="hud-left" class="hud-side">
     </aside>
@@ -27,26 +27,34 @@
 
       <div id="field">
         <canvas id="game"></canvas>
-        <div id="end-overlay" hidden>
-          <div class="end-card panel">
-            <h1 class="end-title"></h1>
-            <p class="end-subtitle"></p>
-            <div class="end-teams"></div>
-            <p class="end-total"></p>
-
-            <div class="menu end-actions">
-              <button type="button" class="btn" data-action="restart">Play again</button>
-              <button type="button" class="btn secondary" data-action="menu">Main menu</button>
-            </div>
-          </div>
-        </div>
-        <div id="pause-overlay" hidden>GAME PAUSED</div>
       </div>
     </section>
 
     <aside id="hud-right" class="hud-side"></aside>
 
   </main>
+
+  <div id="menu-overlay" hidden>
+    <div class="menu-card panel">
+      <h1 class="menu-title"></h1>
+      <p class="menu-subtitle"></p>
+      <div class="menu menu-items"></div>
+    </div>
+  </div>
+
+  <div id="end-overlay" hidden>
+    <div class="end-card panel">
+      <h1 class="end-title"></h1>
+      <p class="end-subtitle"></p>
+      <div class="end-teams"></div>
+      <p class="end-total"></p>
+
+      <div class="menu end-actions">
+        <button type="button" class="btn" data-action="restart">Play again</button>
+        <button type="button" class="btn secondary" data-action="menu">Main menu</button>
+      </div>
+    </div>
+  </div>
 
   <template id="player-hud-template">
     <div class="player-hud">

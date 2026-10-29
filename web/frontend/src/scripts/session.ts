@@ -8,12 +8,12 @@ export abstract class GameSession {
 }
 
 export class LocalSession extends GameSession {
-  private gameType: Config["kind"];
+  private gameMode: Config["kind"];
 
   constructor(config: Config) {
     super();
 
-    this.gameType = config.kind;
+    this.gameMode = config.kind;
 
     switch (config.kind) {
       case "coop":
@@ -21,9 +21,7 @@ export class LocalSession extends GameSession {
         break;
 
       case "pvp": {
-        const [teamCount, teamSize] =
-          config.matchUps[config.selectedMatchUpIdx]!;
-        sim.startPvP(teamCount, teamSize);
+        sim.startPvP(config.teamCount, config.teamSize);
         break;
       }
     }
@@ -35,7 +33,7 @@ export class LocalSession extends GameSession {
 
   step(inputs: PlayerInputs): GameState {
     return {
-      mode: this.gameType,
+      mode: this.gameMode,
       state: JSON.parse(sim.step(JSON.stringify(inputs))),
     };
   }
@@ -48,15 +46,23 @@ export type OnlineSessionConfig = Config & {
 };
 
 export class OnlineSession extends GameSession {
+  private config: OnlineSessionConfig;
+
   constructor(config: OnlineSessionConfig) {
     super();
+
+    this.config = config;
   }
 
   getPlayerIds(): PlayerIds {
     throw new Error("Method not implemented.");
   }
 
-  step(inputs: PlayerInputs): GameState {
+  step(_inputs: PlayerInputs): GameState {
     throw new Error("Method not implemented.");
+  }
+
+  getConfig() {
+    return this.config;
   }
 }
