@@ -1,0 +1,246 @@
+@font-face {
+    font-family: "PackMan";
+    src: url("/PackMan.ttf") format("truetype");
+    font-display: block;
+}
+
+html {
+    background: #000;
+}
+
+html,
+body {
+    margin: 0;
+    height: 100%;
+    color: white;
+    font-size: 25px;
+    font-family: "PackMan", sans-serif, monospace;
+}
+
+[hidden] {
+    display: none !important;
+}
+
+#layout {
+    height: 100%;
+    display: grid;
+    grid-template-columns: minmax(140px, 240px) auto minmax(140px, 240px);
+    align-items: center;
+    justify-items: center;
+    gap: 24px;
+    padding: 24px;
+    box-sizing: border-box;
+
+    &:not([data-screen="playing"]):not([data-screen="playMenu"]) .hud-side,
+    &:not([data-screen="playing"]):not([data-screen="playMenu"]) .hud-global {
+        visibility: hidden;
+    }
+}
+
+#center {
+    display: grid;
+    gap: 12px;
+    justify-items: center;
+}
+
+#field {
+    position: relative;
+}
+
+#game {
+    display: block;
+    width: min(1000px, 100%);
+    aspect-ratio: 1000 / 800;
+    max-height: calc(100vh - 120px);
+    box-shadow:
+        0 0 0 1px rgba(255, 255, 255, 0.15),
+        0 0 40px rgba(80, 120, 255, 0.15);
+}
+
+#pause-overlay {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    background: rgba(0, 0, 0, 0.5);
+    font-size: 56px;
+}
+
+#hud-global {
+    justify-self: stretch;
+    display: flex;
+    justify-content: center;
+}
+
+#boss-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 600px;
+    max-width: 100%;
+
+    & .track {
+        flex: 1;
+        height: 16px;
+        border: 1px solid white;
+        background: #333;
+    }
+
+    & .fill {
+        height: 100%;
+        width: 100%;
+        background: #e63946;
+        transition: width 0.1s linear;
+    }
+}
+
+.hud-side {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.player-hud {
+    display: grid;
+    gap: 6px;
+    font-size: 25px;
+
+    & .row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    & img {
+        height: 24px;
+    }
+
+    &.mine .name {
+        color: #8ecae6;
+    }
+
+    &.dead {
+        opacity: 0.4;
+    }
+}
+
+@media (max-width: 900px) {
+    #layout {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    #center {
+        grid-column: 1 / -1;
+        grid-row: 1;
+    }
+}
+
+#stars {
+    position: fixed;
+    inset: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: -1;
+    max-width: 100vw;
+    max-height: 100vh;
+    object-fit: contain;
+}
+
+#end-overlay {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    background: rgba(0, 0, 0, 0.6);
+}
+
+.end-card {
+    &.won {
+        --accent: var(--neon-gold);
+    }
+
+    &.lost {
+        --accent: var(--neon-red);
+    }
+
+    &.draw {
+        --accent: var(--ink-dim);
+    }
+}
+
+.end-title {
+    font-size: 64px;
+    margin: 0 0 8px;
+    color: var(--accent);
+    text-shadow:
+        4px 4px 0 rgba(0, 0, 0, 0.6),
+        0 0 18px var(--accent);
+    animation: title-in 400ms steps(4) both;
+    text-align: center;
+}
+
+.end-subtitle {
+    font-size: 30px;
+    margin: 0 0 24px;
+    color: var(--ink-dim);
+    text-align: center;
+}
+
+/* Left blank by end-screen.ts when they don't apply (coop has no team name,
+   PvP no subtitle or total). */
+.end-subtitle:empty,
+.end-total:empty,
+.end-team-name:empty {
+    display: none;
+}
+
+.end-teams {
+    display: flex;
+    gap: 40px;
+    justify-content: center;
+}
+
+.end-team-name {
+    margin: 0 0 8px;
+    font-size: 20px;
+    color: var(--accent);
+}
+
+.end-rows {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 6px;
+}
+
+.end-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 24px;
+
+    &.mine .end-row-name {
+        color: var(--neon-cyan);
+    }
+
+    &.dead {
+        opacity: 0.5;
+    }
+}
+
+.end-total {
+    margin: 20px 0 0;
+    font-size: 20px;
+    text-align: center;
+}
+
+@keyframes title-in {
+    from {
+        transform: scale(2.2);
+        opacity: 0;
+    }
+}
+
+.end-actions {
+    margin-top: calc(var(--px) * 8);
+}

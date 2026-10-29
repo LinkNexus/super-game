@@ -1,0 +1,106 @@
+:root {
+    --bg-deep: #05060f;
+    --panel: rgba(12, 10, 32, 0.88);
+    --ink: #f4f1ff;
+    --ink-dim: #9a94c4;
+    --neon-cyan: #2de2e6;
+    --neon-pink: #ff3cac;
+    --neon-gold: #ffd166;
+    --neon-red: #ff4f5a;
+    --px: 4px;
+    --font-game: "PackMan", monospace;
+}
+
+body {
+    font-family: var(--font-game);
+    color: var(--ink);
+    letter-spacing: 0.04em;
+}
+
+body::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    background: repeating-linear-gradient(to bottom,
+            rgba(0, 0, 0, 0) 0 2px,
+            rgba(0, 0, 0, 0.18) 2px 3px);
+}
+
+.panel {
+    --accent: var(--neon-cyan);
+    background: var(--panel);
+    border: var(--px) solid var(--accent);
+    box-shadow:
+        calc(var(--px) * 2) calc(var(--px) * 2) 0 0 rgba(0, 0, 0, 0.6),
+        0 0 24px color-mix(in srgb, var(--accent) 45%, transparent);
+    padding: calc(var(--px) * 8) calc(var(--px) * 10);
+    image-rendering: pixelated;
+}
+
+.btn {
+    --accent: var(--neon-cyan);
+    font: inherit;
+    font-size: 20px;
+    color: var(--ink);
+    text-transform: uppercase;
+    background: transparent;
+    border: var(--px) solid var(--accent);
+    padding: calc(var(--px) * 3) calc(var(--px) * 6);
+    min-width: 260px;
+    cursor: pointer;
+    position: relative;
+    box-shadow: var(--px) var(--px) 0 0 color-mix(in srgb, var(--accent) 40%, black);
+    transition:
+        transform 60ms steps(2),
+        box-shadow 60ms steps(2),
+        background 120ms;
+
+    &:hover,
+    &:focus-visible {
+        outline: none;
+        background: color-mix(in srgb, var(--accent) 22%, transparent);
+        box-shadow:
+            var(--px) var(--px) 0 0 color-mix(in srgb, var(--accent) 40%, black),
+            0 0 18px var(--accent);
+        text-shadow: 0 0 8px var(--accent);
+    }
+
+    &:focus-visible::before {
+        content: "▶";
+        position: absolute;
+        left: calc(var(--px) * 8);
+        color: var(--accent);
+        animation: blink 1s steps(2) infinite;
+    }
+
+    &:active {
+        transform: translate(var(--px), var(--px));
+        box-shadow:
+            0 0 0 0 transparent,
+            0 0 18px var(--accent);
+    }
+
+    &.secondary {
+        --accent: var(--neon-pink);
+    }
+}
+
+@keyframes blink {
+    50% {
+        opacity: 0;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .btn {
+        transition: none;
+        animation: none;
+    }
+}
+
+.menu {
+    display: grid;
+    gap: calc(var(--px) * 4);
+    justify-items: center;
+}

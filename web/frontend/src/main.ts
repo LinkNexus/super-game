@@ -1,13 +1,22 @@
-import { loadAssets } from "./assets";
-import { appModule } from "./constants";
-import { draw } from "./game-renderer";
-import { assertNeverForScreen, toScreen } from "./helpers";
-import { endInputFrame, keysPressed, pollPlayerInputsInGame } from "./inputs";
-import type { CoopGameState, GameState } from "./messages";
-import { spawnEnemyExplosion, updateParticles } from "./particles";
-import { LocalSession } from "./session";
-import { drawStars, updateStars } from "./stars";
-import type { Config, GameScreen } from "./types";
+import { loadAssets } from "./scripts/assets";
+import { appModule } from "./scripts/constants";
+import { assertNeverForScreen, toScreen } from "./scripts/helpers";
+import {
+  endInputFrame,
+  keysPressed,
+  pollPlayerInputsInGame,
+  setGameHasKeyboard,
+} from "./scripts/inputs";
+import type { CoopGameState, GameState } from "./scripts/messages";
+import { LocalSession } from "./scripts/session";
+import type { Config, GameScreen } from "./scripts/types";
+import { hideEndScreen, showEndScreen } from "./scripts/ui/end-screen";
+import { clearHud, updateHud } from "./scripts/ui/hud";
+import { spawnEnemyExplosion, updateParticles } from "./scripts/ui/particles";
+import { clearScreen, drawCoopGame, drawPvPGame } from "./scripts/ui/renderer";
+import { drawStars, updateStars } from "./scripts/ui/stars";
+import "./styles/game-ui.css";
+import "./styles/game.css";
 
 const MAX_DELTA = 0.1;
 let acc = 0;
@@ -30,7 +39,7 @@ function step(now: number) {
   updateParticles(appModule.FIXED_DT);
 
   drawStars();
-  draw(screen);
+  draw();
   endInputFrame();
   requestAnimationFrame(step);
 }
@@ -52,12 +61,50 @@ function init() {
   };
 }
 
-function restart() {
+function restart(config: Config) {
+  hideEndScreen();
+  clearHud();
+  screen = {
+    kind: "playing",
+    match: {
+      config,
+      session: new LocalSession(config),
+      state: null,
+      prevState: null,
+    },
+  };
   // if (screen.match.session instanceof LocalSession) {
   //   startLocalSession();
   // } else {
   //   startOnlineSession();
   // }
+}
+
+function draw() {
+  document.getElementById("layout")!.dataset.screen = screen.kind;
+  document.getElementById("pause-overlay")!.hidden = screen.kind !== "playMenu";
+
+  clearScreen();
+
+  if (screen.kind === "playing" || screen.kind === "playMenu") {
+    const { state: gs, session } = screen.match;
+
+    if (!gs) return;
+
+    const myIds = session.getPlayerIds();
+
+    switch (gs.mode) {
+      case "coop":
+        drawCoopGame(gs.state, myIds);
+        break;
+
+      case "pvp":
+        drawPvPGame(gs.state, myIds);
+        break;
+    }
+
+    updateHud(gs, myIds);
+  }
 }
 
 function handleInputs() {
@@ -90,21 +137,37 @@ function handleInputs() {
 }
 
 function update() {
+  setGameHasKeyboard(false);
+
   switch (screen.kind) {
     case "playing": {
-      const { session } = screen.match;
-      screen.match.state = session.step(
+      const { session, config } = screen.match;
+      setGameHasKeyboard(true);
+      const state = session.step(
         pollPlayerInputsInGame(session.getPlayerIds()),
       );
+
+      screen.match.state = state;
 
       executeEventsOnStateChange();
 
       if (isOver(screen.match.state)) {
-        console.log(screen.match.state);
         screen = {
           kind: "end",
           match: screen.match,
         };
+
+        showEndScreen(state, session.getPlayerIds(), (action) => {
+          switch (action) {
+            case "restart":
+              restart(config);
+              break;
+
+            case "menu":
+              break;
+          }
+        });
+
         break;
       }
 

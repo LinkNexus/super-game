@@ -1,6 +1,6 @@
-import { getAsset, type ImageName } from "./assets";
-import { appModule, canvasCtx } from "./constants";
-import { countOptional, setFont, toScreen } from "./helpers";
+import { getAsset } from "../assets";
+import { appModule, canvasCtx } from "../constants";
+import { setFont, toScreen } from "../helpers";
 import type {
   BossState,
   BulletState,
@@ -9,16 +9,10 @@ import type {
   PlayerIds,
   PlayerState,
   PvPGameState,
-} from "./messages";
+} from "../messages";
 import { drawParticles } from "./particles";
-import { LocalSession } from "./session";
-import type { GameScreen, GameType } from "./types";
 
-const PADDING = 10;
-const MARGIN_BETWEEN_STATUS_TEXTS = 5;
-const STATUS_FONT_SIZE = 25;
-const PLAYER_LIVE_SIZE = 40;
-const PLAYER_LIVE_PADDING = 10;
+const STATUS_FONT_SIZE = 30;
 const PLAYER_COLORS = {
   mainPlayer: "#ffffff",
   players: [
@@ -36,12 +30,6 @@ const PLAYER_COLORS = {
 const PLAYER_MARKER_GAP = 10;
 const PLAYER_MARKER_FONT_SIZE = 15;
 const BULLET_COLOR = "yellow";
-const BOSS_HEALTH_BAR_WIDTH = 300;
-const BOSS_HEALTH_BAR_Y_OFFSET = 10;
-const BOSS_HEALTH_BAR_HEIGHT = 25;
-const BOSS_HEALTH_BAR_COLOR = "red";
-const BOSS_HEALTH_BAR_BG_COLOR = "gray";
-const BOSS_HEALTH_BAR_BORDER = "white";
 
 export type TextStyle = {
   size?: number;
@@ -100,159 +88,25 @@ function drawImage(
   canvasCtx.restore();
 }
 
-const drawStatusTextBesideImage = (
-  imageName: ImageName,
-  text: string,
-  yOffset: number,
-) => {
-  const image = getAsset(imageName);
-  const imageScale = PLAYER_LIVE_SIZE / image.naturalWidth;
-  const imageX = appModule.SCREEN_WIDTH - PLAYER_LIVE_SIZE - PADDING;
-
-  const centerY = yOffset + PLAYER_LIVE_SIZE / 2;
-  drawText(text, imageX, centerY, {
-    align: "right",
-    baseline: "middle",
-  });
-
-  drawImage(
-    image,
-    imageX + PLAYER_LIVE_PADDING,
-    centerY - (image.naturalHeight * imageScale) / 2,
-    image.naturalWidth * imageScale,
-    image.naturalHeight * imageScale,
-  );
-
-  return yOffset + PLAYER_LIVE_SIZE + MARGIN_BETWEEN_STATUS_TEXTS;
-};
-
-export function draw(screen: GameScreen) {
+export function clearScreen() {
   canvasCtx.fillStyle = "black";
   canvasCtx.clearRect(0, 0, appModule.SCREEN_WIDTH, appModule.SCREEN_HEIGHT);
-
-  switch (screen.kind) {
-    case "playing":
-    case "playMenu":
-      drawGame(screen);
-      break;
-
-    case "menu":
-    case "end":
-      break;
-  }
 }
 
-function drawGame({
-  kind,
-  match: { state, session },
-}: GameScreen & { kind: "playing" | "playMenu" }) {
-  if (!state) return;
-
-  const gameType: GameType =
-    session instanceof LocalSession ? "local" : "online";
-  const myIds = session.getPlayerIds();
-
-  switch (state.mode) {
-    case "coop":
-      drawCoopGame(state.state, myIds, gameType);
-      break;
-
-    case "pvp":
-      drawPvPGame(state.state, myIds, gameType);
-      break;
-  }
-
-  if (kind === "playMenu") {
-    canvasCtx.fillStyle = "rgba(0, 0, 0, 0.5)";
-    canvasCtx.fillRect(0, 0, appModule.SCREEN_WIDTH, appModule.SCREEN_HEIGHT);
-
-    canvasCtx.fillStyle = "white";
-    setFont(50);
-
-    canvasCtx.textAlign = "center";
-    canvasCtx.textBaseline = "middle";
-    canvasCtx.fillText(
-      "GAME PAUSED",
-      appModule.SCREEN_WIDTH / 2,
-      appModule.SCREEN_HEIGHT / 2,
-    );
-  }
-}
-
-function drawCoopGame(
-  state: CoopGameState,
-  myIds: PlayerIds,
-  gameType: GameType,
-) {
-  let yOffset = 50;
-
+export function drawCoopGame(state: CoopGameState, myIds: PlayerIds) {
   for (let i = 0; i < state.players.length; ++i) {
     const player = state.players[i];
-
     if (!player) continue;
-
-    const playerIdx = myIds.indexOf(player.id);
-
-    yOffset = drawPlayerStats(
-      player,
-      countOptional(state.players),
-      yOffset,
-      gameType,
-      playerIdx >= 0,
-    );
-
-    drawPlayer(player, playerIdx);
+    drawPlayer(player, myIds.indexOf(player.id));
   }
 
   drawBullets(state.bullets);
   drawEnemies(state.enemies, state.enemies_offset_x, state.enemies_offset_y);
   drawParticles();
-  drawBoss(state.boss, state.phase === appModule.CoopGamePhase.FIGHT_BOSS);
+  drawBoss(state.boss);
 }
 
-function drawPvPGame(
-  state: PvPGameState,
-  myIds: PlayerIds,
-  gameType: GameType,
-) {}
-
-function drawPlayerStats(
-  player: PlayerState,
-  playerCount: number,
-  yOffset: number,
-  gameType: GameType,
-  belongsToMe: boolean,
-): number {
-  if (playerCount > 1) {
-    drawText(
-      (player.name.length > 0 ? player.name : `Player ${player.id}`) +
-        (gameType === "online" && belongsToMe ? " (You)" : ""),
-      appModule.SCREEN_WIDTH - PADDING,
-      yOffset,
-      {
-        align: "right",
-      },
-    );
-
-    yOffset += STATUS_FONT_SIZE + MARGIN_BETWEEN_STATUS_TEXTS;
-  }
-
-  yOffset =
-    drawStatusTextBesideImage(
-      player.lives > 0 ? "heart" : "skull",
-      player.lives > 0 ? `Health: ${player.lives.toString()}` : "",
-      yOffset,
-    ) + MARGIN_BETWEEN_STATUS_TEXTS;
-
-  yOffset =
-    drawStatusTextBesideImage(
-      "star",
-      `Points: ${player.points.toString()}`,
-      yOffset,
-    ) + MARGIN_BETWEEN_STATUS_TEXTS;
-
-  return yOffset;
-}
+export function drawPvPGame(state: PvPGameState, myIds: PlayerIds) {}
 
 function drawPlayer(player: PlayerState, playerIdx: number) {
   const playerShipImage = getAsset("playerShip");
@@ -336,39 +190,8 @@ function drawEnemies(enemies: EnemySlot[], offsetX: number, offsetY: number) {
   }
 }
 
-function drawBoss(boss: BossState, canDrawHealthBar: boolean) {
+function drawBoss(boss: BossState) {
   if (!boss.active) return;
-
-  if (canDrawHealthBar) {
-    const barX = (appModule.SCREEN_WIDTH - BOSS_HEALTH_BAR_WIDTH) / 2;
-    const healthRatio =
-      boss.max_health > 0
-        ? Math.max(0, Math.min(1, boss.health / boss.max_health))
-        : 0;
-
-    canvasCtx.lineWidth = 2;
-    canvasCtx.fillStyle = BOSS_HEALTH_BAR_BG_COLOR;
-    canvasCtx.fillRect(
-      barX,
-      BOSS_HEALTH_BAR_Y_OFFSET,
-      BOSS_HEALTH_BAR_WIDTH,
-      BOSS_HEALTH_BAR_HEIGHT,
-    );
-    canvasCtx.fillStyle = BOSS_HEALTH_BAR_COLOR;
-    canvasCtx.fillRect(
-      barX,
-      BOSS_HEALTH_BAR_Y_OFFSET,
-      BOSS_HEALTH_BAR_WIDTH * healthRatio,
-      BOSS_HEALTH_BAR_HEIGHT,
-    );
-    canvasCtx.strokeStyle = BOSS_HEALTH_BAR_BORDER;
-    canvasCtx.strokeRect(
-      barX,
-      BOSS_HEALTH_BAR_Y_OFFSET,
-      BOSS_HEALTH_BAR_WIDTH,
-      BOSS_HEALTH_BAR_HEIGHT,
-    );
-  }
 
   const screenPos = toScreen(boss.position);
 

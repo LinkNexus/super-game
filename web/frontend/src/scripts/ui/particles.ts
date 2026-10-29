@@ -1,5 +1,5 @@
-import { canvasCtx } from "./constants";
-import type { EnemyType } from "./messages";
+import { canvasCtx } from "../constants";
+import type { EnemyType } from "../messages";
 
 type Particle = {
   x: number;

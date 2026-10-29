@@ -1,14 +1,15 @@
 import { appModule, CONTROLS } from "./constants";
 import type { PlayerIds, PlayerInput } from "./messages";
 
+let gameHasKeyboard = false;
+export const setGameHasKeyboard = (v: boolean) => (gameHasKeyboard = v);
+
+const GAME_KEYS = ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space"];
+
 export const keysDown: Set<string> = new Set();
 export const keysPressed: Set<string> = new Set();
 window.addEventListener("keydown", (e) => {
-  if (
-    ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space"].includes(
-      e.code,
-    )
-  ) {
+  if (gameHasKeyboard && GAME_KEYS.includes(e.code)) {
     e.preventDefault();
   }
 
