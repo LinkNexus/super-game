@@ -5,46 +5,74 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Super Game</title>
-  <style>
-    html {
-      background: #000;
-    }
-
-    html,
-    body {
-      margin: 0;
-      height: 100%;
-    }
-
-    body {
-      display: grid;
-      place-items: center;
-    }
-
-    /* Drawn at the sim's SCREEN_WIDTH x SCREEN_HEIGHT, scaled to fit. */
-    canvas {
-      max-width: 100vw;
-      max-height: 100vh;
-      object-fit: contain;
-    }
-
-    #stars {
-      position: fixed;
-      inset: 0;
-      width: 100vw;
-      height: 100vh;
-      z-index: -1;
-    }
-
-    #game {
-      box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.15), 0 0 40px rgba(80, 120, 255, 0.15);
-    }
-  </style>
 </head>
 
 <body>
   <canvas id="stars"></canvas>
-  <canvas id="game"></canvas>
+
+  <main id="layout" data-screen="playing">
+
+    <aside id="hud-left" class="hud-side">
+    </aside>
+
+    <section id="center">
+      <div id="hud-global">
+        <div id="boss-bar" hidden>
+          <span class="label">BOSS</span>
+          <div class="track">
+            <div class="fill"></div>
+          </div>
+        </div>
+      </div>
+
+      <div id="field">
+        <canvas id="game"></canvas>
+        <div id="end-overlay" hidden>
+          <div class="end-card panel">
+            <h1 class="end-title"></h1>
+            <p class="end-subtitle"></p>
+            <div class="end-teams"></div>
+            <p class="end-total"></p>
+
+            <div class="menu end-actions">
+              <button type="button" class="btn" data-action="restart">Play again</button>
+              <button type="button" class="btn secondary" data-action="menu">Main menu</button>
+            </div>
+          </div>
+        </div>
+        <div id="pause-overlay" hidden>GAME PAUSED</div>
+      </div>
+    </section>
+
+    <aside id="hud-right" class="hud-side"></aside>
+
+  </main>
+
+  <template id="player-hud-template">
+    <div class="player-hud">
+      <div class="name"></div>
+      <div class="row"><img src="/heart.png" alt="" /><span class="lives"></span></div>
+      <div class="row"><img src="/star.png" alt="" /><span class="points"></span></div>
+    </div>
+  </template>
+
+  <!-- End screen: one block per team (coop is a single, unnamed one) -->
+  <template id="end-team-template">
+    <section class="end-team">
+      <h2 class="end-team-name"></h2>
+      <ol class="end-rows"></ol>
+    </section>
+  </template>
+
+  <template id="end-row-template">
+    <li class="end-row">
+      <span class="end-row-name"></span>
+      <span class="end-row-stats"></span>
+    </li>
+  </template>
+
+
+
   <script type="module" src="/src/main.ts"></script>
 </body>
 
