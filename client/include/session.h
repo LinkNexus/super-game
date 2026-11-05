@@ -3,17 +3,19 @@
 #include "constants.h"
 #include "mailbox.h"
 #include "network_client.h"
-#include "shared/aliases.h"
 #include "shared/constants.h"
+#include "shared/helpers.h"
 #include "shared/messages.h"
 #include "shared/sim/game_sim.h"
+#include "shared/types.h"
 #include <cstddef>
 #include <optional>
+#include <utility>
 
 struct CoopMode {};
 
 struct PvPMode {
-  std::vector<std::pair<shared::PlayerCount, shared::PlayerCount>>
+  std::vector<std::pair<shared::TeamCount, shared::PlayerCount>>
       pvp_match_ups{};
   std::size_t selected_match_up_idx{0};
 };
@@ -74,9 +76,15 @@ private:
 
 struct OnlineConfig : Config {
   std::array<std::string, shared::MAX_PLAYERS_PER_CLIENT> players_names{};
-  bool are_ready{};
   std::string server_url{};
 };
+
+/// A player's lobby entry plus the index of its team in `teams` (0 in coop).
+using LobbyPlayer = std::pair<shared::PlayerInfo, std::size_t>;
+
+/// @return @p id's entry in @p lobby, or nullopt if it isn't listed.
+std::optional<LobbyPlayer> findLobbyPlayer(const shared::LobbyUpdate &lobby,
+                                           shared::PlayerId id);
 
 class OnlineSession : public Session {
 public:
@@ -95,8 +103,13 @@ public:
   /// 0 if none has been received yet.
   ThisMachinePlayerIds getPlayersIds() override;
 
-  /// Sends this client's ready-state toggle to the server.
-  void sendReady(bool isReady);
+  /// Readies (or un-readies) one of this machine's players. Ready is per
+  /// player (L74); the next lobby update shows the result.
+  void sendReady(shared::PlayerId playerId, bool isReady);
+
+  /// Asks to move one of this machine's players to @p teamId. The server
+  /// may refuse (team full); the next lobby update shows the result.
+  void sendSwitchTeam(shared::PlayerId playerId, shared::TeamId teamId);
 
   shared::PlayerCount getPlayerCount() const;
 

@@ -2,9 +2,16 @@
 
 #include "elements/text_input.h"
 #include "entity_designer.h"
-#include "shared/aliases.h"
 #include <string>
 #include <vector>
+
+/// What one local player presses in the lobby, for the on-screen hint.
+struct LobbyKeyHint {
+  const char *ready;
+  const char *switchTeam;
+};
+
+using LobbyKeyHints = std::array<LobbyKeyHint, MAX_PLAYERS_ON_THIS_MACHINE>;
 
 class GameDesigner {
 private:
@@ -85,7 +92,7 @@ public:
                  shared::PlayerCount playersCount) const;
 
   void drawConnectingScreen() const;
-  void drawLobby(OnlineSession *session, bool areReady) const;
+  void drawLobby(OnlineSession *session, const LobbyKeyHints &keyHints) const;
 
   /// Final results for whichever mode just ended: coop WON/GAME_OVER with
   /// per-player scores, or the PvP per-team outcome from this machine's

@@ -2,18 +2,22 @@
 #include "constants.h"
 #include "raylib.h"
 #include "session.h"
-#include "shared/aliases.h"
 #include "shared/constants.h"
 #include "shared/helpers.h"
 #include "shared/messages.h"
 #include "shared/sim/enemy_sim.h"
-#include "shared/sim/game_sim.h"
+#include "shared/types.h"
 #include "types.h"
 #include "utils.h"
+#include <algorithm>
 #include <cfloat>
 #include <cmath>
+#include <cstddef>
 #include <cstdlib>
+#include <optional>
 #include <string>
+#include <utility>
+#include <variant>
 
 Game::Game(std::string_view server_url) : server_url_(std::move(server_url)) {}
 
@@ -71,7 +75,7 @@ void Game::checkAndPlaySoundsOnEvents() {
         shared::overloaded{
             [&](shared::CoopGameState &s, shared::CoopGameState &prev_s) {
               for (std::size_t idx = 0; idx < s.enemies.size(); ++idx) {
-                if (prev_s.enemies[idx][0] == 1 && s.enemies[idx][0] == 0) {
+                if (prev_s.enemies[idx].first && !s.enemies[idx].first) {
                   audio_manager_.playExplosionSound();
                 }
               }
@@ -123,25 +127,19 @@ void Game::handleEventsOnScreen() {
   }
 
   if (screen_ != GameScreen::END && config_) {
-    std::visit(
-        shared::overloaded{[&](shared::CoopGameState &s) {
-                             using GamePhase = shared::CoopGameSim::Phase;
-                             auto phase = static_cast<GamePhase>(s.phase);
-
-                             if (phase == GamePhase::GAME_OVER ||
-                                 phase == GamePhase::WON) {
-                               screen_ = GameScreen::END;
-                             }
-                           },
-                           [&](shared::PvPGameState &s) {
-                             using GamePhase = shared::PvPGameSim::Phase;
-                             auto phase = static_cast<GamePhase>(s.phase);
-
-                             if (phase == GamePhase::END) {
-                               screen_ = GameScreen::END;
-                             }
-                           }},
-        config_->state);
+    std::visit(shared::overloaded{[&](shared::CoopGameState &s) {
+                                    if (s.phase ==
+                                            shared::CoopGamePhase::GAME_OVER ||
+                                        s.phase == shared::CoopGamePhase::WON) {
+                                      screen_ = GameScreen::END;
+                                    }
+                                  },
+                                  [&](shared::PvPGameState &s) {
+                                    if (s.phase == shared::PvPGamePhase::END) {
+                                      screen_ = GameScreen::END;
+                                    }
+                                  }},
+               config_->state);
   } else {
     // animate score screen border while showing final results
     score_anim_time_ += shared::FIXED_DT;
@@ -236,7 +234,6 @@ void Game::startOnlineSession() {
   screen_ = GameScreen::CONNECTING;
   config->state = shared::GameState();
   config->prev_state = config->state;
-  config->are_ready = false;
 }
 
 void Game::initNameTextBoxes() {
@@ -451,7 +448,6 @@ void Game::handleInput() {
     break;
 
   case GameScreen::LOBBY: {
-    auto config = dynamic_cast<OnlineConfig *>(config_.get());
     auto session = dynamic_cast<OnlineSession *>(session_.get());
 
     if (IsKeyPressed(KEY_ESCAPE)) {
@@ -461,11 +457,7 @@ void Game::handleInput() {
       break;
     }
 
-    if (IsKeyPressed(KEY_SPACE)) {
-      config->are_ready = !config->are_ready;
-      session->sendReady(config->are_ready);
-    }
-
+    handleLobbyInput(*session);
     break;
   }
 
@@ -490,6 +482,61 @@ void Game::handleInput() {
       restart();
 
     break;
+  }
+}
+
+namespace {
+
+/// The id of the nearest engaged team from @p teamIdx in direction @p step
+/// (-1 left, +1 right), or nullopt at the edge. No wrap-around.
+std::optional<shared::TeamId>
+neighbourTeam(const shared::PvPGameLobbyUpdate &u, std::size_t teamIdx,
+              int step) {
+  for (auto t = static_cast<std::ptrdiff_t>(teamIdx) + step;
+       t >= 0 && std::cmp_less(t, u.teams.size()); t += step) {
+    if (u.teams[t])
+      return u.teams[t]->id;
+  }
+  return std::nullopt;
+}
+
+} // namespace
+
+void Game::handleLobbyInput(OnlineSession &session) {
+  const auto lobby = session.getLobbyUpdate();
+  const auto ids = session.getPlayersIds();
+  const auto *pvp = std::get_if<shared::PvPGameLobbyUpdate>(&lobby);
+
+  for (std::size_t i = 0; i < ids.size(); ++i) {
+    if (!ids[i])
+      continue;
+
+    const auto keyFor = [&](shared::Button button) {
+      return std::find_if(
+                 PLAYERS_CONTROLS[i].begin(), PLAYERS_CONTROLS[i].end(),
+                 [button](const auto &c) { return c.second == button; })
+          ->first;
+    };
+
+    const auto found = findLobbyPlayer(lobby, *ids[i]);
+    if (!found)
+      continue;
+    const auto &[info, teamIdx] = *found;
+
+    if (IsKeyPressed(keyFor(shared::Button::BUTTON_SHOOT)))
+      session.sendReady(info.id, !info.is_ready);
+
+    if (!pvp)
+      continue;
+
+    const int step = IsKeyPressed(keyFor(shared::Button::BUTTON_LEFT))    ? -1
+                     : IsKeyPressed(keyFor(shared::Button::BUTTON_RIGHT)) ? 1
+                                                                          : 0;
+    if (step == 0)
+      continue;
+
+    if (const auto target = neighbourTeam(*pvp, teamIdx, step))
+      session.sendSwitchTeam(info.id, *target);
   }
 }
 
@@ -537,9 +584,8 @@ void Game::draw() {
     break;
 
   case GameScreen::LOBBY:
-    game_designer_.drawLobby(
-        dynamic_cast<OnlineSession *>(session_.get()),
-        dynamic_cast<OnlineConfig *>(config_.get())->are_ready);
+    game_designer_.drawLobby(dynamic_cast<OnlineSession *>(session_.get()),
+                             PLAYERS_LOBBY_KEY_HINTS);
     break;
 
   case GameScreen::PLAYING:
@@ -596,21 +642,20 @@ void Game::spawnExplosion(const Vector2 &pos, shared::EnemyType type) {
 void Game::spawnEnemyExplosions(const shared::CoopGameState &before,
                                 const shared::CoopGameState &after) {
   for (std::size_t idx = 0; idx < after.enemies.size(); ++idx) {
-    bool was_alive = before.enemies[idx][0] != 0;
-    bool is_alive = after.enemies[idx][0] != 0;
+    bool was_alive = before.enemies[idx].first;
+    bool is_alive = after.enemies[idx].first;
 
     if (was_alive && !is_alive) {
       float pos_x =
-          after.enemies_offset_x + (idx % shared::EnemiesPoolSimState::COLS) *
-                                       (shared::EnemySimState::WIDTH +
+          after.enemies_offset.x +
+          (idx % shared::ENEMY_COLS) * (shared::EnemySimState::WIDTH +
                                         shared::EnemiesPoolSimState::SPACING_X);
       float pos_y =
-          after.enemies_offset_y - (idx / shared::EnemiesPoolSimState::COLS) *
-                                       (shared::EnemySimState::HEIGHT +
+          after.enemies_offset.y -
+          (idx / shared::ENEMY_COLS) * (shared::EnemySimState::HEIGHT +
                                         shared::EnemiesPoolSimState::SPACING_Y);
 
-      spawnExplosion(toRaylibVec({pos_x, pos_y}),
-                     static_cast<shared::EnemyType>(after.enemies[idx][1]));
+      spawnExplosion(toRaylibVec({pos_x, pos_y}), after.enemies[idx].second);
     }
   }
 }

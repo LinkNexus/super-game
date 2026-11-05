@@ -35,14 +35,14 @@ namespace {
 
 using Result = Game::ClientMessageResult;
 
-/// A READY frame exactly as the client builds one (`client/src/session.cpp`):
-/// a `{type, payload}` envelope, encoded through the same `shared::encode`
-/// both ends share, so a change to `WIRE_BINARY` moves these cases with it
-/// instead of leaving them asserting against a format nobody speaks.
-std::string readyFrame(bool is_ready) {
+/// A READY frame exactly as the client builds one: a `{type, payload}`
+/// envelope, encoded through the same `shared::encode` both ends share, so a
+/// change to `WIRE_BINARY` moves these cases with it. Ready is per player
+/// (L74), so the payload names the player it readies.
+std::string readyFrame(shared::PlayerId player_id, bool is_ready) {
   nlohmann::json envelope{};
   envelope["type"] = shared::ClientMessageType::READY;
-  envelope["payload"] = shared::ReadyMessage{is_ready};
+  envelope["payload"] = {{"player_id", player_id}, {"is_ready", is_ready}};
 
   return shared::encode(envelope);
 }
@@ -104,7 +104,7 @@ TEST(a_ready_frame_from_the_wire_marks_the_sender_ready) {
   auto secondData = fakeConnection(b, {2});
   joinCoopPair(game, firstData, secondData);
 
-  const auto outcome = game.handleClientMessage(firstData, readyFrame(true));
+  const auto outcome = game.handleClientMessage(firstData, readyFrame(1, true));
 
   CHECK_EQ(outcome.result, Result::OK);
   CHECK(outcome.detail.empty());
@@ -128,7 +128,7 @@ TEST(a_ready_frame_broadcasts_a_fresh_lobby_update_to_every_player) {
 
   const auto before = b.sent.size();
 
-  REQUIRE(game.handleClientMessage(firstData, readyFrame(true)));
+  REQUIRE(game.handleClientMessage(firstData, readyFrame(1, true)));
 
   CHECK(b.sent.size() > before);
   CHECK_EQ(b.lastType(), shared::ServerMessageType::COOP_GAME_LOBBY_UPDATE);
@@ -138,10 +138,9 @@ TEST(a_ready_frame_broadcasts_a_fresh_lobby_update_to_every_player) {
   CHECK_EQ(lobby.players[0]->is_ready, true);
 }
 
-/// `setPlayersReady` keys on the socket rather than on a player id, so one
-/// SPACE press from a same-keyboard duo readies both of their slots - and the
-/// frame carries no player id at all, which is what makes that work.
-TEST(a_ready_frame_readies_both_slots_of_a_two_slot_connection) {
+/// Ready is per player since L74: a same-machine duo readies separately, so
+/// the frame readies only the player it names.
+TEST(a_ready_frame_readies_only_the_player_it_names) {
   FakeConnection a, b;
   CoopGame game;
 
@@ -149,15 +148,65 @@ TEST(a_ready_frame_readies_both_slots_of_a_two_slot_connection) {
   auto secondData = fakeConnection(b, {3});
   joinCoopPair(game, firstData, secondData);
 
-  REQUIRE(game.handleClientMessage(firstData, readyFrame(true)));
+  REQUIRE(game.handleClientMessage(firstData, readyFrame(2, true)));
 
   const auto lobby = coopLobbyFrame(a);
   REQUIRE(lobby.players[0].has_value());
   REQUIRE(lobby.players[1].has_value());
   REQUIRE(lobby.players[2].has_value());
-  CHECK_EQ(lobby.players[0]->is_ready, true);
+  CHECK_EQ(lobby.players[0]->is_ready, false);
   CHECK_EQ(lobby.players[1]->is_ready, true);
   CHECK_EQ(lobby.players[2]->is_ready, false);
+}
+
+/// Same ownership rule as inputs: a connection can only ready its own players.
+TEST(a_ready_frame_naming_a_player_the_sender_does_not_own_is_ignored) {
+  FakeConnection a, b;
+  CoopGame game;
+
+  auto firstData = fakeConnection(a, {1});
+  auto secondData = fakeConnection(b, {2});
+  joinCoopPair(game, firstData, secondData);
+
+  game.handleClientMessage(firstData, readyFrame(2, true));
+
+  CHECK_EQ(game.findPlayerById(1)->is_ready, false);
+  CHECK_EQ(game.findPlayerById(2)->is_ready, false);
+}
+
+TEST(a_ready_frame_without_a_player_id_is_reported_as_a_bad_envelope) {
+  FakeConnection a;
+  CoopGame game;
+
+  auto data = fakeConnection(a, {1});
+  REQUIRE(game.addPlayers(data));
+
+  nlohmann::json envelope{};
+  envelope["type"] = shared::ClientMessageType::READY;
+  envelope["payload"] = {{"is_ready", true}};
+
+  const auto outcome = game.handleClientMessage(data, shared::encode(envelope));
+
+  CHECK_EQ(outcome.result, Result::BadEnvelope);
+  CHECK_EQ(game.findPlayerById(1)->is_ready, false);
+}
+
+/// A duo is only ready once both of its players are: one ready frame from a
+/// two-slot connection must not start the match.
+TEST(the_match_waits_for_both_players_of_a_two_slot_connection) {
+  FakeConnection a, b;
+  CoopGame game;
+
+  auto firstData = fakeConnection(a, {1, 2});
+  auto secondData = fakeConnection(b, {3});
+  joinCoopPair(game, firstData, secondData);
+
+  REQUIRE(game.handleClientMessage(secondData, readyFrame(3, true)));
+  REQUIRE(game.handleClientMessage(firstData, readyFrame(1, true)));
+  CHECK_EQ(game.isRunning(), false);
+
+  REQUIRE(game.handleClientMessage(firstData, readyFrame(2, true)));
+  CHECK_EQ(game.isRunning(), true);
 }
 
 /// The last ready frame is also what starts the match, so the inbound path
@@ -170,10 +219,10 @@ TEST(the_last_ready_frame_starts_the_match) {
   auto secondData = fakeConnection(b, {2});
   joinCoopPair(game, firstData, secondData);
 
-  REQUIRE(game.handleClientMessage(firstData, readyFrame(true)));
+  REQUIRE(game.handleClientMessage(firstData, readyFrame(1, true)));
   CHECK_EQ(game.isRunning(), false);
 
-  REQUIRE(game.handleClientMessage(secondData, readyFrame(true)));
+  REQUIRE(game.handleClientMessage(secondData, readyFrame(2, true)));
   CHECK_EQ(game.isRunning(), true);
 
   const auto lobby = coopLobbyFrame(b);
@@ -181,7 +230,7 @@ TEST(the_last_ready_frame_starts_the_match) {
 }
 
 /// `handleClientMessage` is non-virtual on the base, so PvP reaches
-/// `setPlayersReady` through a different override of the same call. Covered
+/// `setPlayerReady` through a different override of the same call. Covered
 /// because the two rosters are shaped differently (flat array vs. teams) and
 /// the ready lookup has been wrong in exactly one of them before.
 TEST(a_ready_frame_works_the_same_on_a_pvp_game) {
@@ -193,10 +242,10 @@ TEST(a_ready_frame_works_the_same_on_a_pvp_game) {
   REQUIRE(game.addPlayers(firstData));
   REQUIRE(game.addPlayers(secondData));
 
-  REQUIRE(game.handleClientMessage(firstData, readyFrame(true)));
+  REQUIRE(game.handleClientMessage(firstData, readyFrame(1, true)));
   CHECK_EQ(game.isRunning(), false);
 
-  REQUIRE(game.handleClientMessage(secondData, readyFrame(true)));
+  REQUIRE(game.handleClientMessage(secondData, readyFrame(2, true)));
   CHECK_EQ(game.isRunning(), true);
 }
 
@@ -371,7 +420,7 @@ TEST(an_array_wrapped_envelope_is_reported_as_a_bad_envelope) {
   REQUIRE(game.addPlayers(data));
 
   nlohmann::json wrapped = nlohmann::json::array();
-  wrapped.push_back(nlohmann::json::parse(readyFrame(true)));
+  wrapped.push_back(nlohmann::json::parse(readyFrame(1, true)));
 
   const auto outcome =
       game.handleClientMessage(data, shared::encode(wrapped));

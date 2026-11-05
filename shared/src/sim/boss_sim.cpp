@@ -1,11 +1,13 @@
 #include "shared/sim/boss_sim.h"
 #include "shared/constants.h"
-#include "shared/math_utils.h"
 #include "shared/sim/bullet_sim.h"
+#include "shared/types.h"
+#include <mathlib.hpp>
+#include <vector>
 
 using namespace shared;
 
-void BossSimState::init(uint8_t playersCount) {
+void BossSimState::init(PlayerCount playersCount) {
   if (auto res = std::find_if(
           SPREAD_SHOT_BULLETS_COUNT_PER_PLAYERS_COUNT.begin(),
           SPREAD_SHOT_BULLETS_COUNT_PER_PLAYERS_COUNT.end(),
@@ -54,8 +56,8 @@ void BossSimState::spawnBullets(
     float dt, std::array<shared::BulletSimState, MAX_BULLETS> &bullets) {
   switch (shooting_pattern) {
   case BossPattern::SPREAD_SHOT: {
-    std::vector<shared::BulletSimState *> reserved_bullets(
-        spread_shot_bullets_count, nullptr);
+    std::vector<BulletSimState *> reservedBullets(spread_shot_bullets_count,
+                                                  nullptr);
 
     int count = 0;
 
@@ -64,30 +66,30 @@ void BossSimState::spawnBullets(
         break;
 
       if (!b.active) {
-        reserved_bullets[count] = &b;
+        reservedBullets[count] = &b;
         count++;
       }
     }
 
-    Vec2D spawnPosition{position.x, position.y - HEIGHT / 2};
+    mathlib::Vec2f spawnPosition{position.x, position.y - HEIGHT / 2};
 
-    Vec2D bottomLeft{0, 0};
-    Vec2D bottomRight{SCREEN_WIDTH, 0};
+    constexpr auto bottomLeft = mathlib::Vec2f::zero();
+    const mathlib::Vec2f bottomRight{SCREEN_WIDTH, 0};
 
     auto direction1 = (bottomLeft - spawnPosition);
     auto direction2 = (bottomRight - spawnPosition);
-    auto angle = direction1.angle_between(direction2);
+    auto angle = direction1.angleWith(direction2);
 
-    Vec2D straightDown{0, -1};
+    mathlib::Vec2f straightDown{0, -1};
 
     for (std::size_t i = 0; i < spread_shot_bullets_count; ++i) {
-      auto bullet = reserved_bullets[i];
+      auto bullet = reservedBullets[i];
       if (bullet == nullptr)
         continue;
 
-      float angleOffset = 0.0f;
+      auto angleOffset = 0.0f;
       if (spread_shot_bullets_count > 1) {
-        angleOffset = -angle / 2 + (angle / (reserved_bullets.size() - 1)) * i;
+        angleOffset = -angle / 2 + (angle / (reservedBullets.size() - 1)) * i;
       }
 
       bullet->velocity = straightDown.rotated(angleOffset) * BULLETS_SPEED;
@@ -157,4 +159,8 @@ void BossSimState::step(float dt,
     pattern_switching_cooldown -= dt;
   } else
     spawnBullets(dt, bullets);
+}
+
+mathlib::Rectanglef shared::BossSimState::getHitBox() const {
+  return mathlib::Rectanglef::fromCenterAndSize(position, WIDTH, HEIGHT);
 }

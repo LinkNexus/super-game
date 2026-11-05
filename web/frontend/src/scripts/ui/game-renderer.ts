@@ -1,14 +1,17 @@
 import { getAsset } from "../assets";
 import { appModule, canvasCtx } from "../constants";
 import { setFont, toScreen } from "../helpers";
-import type {
-  BossState,
-  BulletState,
-  CoopGameState,
-  EnemySlot,
-  PlayerIds,
-  PlayerState,
-  PvPGameState,
+import {
+  type BossState,
+  type BulletState,
+  type CoopGameState,
+  type EnemySlot,
+  EnemyType,
+  type PlayerId,
+  type PlayerIds,
+  type PlayerState,
+  type PvPGameState,
+  type Vec2,
 } from "../messages";
 import type { GameType } from "../types";
 import { drawParticles } from "./particles";
@@ -17,7 +20,7 @@ const STATUS_FONT_SIZE = 30;
 const PLAYER_COLORS = {
   mainPlayer: "#ffffff",
   players: [
-    "#E63946",
+    "#BF40BF",
     "#F4A261",
     "#E9C46A",
     "#2A9D8F",
@@ -26,8 +29,12 @@ const PLAYER_COLORS = {
     "#F284B6",
     "#264653",
   ],
-  playerEnemy: "#E63946",
+  playerEnemy: "#EE4B2B",
 };
+// Never hand a friendly ship the enemy colour.
+const FRIENDLY_COLORS = PLAYER_COLORS.players.filter(
+  (c) => c.toLowerCase() !== PLAYER_COLORS.playerEnemy.toLowerCase(),
+);
 const PLAYER_MARKER_GAP = 10;
 const PLAYER_MARKER_FONT_SIZE = 15;
 const BULLET_COLOR = "yellow";
@@ -57,6 +64,8 @@ function drawText(
   canvasCtx.fillText(text, x, y);
 }
 
+const offCanvasesMap = new Map<string, HTMLCanvasElement>();
+
 function drawImage(
   image: HTMLImageElement,
   x: number,
@@ -71,21 +80,30 @@ function drawImage(
   canvasCtx.translate(x + width / 2, y + height / 2);
   canvasCtx.rotate(angle);
 
+  let source: CanvasImageSource = image;
+
   if (tintColor) {
-    const offscreenCanvas = document.createElement("canvas");
-    offscreenCanvas.width = width;
-    offscreenCanvas.height = height;
+    const key = `${image.src}_${width}_${height}_${tintColor}`;
+    let off = offCanvasesMap.get(key);
 
-    const offscreenCtx = offscreenCanvas.getContext("2d")!;
+    if (!off) {
+      off = document.createElement("canvas");
+      off.width = width;
+      off.height = height;
+      const offCtx = off.getContext("2d")!;
+      offCtx.drawImage(image, 0, 0, width, height);
+      offCtx.globalCompositeOperation = "multiply";
+      offCtx.fillStyle = tintColor;
+      offCtx.fillRect(0, 0, width, height);
+      offCtx.globalCompositeOperation = "destination-in";
+      offCtx.drawImage(image, 0, 0, width, height);
+      offCanvasesMap.set(key, off);
+    }
 
-    offscreenCtx.drawImage(image, 0, 0, width, height);
-    offscreenCtx.globalCompositeOperation = "source-atop";
-    offscreenCtx.fillStyle = tintColor;
-    offscreenCtx.fillRect(0, 0, width, height);
+    source = off;
   }
 
-  canvasCtx.drawImage(image, -width / 2, -height / 2, width, height);
-
+  canvasCtx.drawImage(source, -width / 2, -height / 2, width, height);
   canvasCtx.restore();
 }
 
@@ -98,18 +116,15 @@ export function drawCoopGame(state: CoopGameState, myIds: PlayerIds) {
   for (let i = 0; i < state.players.length; ++i) {
     const player = state.players[i];
     if (!player || player.lives < 1) continue;
-    const playerIdx = myIds.indexOf(player.id);
     drawPlayer(
       player,
-      playerIdx,
-      playerIdx === 0
-        ? PLAYER_COLORS.mainPlayer
-        : PLAYER_COLORS.players[playerIdx % PLAYER_COLORS.players.length]!,
+      myIds.indexOf(player.id),
+      playerColor(player.id, i, myIds, false),
     );
   }
 
   drawBullets(state.bullets);
-  drawEnemies(state.enemies, state.enemies_offset_x, state.enemies_offset_y);
+  drawEnemies(state.enemies, state.enemies_offset);
   drawParticles();
   drawBoss(state.boss);
 }
@@ -119,37 +134,54 @@ export function drawPvPGame(
   myIds: PlayerIds,
   gameType: GameType,
 ) {
-  const isOnThisMachine = (player: PlayerState) => {
-    return player.id !== 0 && myIds.includes(player.id);
-  };
-  const thisMachineTeamIdx = state.teams.findIndex((t) => {
-    return t?.players.some((p) => p && isOnThisMachine(p));
-  });
+  const myTeams = new Set(
+    state.teams.flatMap((t, idx) =>
+      t?.players.some((p) => p && myIds.includes(p.id)) ? [idx] : [],
+    ),
+  );
+  // One team of mine online: that's "my team". None or both: no opponents,
+  // every ship its own colour, like local.
+  const myTeamIdx =
+    gameType === "online" && myTeams.size === 1 ? [...myTeams][0]! : -1;
 
-  let colorIdx = 0;
-  for (let teamIdx = 0; teamIdx < state.teams.length; ++teamIdx) {
-    const team = state.teams[teamIdx];
-    if (!team) continue;
+  state.teams.forEach((team, teamIdx) => {
+    team?.players.forEach((p, rank) => {
+      if (!p) return;
 
-    team.players.forEach((p) => {
-      if (!p || p.lives < 1) return;
+      const color = playerColor(
+        p.id,
+        teamIdx * appModule.MAX_PLAYERS_PER_TEAM + rank,
+        myIds,
+        myTeamIdx !== -1 && teamIdx !== myTeamIdx,
+      );
+      if (p.lives < 1) return; // after the colour, so deaths shift nothing
 
-      let color = PLAYER_COLORS.playerEnemy;
-      const playerIdxOnThisMachine = myIds.indexOf(p.id);
-
-      if (gameType === "local" || thisMachineTeamIdx === teamIdx) {
-        color =
-          playerIdxOnThisMachine === 0
-            ? PLAYER_COLORS.mainPlayer
-            : PLAYER_COLORS.players[colorIdx++ % PLAYER_COLORS.players.length]!;
-      }
-
-      drawPlayer(p, playerIdxOnThisMachine, color);
+      drawPlayer(p, myIds.indexOf(p.id), color);
     });
-  }
+  });
 
   drawBullets(state.bullets);
   drawParticles();
+}
+
+/// Depends on ids and roster slots only, never on who's alive, so a ship
+/// keeps its colour all match. `slot`: coop, index in `state.players`; PvP,
+/// teamIdx * MAX_PLAYERS_PER_TEAM + rank.
+function playerColor(
+  id: PlayerId,
+  slot: number,
+  myIds: PlayerIds,
+  isOpponent: boolean,
+): string {
+  if (isOpponent) return PLAYER_COLORS.playerEnemy;
+
+  const mine = myIds.indexOf(id);
+  if (mine === 0) return PLAYER_COLORS.mainPlayer;
+
+  // This machine's players take the first colours, everyone else follows by
+  // slot, so the two groups never collide.
+  const idx = mine > 0 ? mine - 1 : appModule.MAX_PLAYERS_PER_CLIENT - 1 + slot;
+  return FRIENDLY_COLORS[idx % FRIENDLY_COLORS.length]!;
 }
 
 function drawPlayer(player: PlayerState, playerIdx: number, color: string) {
@@ -174,12 +206,12 @@ function drawPlayer(player: PlayerState, playerIdx: number, color: string) {
         ((size * 2) / playerShipImage.naturalWidth)) /
       2;
 
-    const markerPos = toScreen(
-      new appModule.Vec2D(
-        player.position.x,
-        player.position.y - drawnHalfHeight - PLAYER_MARKER_GAP,
-      ).rotated(player.orientation),
-    );
+    const d = drawnHalfHeight + PLAYER_MARKER_GAP + PLAYER_MARKER_FONT_SIZE;
+
+    const markerPos = toScreen({
+      x: player.position.x + d * Math.sin(player.orientation),
+      y: player.position.y - d * Math.cos(player.orientation),
+    });
 
     drawText(`P${playerIdx + 1}`, markerPos.x, markerPos.y, {
       align: "center",
@@ -204,21 +236,26 @@ function drawBullets(bullets: BulletState[]) {
   }
 }
 
-function drawEnemies(enemies: EnemySlot[], offsetX: number, offsetY: number) {
+function drawEnemies(enemies: EnemySlot[], offset: Vec2) {
   for (let i = 0; i < enemies.length; ++i) {
-    if (enemies[i]![0] === 0) continue;
+    if (!enemies[i]![0]) continue;
 
-    const image = getAsset(enemies[i]![1] === 0 ? "enemy1" : "enemy2");
+    const image = getAsset(
+      enemies[i]![1] === EnemyType.TYPE_1 ? "enemy1" : "enemy2",
+    );
     const posX =
-      offsetX +
-      (i % appModule.SIM_ENEMIES_POOL_COLS) *
+      offset.x +
+      (i % appModule.SIM_ENEMY_COLS) *
         (appModule.SIM_ENEMY_WIDTH + appModule.SIM_ENEMIES_POOL_SPACING_X);
     const poxY =
-      offsetY -
-      Math.floor(i / appModule.SIM_ENEMIES_POOL_COLS) *
+      offset.y -
+      Math.floor(i / appModule.SIM_ENEMY_COLS) *
         (appModule.SIM_ENEMY_HEIGHT + appModule.SIM_ENEMIES_POOL_SPACING_Y);
     const scale = appModule.SIM_ENEMY_WIDTH / image.naturalWidth;
-    const screenPos = toScreen(new appModule.Vec2D(posX, poxY));
+    const screenPos = toScreen({
+      x: posX,
+      y: poxY,
+    });
 
     drawImage(
       image,

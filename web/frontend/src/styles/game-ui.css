@@ -198,3 +198,76 @@ body::after {
         border-color: var(--accent);
     }
 }
+
+/* Toasts (ui/toast.ts): a stack in the top-right corner, newest at the
+   bottom. Above the overlays, below the scanlines. */
+#toasts {
+    position: fixed;
+    top: calc(var(--px) * 4);
+    right: calc(var(--px) * 4);
+    z-index: 20;
+    display: grid;
+    gap: calc(var(--px) * 3);
+    width: min(360px, calc(100vw - var(--px) * 8));
+    pointer-events: none;
+}
+
+.toast {
+    --accent: var(--neon-cyan);
+    display: grid;
+    gap: var(--px);
+    padding: calc(var(--px) * 3) calc(var(--px) * 4);
+    background: var(--panel);
+    border: var(--px) solid var(--accent);
+    box-shadow:
+        calc(var(--px) * 2) calc(var(--px) * 2) 0 0 rgba(0, 0, 0, 0.6),
+        0 0 16px color-mix(in srgb, var(--accent) 45%, transparent);
+    font-size: 16px;
+    cursor: pointer;
+    pointer-events: auto;
+    animation: toast-in 240ms steps(4) both;
+
+    &.success {
+        --accent: var(--neon-gold);
+    }
+
+    &.error {
+        --accent: var(--neon-red);
+    }
+
+    /* A repeat of a toast that's still up: a nudge instead of a copy. */
+    &.again {
+        animation: toast-again 240ms steps(4);
+    }
+
+    & .toast-title {
+        font-weight: normal;
+        font-size: 18px;
+        color: var(--accent);
+        text-shadow: 0 0 8px var(--accent);
+        text-transform: uppercase;
+    }
+
+    & .toast-message {
+        color: var(--ink);
+    }
+}
+
+@keyframes toast-in {
+    from {
+        transform: translateX(calc(100% + var(--px) * 4));
+    }
+}
+
+@keyframes toast-again {
+    50% {
+        transform: translateX(calc(var(--px) * -3));
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .toast,
+    .toast.again {
+        animation: none;
+    }
+}

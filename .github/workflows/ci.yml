@@ -56,8 +56,9 @@ jobs:
   # std::optional<Team>::emplace() (is_constructible_v<Team> false while the
   # builtin says true) - a toolchain bug, absent with clang + libc++.
   #
-  # No submodules: `tests-asan` inherits `tests` (BUILD_CLIENT=OFF,
-  # BUILD_SERVER=OFF), and supergame-server-lib names no uWS type. The id stays
+  # Only vendor/mathlib (shared/ needs it): `tests-asan` inherits `tests`
+  # (BUILD_CLIENT=OFF, BUILD_SERVER=OFF), and supergame-server-lib names no
+  # uWS type. The id stays
   # `test-shared` because docker-server and publish-release `needs:` it, so a
   # sanitizer finding blocks a deploy.
   test-shared:
@@ -79,6 +80,9 @@ jobs:
         with:
           submodules: false
 
+      - name: Init mathlib submodule
+        run: git submodule update --init vendor/mathlib
+
       - name: Build tests (GCC 14, ASan + UBSan)
         run: |
           cmake --preset tests-asan
@@ -90,8 +94,8 @@ jobs:
   # shared/ compiled to wasm by Emscripten (the `web` preset), with the sim
   # suite run under node: proves the simulation behaves the same on wasm32
   # (32-bit size_t/long) as natively, and that supergame-web-sim links. Same
-  # emscripten as flake.nix's `web` shell - bump together. No submodules: the
-  # preset builds only shared/, its tests and the web target. Deploying the
+  # emscripten as flake.nix's `web` shell - bump together. Only vendor/mathlib:
+  # the preset builds only shared/, its tests and the web target. Deploying the
   # web client is L41; this is a check only, not in any `needs:`.
   test-web:
     runs-on: ubuntu-latest
@@ -108,6 +112,9 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: false
+
+      - name: Init mathlib submodule
+        run: git submodule update --init vendor/mathlib
 
       - name: Build (Emscripten)
         run: |
@@ -306,9 +313,9 @@ jobs:
         with:
           submodules: false
 
-      - name: Init uWebSockets submodule
+      - name: Init uWebSockets + mathlib submodules
         run: |
-          git submodule update --init vendor/uWebSockets
+          git submodule update --init vendor/uWebSockets vendor/mathlib
           git -C vendor/uWebSockets submodule update --init uSockets
 
       - name: Set lowercase image name

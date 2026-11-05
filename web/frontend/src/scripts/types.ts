@@ -1,6 +1,6 @@
 import type { GAME_TYPES } from "./constants";
 import type { GameState } from "./messages";
-import type { GameSession } from "./session";
+import type { GameSession, OnlineSession } from "./session";
 
 export type Config = { playerCount: number } & (
   | {
@@ -15,7 +15,6 @@ export type Config = { playerCount: number } & (
 
 type Match = {
   session: GameSession;
-  config: Config;
   state: GameState | null;
   prevState: GameState | null;
 };
@@ -26,6 +25,7 @@ export type GameScreen =
   | {
       kind: "menu";
     }
+  | { kind: "lobby"; session: OnlineSession }
   | { kind: "playing"; match: Match }
   | {
       kind: "pause";

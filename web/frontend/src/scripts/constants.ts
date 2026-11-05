@@ -28,3 +28,5 @@ export const CONTROLS = [
     KeyW: appModule.Button.BUTTON_SHOOT,
   },
 ] as const;
+
+export const ARM_DELAY_MS = 800;

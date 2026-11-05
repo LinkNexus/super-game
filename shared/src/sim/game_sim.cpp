@@ -1,8 +1,6 @@
 #include "shared/sim/game_sim.h"
-#include "shared/aliases.h"
 #include "shared/constants.h"
 #include "shared/helpers.h"
-#include "shared/math_utils.h"
 #include "shared/messages.h"
 #include "shared/sim/boss_sim.h"
 #include "shared/sim/bullet_sim.h"
@@ -10,12 +8,14 @@
 #include "shared/sim/player_sim.h"
 #include <cstddef>
 #include <cstdint>
+#include <mathlib.hpp>
+#include <utility>
 
 using namespace shared;
 
 void shared::PvPGameSim::start(const TeamRosters &ids) {
-  bool isOnTop{true};
-  PlayerCount teamSlot{0};
+  auto isOnTop{true};
+  TeamCount teamSlot{0};
 
   for (const auto &kvp : ids) {
     if (!kvp)
@@ -35,7 +35,7 @@ void shared::PvPGameSim::start(const TeamRosters &ids) {
     team.init(rId,
               isOnTop ? (SCREEN_HEIGHT - PlayerSimState::POSITION_Y)
                       : PlayerSimState::POSITION_Y,
-              isOnTop ? toRads(180) : 0);
+              isOnTop ? mathlib::toRadians(180.0f) : 0);
     auto positionX = (SCREEN_WIDTH - (PlayerSimState::SIZE * size) -
                       ((size - 1) * PLAYERS_SPACING)) /
                      2.0f;
@@ -56,7 +56,7 @@ void shared::PvPGameSim::start(const TeamRosters &ids) {
     }
 
     isOnTop = !isOnTop;
-    phase_ = Phase::PLAYERS_FIGHT;
+    phase_ = PvPGamePhase::PLAYERS_FIGHT;
     bullets_pool_.fill(BulletSimState());
   }
 }
@@ -67,7 +67,7 @@ void setBulletsPoolState(BulletsPoolState &state, BulletsPool &pool) {
     auto &bullet = pool[idx];
 
     bullet_state.position = bullet.position;
-    bullet_state.type = static_cast<uint8_t>(bullet.type);
+    bullet_state.type = bullet.type;
     bullet_state.active = bullet.active;
   }
 }
@@ -86,18 +86,16 @@ void CoopGameSim::setGameState(CoopGameState &state) {
     }
   }
 
-  state.phase = static_cast<uint8_t>(phase_);
+  state.phase = phase_;
 
   setBulletsPoolState(state.bullets, bullets_pool_);
 
   for (std::size_t idx = 0;
        enemies_pool_.enemies.size() && idx < state.enemies.size(); ++idx) {
-    state.enemies[idx][0] = enemies_pool_.enemies[idx].alive ? 1 : 0;
-    state.enemies[idx][1] =
-        static_cast<uint8_t>(enemies_pool_.enemies[idx].type);
+    const auto &enemy = enemies_pool_.enemies[idx];
+    state.enemies[idx] = {enemy.alive, enemy.type};
   }
-  state.enemies_offset_x = enemies_pool_.offset_x;
-  state.enemies_offset_y = enemies_pool_.offset_y;
+  state.enemies_offset = enemies_pool_.offset;
 
   state.boss.position = boss_.position;
   state.boss.active = boss_.active;
@@ -113,7 +111,7 @@ void PvPGameSim::setGameState(PvPGameState &state) {
     if (team) {
       auto &t = state.teams[teamIdx++].emplace();
       t.id = team->id;
-      t.outcome = static_cast<uint8_t>(team->outcome);
+      t.outcome = team->outcome;
 
       PlayerCount playerIdx{0};
       for (const auto &player : team->players) {
@@ -129,7 +127,7 @@ void PvPGameSim::setGameState(PvPGameState &state) {
     }
   }
 
-  state.phase = static_cast<uint8_t>(phase_);
+  state.phase = phase_;
 
   setBulletsPoolState(state.bullets, bullets_pool_);
 }
@@ -139,14 +137,12 @@ void CoopGameSim::checkCollisions() {
     if (!bullet.active)
       continue;
 
-    if (bullet.type == BulletType::PLAYER) {
-      if (phase_ == Phase::FIGHT_BOSS) {
-        if (boss_.active &&
-            rectIntersection(bullet.position, BulletSimState::WIDTH / 2,
-                             BulletSimState::HEIGHT / 2, boss_.position,
-                             BossSimState::WIDTH / 2,
-                             BossSimState::HEIGHT / 2)) {
+    const auto bulletHitbox = bullet.getHitBox();
 
+    if (bullet.type == BulletType::PLAYER) {
+      if (phase_ == CoopGamePhase::FIGHT_BOSS) {
+        if (boss_.active &&
+            mathlib::intersects(bulletHitbox, boss_.getHitBox())) {
           boss_.health--;
 
           for (auto &player : players_) {
@@ -160,13 +156,10 @@ void CoopGameSim::checkCollisions() {
         }
       }
 
-      else if (phase_ == Phase::FIGHT_ENEMIES) {
+      else if (phase_ == CoopGamePhase::FIGHT_ENEMIES) {
         for (auto &enemy : enemies_pool_.enemies) {
           if (enemy.alive &&
-              rectIntersection(bullet.position, BulletSimState::WIDTH / 2,
-                               BulletSimState::HEIGHT / 2, enemy.position,
-                               EnemySimState::WIDTH / 2,
-                               EnemySimState::HEIGHT / 2)) {
+              mathlib::intersects(bulletHitbox, enemy.getHitBox())) {
             enemy.alive = false;
             bullet.active = false;
 
@@ -184,11 +177,7 @@ void CoopGameSim::checkCollisions() {
     } else if (bullet.type == BulletType::ENEMY) {
       for (auto &player : players_) {
         if (player && player->lives > 0 &&
-            rectIntersection(
-                bullet.position, BulletSimState::WIDTH / 2,
-                BulletSimState::HEIGHT / 2, player->position,
-                PlayerSimState::SIZE * PlayerSimState::HITBOX_SCALE / 2,
-                PlayerSimState::SIZE * PlayerSimState::HITBOX_SCALE / 2)) {
+            mathlib::intersects(bulletHitbox, player->getHitBox())) {
           player->lives--;
           bullet.active = false;
           break;
@@ -232,11 +221,7 @@ void PvPGameSim::checkCollisions() {
 
         for (auto &player : team->players) {
           if (player && player->lives > 0 &&
-              rectIntersection(
-                  bullet.position, BulletSimState::WIDTH / 2,
-                  BulletSimState::HEIGHT / 2, player->position,
-                  PlayerSimState::SIZE * PlayerSimState::HITBOX_SCALE / 2,
-                  PlayerSimState::SIZE * PlayerSimState::HITBOX_SCALE / 2)) {
+              mathlib::intersects(bullet.getHitBox(), player->getHitBox())) {
             if (ownerPlayer) {
               ownerPlayer->points += POINTS_PER_HIT;
             }
@@ -278,8 +263,8 @@ void shared::CoopGameSim::removePlayer(PlayerId player_id) {
     }
   }
 
-  if (phase_ != Phase::WON && phase_ != Phase::GAME_OVER &&
+  if (phase_ != CoopGamePhase::WON && phase_ != CoopGamePhase::GAME_OVER &&
       count_optional(players_) == 0) {
-    phase_ = Phase::GAME_OVER;
+    phase_ = CoopGamePhase::GAME_OVER;
   }
 }

@@ -1,11 +1,9 @@
 #include "game_designer.h"
 #include "constants.h"
 #include "session.h"
-#include "shared/aliases.h"
 #include "shared/constants.h"
 #include "shared/helpers.h"
 #include "shared/messages.h"
-#include "shared/sim/game_sim.h"
 #include "types.h"
 #include <algorithm>
 #include <array>
@@ -189,7 +187,8 @@ void GameDesigner::drawConnectingScreen() const {
            shared::SCREEN_HEIGHT / 2 + 40, 20, WHITE);
 }
 
-void GameDesigner::drawLobby(OnlineSession *session, bool areReady) const {
+void GameDesigner::drawLobby(OnlineSession *session,
+                             const LobbyKeyHints &keyHints) const {
   const auto &lobbyUpdate{session->getLobbyUpdate()};
   const auto playerIds{session->getPlayersIds()};
 
@@ -267,8 +266,8 @@ void GameDesigner::drawLobby(OnlineSession *session, bool areReady) const {
                 continue;
 
               auto teamLabel{std::string("Team ") +
-                             std::to_string(teamIdx + 1)};
-              if (std::any_of(team->begin(), team->end(),
+                             std::to_string(team->id)};
+              if (std::any_of(team->players.begin(), team->players.end(),
                               [&isOnThisMachine](const auto &p) {
                                 return p && isOnThisMachine(p->id);
                               }))
@@ -279,7 +278,7 @@ void GameDesigner::drawLobby(OnlineSession *session, bool areReady) const {
                   LINE_GAP;
 
               for (std::size_t slot = 0; slot < u.team_size; ++slot) {
-                const auto &p = (*team)[slot];
+                const auto &p = team->players[slot];
 
                 if (!p) {
                   y = drawEmptySlot(y);
@@ -302,10 +301,29 @@ void GameDesigner::drawLobby(OnlineSession *session, bool areReady) const {
           }},
       lobbyUpdate);
 
-  y = drawCentered(areReady ? "Press SPACE to cancel ready"
-                            : "Press SPACE to ready up",
-                   y, HINT_FONT_SIZE, LIGHTGRAY) +
-      LINE_GAP;
+  // One line per player on this machine: each readies with their own keys.
+  const bool isPvP{
+      std::holds_alternative<shared::PvPGameLobbyUpdate>(lobbyUpdate)};
+
+  for (std::size_t i{0}; i < playerIds.size() && i < keyHints.size(); ++i) {
+    if (!playerIds[i])
+      continue;
+
+    const auto found{findLobbyPlayer(lobbyUpdate, *playerIds[i])};
+    if (!found)
+      continue;
+
+    const auto &info{found->first};
+    const auto name{info.name.empty() ? "Player " + std::to_string(i + 1)
+                                      : info.name};
+    auto hint{name + ": " + keyHints[i].ready +
+              (info.is_ready ? " to cancel ready" : " to ready up")};
+    if (isPvP)
+      hint += std::string(", ") + keyHints[i].switchTeam + " to switch team";
+
+    y = drawCentered(hint.c_str(), y, HINT_FONT_SIZE, LIGHTGRAY) + LINE_GAP;
+  }
+
   drawCentered("Press ESC to leave the lobby", y, HINT_FONT_SIZE, LIGHTGRAY);
 }
 
@@ -322,11 +340,10 @@ void GameDesigner::drawGame(
 
                    entity_designer_.drawParticles(particles);
 
-                   entity_designer_.drawEnemies(s.enemies, s.enemies_offset_x,
-                                                s.enemies_offset_y);
+                   entity_designer_.drawEnemies(s.enemies, s.enemies_offset);
 
                    {
-                     using GamePhase = shared::CoopGameSim::Phase;
+                     using GamePhase = shared::CoopGamePhase;
                      entity_designer_.drawBoss(
                          s.boss, static_cast<GamePhase>(s.phase) ==
                                      GamePhase::FIGHT_BOSS);
@@ -396,8 +413,7 @@ void GameDesigner::drawEndScreen(const shared::GameState &state,
   std::visit(
       shared::overloaded{
           [&](const shared::CoopGameState &s) {
-            using Phase = shared::CoopGameSim::Phase;
-            const auto won{static_cast<Phase>(s.phase) == Phase::WON};
+            const auto won{s.phase == shared::CoopGamePhase::WON};
 
             y = drawCentered(won ? "VICTORY" : "GAME OVER", y, TITLE_FONT_SIZE,
                              won ? GOLD : RED) +
@@ -427,8 +443,6 @@ void GameDesigner::drawEndScreen(const shared::GameState &state,
             y += LINE_GAP;
           },
           [&](const shared::PvPGameState &s) {
-            using Outcome = shared::PvPGameSim::TeamOutcome;
-
             const auto ownsTeam =
                 [&isOnThisMachine](
                     const std::optional<shared::TeamState> &team) {
@@ -448,11 +462,11 @@ void GameDesigner::drawEndScreen(const shared::GameState &state,
             // headline would be meaningless, so only personalise it when
             // exactly one team is ours.
             if (myTeamsCount == 1) {
-              switch (static_cast<Outcome>((*myTeam)->outcome)) {
-              case Outcome::WON:
+              switch ((*myTeam)->outcome) {
+              case shared::TeamOutcome::WON:
                 y = drawCentered("YOU WIN", y, TITLE_FONT_SIZE, GOLD);
                 break;
-              case Outcome::LOST:
+              case shared::TeamOutcome::LOST:
                 y = drawCentered("YOU LOSE", y, TITLE_FONT_SIZE, RED);
                 break;
               default:
@@ -462,8 +476,7 @@ void GameDesigner::drawEndScreen(const shared::GameState &state,
             } else {
               const auto winner{std::find_if(
                   s.teams.begin(), s.teams.end(), [](const auto &team) {
-                    return team &&
-                           static_cast<Outcome>(team->outcome) == Outcome::WON;
+                    return team && team->outcome == shared::TeamOutcome::WON;
                   })};
 
               if (winner == s.teams.end()) {
@@ -493,14 +506,14 @@ void GameDesigner::drawEndScreen(const shared::GameState &state,
                 if (myTeamsCount == 1 && ownsTeam(team))
                   teamLabel += " (Yours)";
 
-                switch (static_cast<Outcome>(team->outcome)) {
-                case Outcome::WON:
+                switch (team->outcome) {
+                case shared::TeamOutcome::WON:
                   teamLabel += " - WON";
                   break;
-                case Outcome::LOST:
+                case shared::TeamOutcome::LOST:
                   teamLabel += " - LOST";
                   break;
-                case Outcome::DREW:
+                case shared::TeamOutcome::DREW:
                   teamLabel += " - DREW";
                   break;
                 default:

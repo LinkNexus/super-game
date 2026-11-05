@@ -12,15 +12,31 @@ entries appear here as one-line stubs so the numbering stays readable.
 
 ---
 
-## Where things stand — 2026-10-30 (run on branch `l37`)
+## Where things stand — 2026-11-05 (run on branch `l39`)
 
-**L37 and L38 done for local play** on `l37`: menus (local + the online flow up to "connecting"),
-coop and PvP rendering, DOM HUD, end screen, pause, arcade/neon UI kit; server validates names.
-`npm run build` passes again. **Next:** push + PR for this run, then **L39** (`OnlineSession`).
-Responsive/mobile is a later, separate pass (see L38).
+**Now: L39 + L74 code-complete** (online mode on web), branch `l39` off `origin/master`, not yet
+pushed. Local dev: `supergame-server` listens on `ws://localhost:9001`. Responsive/mobile is a
+later, separate pass (see L38). **Left — manual checks only, then PR and close L39/L74:**
+1. **Desktop against the server** — built clean, never run online: per-player ready (P1 SPACE,
+   P2 W), team switch (P1 ←/→, P2 A/D, no wrap), the per-player key hints in the lobby, and
+   `EntityDesigner::playerColor` (same rule as the web's `playerColor`).
+2. **Web ↔ desktop in one 2v2 lobby**, plus a same-machine online 1v1 (the split join) from each.
+3. `windows-client-release` build (`nix develop .#mingw`) — not run this time.
+4. Optional: `PvPGame`'s constructor trusts `team_count ≤ MAX_TEAMS` (handshake-validated); an
+   assert would make a misuse loud.
 
-**Next after this run:** **L39** (online mode on web, with L74). L35–L38 are
-local mode only. **L74 is deferred to sit with L39** (online mode on web); see its entry.
+**Landed this run:** L74 server half — per-player `READY`/`SWITCH_TEAM` (moves the slot into the
+target's `teamSlotRange`, clears ready in both teams, rejected switches still broadcast), joins
+"together first, else split, all-or-nothing" (first team that fits the whole connection). Web:
+`OnlineSession`, lobby screen (`ui/lobby.ts`, Claude), toasts (`ui/toast.ts`, Claude), online
+pause/restart/quit, deterministic player colours, end-screen arming delay (`inert` 800 ms) and
+`MenuNav`'s fresh-Space rule. Desktop: the same protocol and colours (Claude, at Levy's request).
+Debug builds now pass `-O0` explicitly (nix's wrapper injected `-O2`). Suites: server 92/92,
+shared 22/22, web `tsc` clean.
+
+**Last run (L37 + L38, PR #28, merged):** web frontend for local play — menus (incl. the online
+flow up to "connecting"), coop and PvP rendering, DOM HUD, end screen, pause, UI kit; server
+validates names.
 
 **Two manual checks left over from the last run** (nothing automated can cover them):
 - Launch `supergame-client.exe` from `windows-client-release` on a real Windows machine (no
@@ -152,7 +168,7 @@ arguments between entries — is in the [archive](ROADMAP-ARCHIVE.md).
 | L73 | ✅ End / score screen | [archive](ROADMAP-ARCHIVE.md#phase-45--hardening--cleanup-before-the-web-client-no-deadline) |
 | L75 | ✅ Shared screen-layout helpers | [archive](ROADMAP-ARCHIVE.md#phase-45--hardening--cleanup-before-the-web-client-no-deadline) |
 | L76 | ✅ `.close` leaves a dangling `WsConnection *` on an already-over game | [archive](ROADMAP-ARCHIVE.md#phase-45--hardening--cleanup-before-the-web-client-no-deadline) |
-| L74 | **Per-connection ready, team select, and same-team visual distinction** | **Deferred (2026-10-22) — do the server half right before or alongside L39, the UI in `web/frontend/` only.** Three reasons: the web client first touches the lobby at L39, so there is no deadline before that; `client/` is retired at web parity (Phase 5), so a raylib team-select/ready UI now would be thrown away; and team select can be **additive** (optional `?team=` handshake param or a new `ClientMessageType`, auto-balance stays the default), so landing it later breaks no client. **Left, as of the 2026-10-22 audit:** (1) *Ready display* — server is already per-connection (`Game::setPlayersReady` sets every player on the `ws`), but `PlayerInfo::is_ready` and the client's `Players ready: n/m` count per slot, so a two-player client counts twice. Decide: keep the per-player field synced per connection (display-only change) or make ready per-connection on the wire. (2) *Team select* — not started; `PvPGame::addPlayers` takes the first team with room. A lobby-time switch must free the slot and re-insert into the other team's `teamSlotRange` (never patch `team_id` in place), and should clear ready so a switch after both teams readied can't start an unbalanced match. Server suite can cover it like the L80/L81 2v2 cases. (3) *Same-team distinction* — likely already done: `entity_designer.cpp:290-310` gives local duos `MAIN_PLAYER_COLOR` + `PLAYER_COLORS[…]`, coop colours by slot. Only gap: online PvP opponents are all `PLAYER_ENEMY_COLOR` — confirm in-game whether that is fine and close this part if so. <br><br>*Original entry:* The remainders of L31/L33/L34, now unblocked since one connection can own two slots. `setPlayersReady` keys on `ws` and sets the flag for every player on that socket, which is already per-connection behaviour — but the lobby still shows and counts it per slot. Still missing: any way to *choose* a team (only auto-balance-on-connect shipped), and two players on the same team are both drawn in one colour, so a same-machine duo can't tell their ships apart (same flattening hits coop at 3-4 players). |
+| L74 | **Per-connection ready, team select, and same-team visual distinction** | **Deferred (2026-10-22) — do the server half right before or alongside L39, the UI in `web/frontend/` only.** **Decided (2026-10-30), shipped with a new desktop release:** teams and ready are **per player**. `SWITCH_TEAM {player_id, team_id}` (sender must own the player, target needs a free seat, clears ready in both teams involved, rejected switches still broadcast the lobby); `READY {player_id, is_ready}`; `PvPGameLobbyUpdate.teams` becomes `TeamInfo {id, players}` (same ids as `PvPGameState`). Join: together first, split across teams if no team fits the connection, all-or-nothing (handshake check loosens to `slots ≤ team_size × team_count`, so a same-machine online 1v1 works). `Game::setPlayersReady(ws, bool)` stays as the whole-connection helper the tests use for setup. Clients: when this machine's players sit on both teams, there is no "your team" — fall back to local PvP's per-ship colours and "TEAM N WINS". Tests: `server/tests/test_team_switch.cpp`, split joins in `test_roster.cpp`, per-player ready in `test_inbound.cpp`. Three reasons: the web client first touches the lobby at L39, so there is no deadline before that; `client/` is retired at web parity (Phase 5), so a raylib team-select/ready UI now would be thrown away; and team select can be **additive** (optional `?team=` handshake param or a new `ClientMessageType`, auto-balance stays the default), so landing it later breaks no client. **Left, as of the 2026-10-22 audit:** (1) *Ready display* — server is already per-connection (`Game::setPlayersReady` sets every player on the `ws`), but `PlayerInfo::is_ready` and the client's `Players ready: n/m` count per slot, so a two-player client counts twice. Decide: keep the per-player field synced per connection (display-only change) or make ready per-connection on the wire. (2) *Team select* — not started; `PvPGame::addPlayers` takes the first team with room. A lobby-time switch must free the slot and re-insert into the other team's `teamSlotRange` (never patch `team_id` in place), and should clear ready so a switch after both teams readied can't start an unbalanced match. Server suite can cover it like the L80/L81 2v2 cases. (3) *Same-team distinction* — likely already done: `entity_designer.cpp:290-310` gives local duos `MAIN_PLAYER_COLOR` + `PLAYER_COLORS[…]`, coop colours by slot. Only gap: online PvP opponents are all `PLAYER_ENEMY_COLOR` — confirm in-game whether that is fine and close this part if so. <br><br>*Original entry:* The remainders of L31/L33/L34, now unblocked since one connection can own two slots. `setPlayersReady` keys on `ws` and sets the flag for every player on that socket, which is already per-connection behaviour — but the lobby still shows and counts it per slot. Still missing: any way to *choose* a team (only auto-balance-on-connect shipped), and two players on the same team are both drawn in one colour, so a same-machine duo can't tell their ships apart (same flattening hits coop at 3-4 players). |
 | L77 | **One-command setup from a bare clone** | **Left:** an idempotent `make setup` (toolchain preflight + the submodule init in its exact non-recursive form — never `--recursive`, which pulls 1GB+ of BoringSSL/lsquic/fuzz corpus this project never uses, plus two *nested* inits for `uSockets` and mbedTLS's `framework`) that `client`/`server`/`all` depend on, so a bare clone needs one command rather than six README lines. Keep the logic in `scripts/setup.sh` with the Makefile as a thin wrapper. Exit non-zero naming the missing tool and its install command per platform. The `tests` target already needs no submodules at all, so it gets there for free. Per-module builds, the preset rewrite and both CI pipelines landed 2026-10-13. Full history: [archive](ROADMAP-ARCHIVE.md#l77--one-command-setup--per-module-builds-from-a-bare-clone). |
 | L78 | **Client-side `dynamic_cast` removal (L66's other half)** | Nine `dynamic_cast<OnlineConfig *>` / `dynamic_cast<OnlineSession *>` sites in `client/src/game.cpp`, five of them unchecked derefs, left on their own branch by choice after the server half landed. Same duplicated-fact shape as the server had: `GameType type_` says local-vs-online, and the dynamic types of `config_`/`session_` say it again, with nothing checking that they agree. **Near-term fix:** two asserted accessors (`onlineConfig()`/`onlineSession()`) rather than cached `OnlineConfig *` / `OnlineSession *` members - a cached pointer dangles the moment `config_ = nullptr`, which the LOBBY/ESC branch does. **Structural fix, which belongs with L70:** one `std::variant<LocalPlay, OnlinePlay>` holding each config+session as a pair, making today's representable "OnlineConfig with a LocalSession" impossible and retiring `type_` as a third spelling. Do the accessors here only if L70 is not imminent; otherwise skip straight to the variant and close both together. Already fixed on the L66 branch and not part of this entry: the `LOBBY` use-after-free where ESC freed `config_` and the `KEY_SPACE` branch below it still dereferenced the pointer cast before it. |
 | L79 | ✅ Make the server's inbound `.message` path testable | [archive](ROADMAP-ARCHIVE.md#phase-45--hardening--cleanup-before-the-web-client-no-deadline) |
@@ -212,6 +228,7 @@ All tasks below are Levy's.
 | L39 | **Online mode via native browser `WebSocket`** | TS client speaking the existing wire protocol directly to `supergame-server` (same `?name=`/`?players=` handshake as desktop, once L28/L29 land), plus a TS port of `OnlineSession`'s client-side interpolation lerp. **Do L74 with this** (team select + ready display: server half first, UI here only — see L74). |
 | L40 | **Web asset pipeline** | Lazy-load audio behind a user-gesture "Play" button (browsers block autoplay pre-interaction anyway, so this is required, not optional), and re-encode `Backgroundsound.wav` (48MB) to a compressed web-friendly format — bundling the raw wav would make first load brutal. *(2026-10-25: already done — it's `assets/backgroundsound.ogg`, and all assets are ~2 MB, so only the user-gesture part is left.)* |
 | L41 | **CI: build + deploy the web target** | New GitHub Actions job building the `web-sim` WASM preset + frontend bundle, mirroring the existing cross-compile job pattern — artifact upload/deploy gated to master pushes only, consistent with the rest of the pipeline's storage-conscious triggers. <br><br>**Decided (2026-10-24): hosting + routing.** The frontend is static files served by a Caddy/nginx container on the Dokploy VPS (multi-stage image: build WASM + TS bundle, serve `dist/`; `.wasm` must go out as `application/wasm`), not by `supergame-server`. **One domain, routed by path**: `supergame.levynkeneng.dev/ws` → game server, `/api` → the Phase 7 service, `/` → the static container (Traefik prefers the longer rule, so `/` is a safe catch-all). Same origin means Phase 7 auth needs no CORS and can use a plain `HttpOnly`/`SameSite=Strict` cookie. No server change needed: its WS route is `"/*"` (`server/src/main.cpp:70`); the client URL (`client/include/constants.h:14`) becomes `.../ws`. **Two things to handle at the switch:** `/health` and `/version` are exact routes, so give them their own rule to the game server (`/version` is what the post-deploy check polls); and v2.0.0 desktop clients connect to `/`, so either ship a new desktop build or add a `/` + `Upgrade: websocket` header rule. **Not two-level subdomains** (`game.supergame.…`): the domain is Cloudflare-proxied, so browsers get Cloudflare's Universal SSL certificate (`levynkeneng.dev` + `*.levynkeneng.dev` only, verified 2026-10-24) — the Nginx Proxy Manager cert only covers the Cloudflare→origin hop. Two-level names would need DNS-only (grey cloud) or a paid Advanced Certificate. |
+| L82 | **Per-connection wire format, negotiated at the handshake** | Not urgent — do it when `WIRE_BINARY` is about to be turned on, not before. Today the format is a compile-time flag (`shared/wire.h`), so every client gets the same one. Instead: the client offers WebSocket subprotocols (`new WebSocket(url, ["supergame.msgpack", "supergame.json"])`), the server picks one in `.upgrade`, echoes it back, and stores a `WireFormat` in `PerSocketData`; a missing header means JSON, so the desktop client keeps working unchanged. `UwsConnection::send` takes encoding *and* opcode from that per-socket format; `shared::encode/decode` take the format as a parameter instead of reading `WIRE_BINARY` (`web_sim.cpp` passes JSON — the local path never hits the network). Broadcasts keep L69's encode-once: lazily once *per format* used in that broadcast, so at most two. Payoff: readable JSON in the browser's network tab while debugging, msgpack size elsewhere. **Not** mirroring the client's opcode: the server speaks first (WELCOME + lobby in `.open`, before any client frame), the format could flip mid-connection, and a binary opcode doesn't say *which* bytes (JSON is legal in a binary frame). Related bug, fix with L39 regardless: WELCOME is sent via raw `ws->send()` (`server/src/main.cpp:193`), whose uWS default opcode is `BINARY`, so browsers get it as a `Blob` while every other message is text — route it through `data->connection.send()`. |
 
 ---
 
@@ -227,12 +244,9 @@ rendering swap: `Vec2D` positions become `Vec3D` throughout the sim, and collisi
 and the boss's already-angle-based spread-shot fan (`Vec2D::rotated`/`angle_between` — L21)
 all need a 3D equivalent.
 
-**Sequencing note:** this touches nearly every file Phase 4 (PvP collision) and Phase 5
-(WASM/wire format) also touch. Doing the dimensionality migration first — or at least before
-deep investment in Phase 4's collision work — avoids writing 2D collision logic that gets
-thrown away almost immediately after. Phase 5's core design (the WASM shim reusing
-`to_json`/`from_json`) is unaffected either way — it's format-agnostic; 3D coordinates are
-just more fields in the same JSON.
+**Sequencing note:** Phase 4's collision work has already shipped in 2D, so the migration
+generalizes it (L46) instead of preceding it. Phase 5's design is unaffected: the WASM shim
+and the binary wire format carry a third coordinate as one more field.
 
 **Platform note:** per Phase 5's decision, `client/` is expected to already be retired by the
 time this phase starts, so the 3D renderer (L48) targets the web frontend, not raylib's
@@ -241,10 +255,22 @@ WebGL2 and isn't a route to it. That shifts L48's original raylib-`Camera3D`/mes
 goal to whatever the web 3D stack ends up being — the API changes, the "gain real 3D
 rendering experience" goal doesn't.
 
-**Open question worth resolving before starting:** does 3D fully replace the 2D game, or
-become an additional selectable mode alongside it (extending Phase 4's mode-select step with
-a dimensionality axis, not just Coop/PvP)? Affects whether `Vec2D` and the current 2D
-collision/rendering path get deleted outright or kept around for a 2D mode.
+**Decided (2026-11-01): 2D stays, as a selectable mode beside 3D.** Mode select gets a
+dimensionality axis next to Coop/PvP. 3D-specific features are still undesigned. The shape:
+
+- **One sim, `Vec3D` everywhere, not a separate 3D sim.** Bullet pool, collision, roster,
+  inputs, scoring and the wire format are written once.
+- **Axes have fixed meanings in both modes:** `x` = lateral, `y` = height, `z` = depth (the
+  advance axis: formations approach and bullets fly along it). **2D is the 3D game seen from
+  above with `y` pinned to 0.** Not "today's 2D plus a `z`": the sim's current `y` (the advance
+  axis since L56) becomes `z`, so shared systems never need to know which mode they're in. The
+  2D renderer draws `(x, z)`. Enforce `y == 0` in one place in flat mode, not per call site.
+- **Rules differ per dimension, so split them like Coop/PvP (L28):** player bounds (1-DOF vs.
+  2-DOF), formation advance (grid steps vs. the rail), boss fan (arc vs. cone), 3D-only
+  features. **Compose, don't inherit:** Coop/PvP × Flat/Rail is four combinations, so the
+  mode rules and the world rules should be independent parts (template parameters or strategy
+  members), not four classes. No `if (is3D)` inside update functions (the L70 problem).
+- **Open:** which way do PvP teams face on a rail?
 
 **Idea (2026-10-25), not yet a task: player counts from formulas, not tables.** Today the caps
 are fixed (`MAX_PLAYERS_COOP`, `MAX_TEAMS × MAX_PLAYERS_PER_TEAM`) and enemy count/difficulty
@@ -263,8 +289,8 @@ All tasks below are Levy's.
 
 | # | Task | Notes |
 |---|------|-------|
-| L42 | **`Vec3D` primitives in `shared/`** | Add a 3D vector type alongside the existing `Vec2D` (`math_utils.h`), generalizing the angle/rotation math already built for the boss's spread-shot fan (`Vec2D::rotated`, `angle_between`, `dot_product` — L21) to 3D (e.g. spreading a bullet volley across a cone instead of a 2D arc). |
-| L43 | **Migrate sim positions `Vec2D` → `Vec3D`** | `PlayerSimState`, `BulletSimState`, `EnemySimState`, `BossSimState` (and their wire counterparts in `messages.h`) move to 3D positions, one entity at a time — same "state and logic migrate together" principle already established for the client/server split (see [CLAUDE.md](CLAUDE.md)), applied to a dimensionality change instead. |
+| L42 | **`Vec3D` primitives in `shared/`** | **Mostly done by the `vendor/mathlib` switch:** `mathlib::Vec3f` exists (incl. `rotatedAroundAxis`), and the sim's vector type is the one alias `shared::SimVec` (`types.h`). What's left is a cone-spread helper, if mathlib doesn't cover it. *Original entry:* Add a 3D vector type alongside the existing `Vec2D` (`math_utils.h`), generalizing the angle/rotation math already built for the boss's spread-shot fan (`Vec2D::rotated`, `angle_between`, `dot_product` — L21) to 3D (e.g. spreading a bullet volley across a cone instead of a 2D arc). |
+| L43 | **Migrate sim positions `Vec2D` → `Vec3D`** | `PlayerSimState`, `BulletSimState`, `EnemySimState`, `BossSimState` (and their wire counterparts in `messages.h`) move to 3D positions, one entity at a time — same "state and logic migrate together" principle already established for the client/server split (see [CLAUDE.md](CLAUDE.md)), applied to a dimensionality change instead. **Includes the axis rename** (today's sim `y` → `z`, see the decision above), and with it the 2D renderers' swap to drawing `(x, z)`. |
 | L44 | **Player steering: 2-DOF movement plane** | Today `PlayerSimState::POSITION_Y` is fixed — the player only ever moves in X. On-rails 3D needs real X/Y steering within a bounded plane a fixed distance in front of the camera (Z stays constant for the player; only the *world* advances in Z). Needs a new `UP`/`DOWN` bit on `PlayerInput.buttons` alongside the existing left/right/fire bits. |
 | L45 | **World/enemy Z-advance ("the rail")** | Reinterpret the existing enemy row/column formation (`enemy_sim.h`) as an (X,Y) formation plane spawned at a far Z that shrinks toward the player over time, replacing the current "step down the 2D grid" logic — keeps the existing grid/wave structure, just adds depth instead of a full rewrite. |
 | L46 | **3D collision (AABB → 3D bounding box)** | Generalize the hitbox constants (currently a single `SIZE` per entity, e.g. `PlayerSimState::SIZE`) to width/height/depth, and extend the AABB collision check used throughout `GameSim` to 3 axes. |

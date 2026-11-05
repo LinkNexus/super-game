@@ -1,6 +1,6 @@
 #pragma once
 
-#include "shared/aliases.h"
+#include "shared/constants.h"
 #include <algorithm>
 #include <array>
 #include <charconv>
@@ -24,8 +24,10 @@ struct PairHash {
   }
 };
 
-inline std::optional<int> toInt(std::string_view sv) {
-  int value;
+template <typename T = int>
+  requires std::is_arithmetic_v<T>
+inline std::optional<T> toNumber(std::string_view sv) {
+  T value;
   auto [ptr, ec] = std::from_chars(sv.data(), sv.data() + sv.size(), value);
 
   if (ec != std::errc{} || ptr != sv.data() + sv.size())
@@ -35,14 +37,16 @@ inline std::optional<int> toInt(std::string_view sv) {
 }
 
 template <typename T, std::size_t N>
-inline PlayerCount count_optional(const std::array<std::optional<T>, N> &arr) {
-  return static_cast<PlayerCount>(std::count_if(
+static inline std::size_t
+count_optional(const std::array<std::optional<T>, N> &arr) {
+  return static_cast<std::size_t>(std::count_if(
       arr.begin(), arr.end(), [](const auto &opt) { return opt.has_value(); }));
 }
 
 template <typename T, std::size_t N, typename Fn>
   requires(std::is_invocable_v<Fn, T &, std::size_t>)
-void iterateOverOptionals(std::array<std::optional<T>, N> &arr, Fn callback) {
+static inline void iterateOverOptionals(std::array<std::optional<T>, N> &arr,
+                                        Fn callback) {
   for (std::size_t i = 0; i < arr.size(); ++i) {
     if (arr[i].has_value()) {
       callback(arr[i].value(), i);
@@ -52,12 +56,22 @@ void iterateOverOptionals(std::array<std::optional<T>, N> &arr, Fn callback) {
 
 template <typename T, std::size_t N, typename Fn>
   requires(std::is_invocable_v<Fn, const T &, std::size_t>)
-void iterateOverOptionals(const std::array<std::optional<T>, N> &arr,
-                          Fn callback) {
+static inline void
+iterateOverOptionals(const std::array<std::optional<T>, N> &arr, Fn callback) {
   for (std::size_t i = 0; i < arr.size(); ++i) {
     if (arr[i].has_value()) {
       callback(arr[i].value(), i);
     }
   }
 }
+
+static inline auto isNameValid(const std::string_view name) {
+  for (const auto &c : name) {
+    if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_'))
+      return false;
+  }
+
+  return name.size() <= MAX_NAME_LENGTH;
+}
+
 } // namespace shared

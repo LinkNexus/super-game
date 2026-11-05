@@ -1,11 +1,11 @@
 #include "shared/sim/player_sim.h"
 #include "shared/constants.h"
-#include "shared/messages.h"
 #include "shared/sim/bullet_sim.h"
+#include <mathlib.hpp>
 
 using namespace shared;
 
-void PlayerSimState::init(PlayerId id, Vec2D position, int lives,
+void PlayerSimState::init(PlayerId id, mathlib::Vec2f position, int lives,
                           float orientation) {
   this->position = position;
   fire_cooldown = 0.0f;
@@ -20,12 +20,10 @@ void PlayerSimState::spawnBullet(
   for (auto &bullet : bullets) {
     if (!bullet.active) {
       bullet.active = true;
-      Vec2D offset = {0, SIZE};
-      bullet.position = position + offset.rotated(orientation);
+      bullet.position = position + mathlib::Vec2f{0, SIZE}.rotated(orientation);
 
-      Vec2D velocity{0.0f, BulletSimState::SPEED};
-      bullet.velocity = velocity.rotated(orientation);
-
+      bullet.velocity =
+          mathlib::Vec2f{0.0f, BulletSimState::SPEED}.rotated(orientation);
       bullet.owner_id = id;
       bullet.type = BulletType::PLAYER;
       return;
@@ -33,14 +31,14 @@ void PlayerSimState::spawnBullet(
   }
 }
 
-void PlayerSimState::step(const PlayerInput &input, float dt,
+void PlayerSimState::step(Button buttons, float dt,
                           std::array<BulletSimState, MAX_BULLETS> &bullets,
                           bool can_fire_bullets) {
   float vx = 0;
 
-  if (input.buttons & BUTTON_LEFT)
+  if (buttons & BUTTON_LEFT)
     vx = -1.0f;
-  if (input.buttons & BUTTON_RIGHT)
+  if (buttons & BUTTON_RIGHT)
     vx = 1.0f;
 
   position.x += vx * SPEED * dt;
@@ -57,9 +55,13 @@ void PlayerSimState::step(const PlayerInput &input, float dt,
   if (fire_cooldown > 0.0f)
     fire_cooldown -= dt;
 
-  if (can_fire_bullets && (input.buttons & BUTTON_SHOOT) &&
-      fire_cooldown <= 0.0f) {
+  if (can_fire_bullets && (buttons & BUTTON_SHOOT) && fire_cooldown <= 0.0f) {
     spawnBullet(bullets);
     fire_cooldown = FIRE_COOLDOWN;
   }
+}
+
+mathlib::Rectanglef shared::PlayerSimState::getHitBox() const {
+  return mathlib::Rectanglef::fromCenterAndSize(position, SIZE, SIZE)
+      .scaledFromCenterBy(HITBOX_SCALE);
 }

@@ -16,13 +16,9 @@ set(ENABLE_PROGRAMS OFF CACHE BOOL "" FORCE)
 set(USE_STATIC_MBEDTLS_LIBRARY ON CACHE BOOL "" FORCE)
 set(USE_SHARED_MBEDTLS_LIBRARY OFF CACHE BOOL "" FORCE)
 
-add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/vendor/mbedtls)
-
-# Same reason as ixwebsocket's: these propagate an include path into anything
-# that links them, and none of their warnings are ours to fix.
-foreach(_mbedtls_target mbedtls mbedx509 mbedcrypto)
-    supergame_mark_vendored_system(${_mbedtls_target})
-endforeach()
+# SYSTEM, same reason as ixwebsocket's: these propagate an include path into
+# anything that links them, and none of their warnings are ours to fix.
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/vendor/mbedtls SYSTEM)
 
 set(MBEDTLS_FOUND TRUE)
 set(MBEDTLS_INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/vendor/mbedtls/include)

@@ -1,7 +1,13 @@
 #pragma once
 
+#include "mathlib.hpp"
 #include "raylib.h"
-#include "shared/math_utils.h"
+#include "shared/constants.h"
 
-shared::Vec2D toScreen(shared::Vec2D vec);
-Vector2 toRaylibVec(shared::Vec2D vec);
+static inline mathlib::Vec2f toScreen(mathlib::Vec2f vec) {
+  return {vec.x, shared::SCREEN_HEIGHT - vec.y};
+}
+
+static inline Vector2 toRaylibVec(mathlib::Vec2f vec) {
+  return {vec.x, shared::SCREEN_HEIGHT - vec.y};
+}

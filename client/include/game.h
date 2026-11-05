@@ -39,6 +39,10 @@ private:
 
   void handleInput();
 
+  /// Per local player: ready toggle and, in PvP, team switch. Reads the
+  /// current state from the last lobby update, never from a local copy.
+  void handleLobbyInput(OnlineSession &session);
+
   /// Polls raylib input and writes the resulting buttons into `inputs_`
   /// for whichever local player(s) are active this tick.
   ThisMachinePlayerInputs pollPlayersInputs();
@@ -77,6 +81,13 @@ private:
                             {KEY_D, shared::Button::BUTTON_RIGHT},
                             {KEY_W, shared::Button::BUTTON_SHOOT},
                         }}}};
+
+  /// The lobby reuses each player's controls: shoot readies, left/right
+  /// moves to the neighbouring team. Keep in sync with PLAYERS_CONTROLS.
+  static constexpr LobbyKeyHints PLAYERS_LOBBY_KEY_HINTS{{
+      {"SPACE", "LEFT/RIGHT"},
+      {"W", "A/D"},
+  }};
 
   std::array<Particle, MAX_PARTICLES> particles_{};
   std::array<Star, STAR_COUNT> stars_;
