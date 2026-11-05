@@ -37,14 +37,14 @@ using Result = Game::ClientMessageResult;
 
 /// A READY frame exactly as the client builds one: a `{type, payload}`
 /// envelope, encoded through the same `shared::encode` both ends share, so a
-/// change to `WIRE_BINARY` moves these cases with it. Ready is per player
-/// (L74), so the payload names the player it readies.
+/// case pinned to JSON (L82 made the format per connection). Ready is per
+/// player (L74), so the payload names the player it readies.
 std::string readyFrame(shared::PlayerId player_id, bool is_ready) {
   nlohmann::json envelope{};
   envelope["type"] = shared::ClientMessageType::READY;
   envelope["payload"] = {{"player_id", player_id}, {"is_ready", is_ready}};
 
-  return shared::encode(envelope);
+  return shared::encode(envelope, shared::WireFormat::JSON);
 }
 
 std::string inputFrame(std::initializer_list<shared::PlayerInput> inputs) {
@@ -58,7 +58,7 @@ std::string inputFrame(std::initializer_list<shared::PlayerInput> inputs) {
   envelope["type"] = shared::ClientMessageType::PLAYER_INPUT;
   envelope["payload"] = payload;
 
-  return shared::encode(envelope);
+  return shared::encode(envelope, shared::WireFormat::JSON);
 }
 
 /// The lobby snapshot carried by @p connection's most recent frame - the
@@ -185,7 +185,8 @@ TEST(a_ready_frame_without_a_player_id_is_reported_as_a_bad_envelope) {
   envelope["type"] = shared::ClientMessageType::READY;
   envelope["payload"] = {{"is_ready", true}};
 
-  const auto outcome = game.handleClientMessage(data, shared::encode(envelope));
+  const auto outcome = game.handleClientMessage(
+      data, shared::encode(envelope, shared::WireFormat::JSON));
 
   CHECK_EQ(outcome.result, Result::BadEnvelope);
   CHECK_EQ(game.findPlayerById(1)->is_ready, false);
@@ -422,8 +423,8 @@ TEST(an_array_wrapped_envelope_is_reported_as_a_bad_envelope) {
   nlohmann::json wrapped = nlohmann::json::array();
   wrapped.push_back(nlohmann::json::parse(readyFrame(1, true)));
 
-  const auto outcome =
-      game.handleClientMessage(data, shared::encode(wrapped));
+  const auto outcome = game.handleClientMessage(
+      data, shared::encode(wrapped, shared::WireFormat::JSON));
 
   CHECK_EQ(outcome.result, Result::BadEnvelope);
   CHECK_EQ(game.findPlayerById(1)->is_ready, false);
@@ -444,7 +445,8 @@ TEST(a_type_outside_the_enum_is_reported_as_unknown) {
   envelope["type"] = 7;
   envelope["payload"] = nlohmann::json::object();
 
-  const auto outcome = game.handleClientMessage(data, shared::encode(envelope));
+  const auto outcome = game.handleClientMessage(
+      data, shared::encode(envelope, shared::WireFormat::JSON));
 
   CHECK_EQ(outcome.result, Result::UnknownType);
   CHECK(!outcome.detail.empty());
@@ -466,7 +468,8 @@ TEST(a_payload_that_does_not_match_its_type_is_reported_as_a_bad_envelope) {
   envelope["type"] = shared::ClientMessageType::READY;
   envelope["payload"] = "not an object";
 
-  const auto outcome = game.handleClientMessage(data, shared::encode(envelope));
+  const auto outcome = game.handleClientMessage(
+      data, shared::encode(envelope, shared::WireFormat::JSON));
 
   CHECK_EQ(outcome.result, Result::BadEnvelope);
   CHECK(!outcome.detail.empty());

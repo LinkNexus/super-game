@@ -34,7 +34,7 @@ std::string switchTeamFrame(shared::PlayerId player_id,
   envelope["payload"] = {{"player_id", player_id},
                          {"target_team_id", target_team_id}};
 
-  return shared::encode(envelope);
+  return shared::encode(envelope, shared::WireFormat::JSON);
 }
 
 std::string readyFrame(shared::PlayerId player_id, bool is_ready) {
@@ -42,7 +42,7 @@ std::string readyFrame(shared::PlayerId player_id, bool is_ready) {
   envelope["type"] = shared::ClientMessageType::READY;
   envelope["payload"] = {{"player_id", player_id}, {"is_ready", is_ready}};
 
-  return shared::encode(envelope);
+  return shared::encode(envelope, shared::WireFormat::JSON);
 }
 
 /// Bind the result to a named local (see `coopLobbyFrame` in test_inbound.cpp).
@@ -409,14 +409,14 @@ TEST(a_switch_frame_missing_a_field_is_reported_as_a_bad_envelope) {
   REQUIRE(game.addPlayers(aData));
   const auto t1 = teamIdAt(pvpLobbyOf(game), 1);
 
-  for (const auto &payload :
-       {nlohmann::json{{"target_team_id", t1}}, nlohmann::json{{"player_id", 1}}}) {
+  for (const auto &payload : {nlohmann::json{{"target_team_id", t1}},
+                              nlohmann::json{{"player_id", 1}}}) {
     nlohmann::json envelope{};
     envelope["type"] = shared::ClientMessageType::SWITCH_TEAM;
     envelope["payload"] = payload;
 
-    const auto outcome =
-        game.handleClientMessage(aData, shared::encode(envelope));
+    const auto outcome = game.handleClientMessage(
+        aData, shared::encode(envelope, shared::WireFormat::JSON));
     CHECK_EQ(outcome.result, Result::BadEnvelope);
   }
 }

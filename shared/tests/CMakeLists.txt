@@ -1,6 +1,7 @@
 add_executable(supergame-shared-tests
     test_coop_sim.cpp
     test_pvp_sim.cpp
+    test_wire.cpp
 )
 
 target_link_libraries(supergame-shared-tests PRIVATE
