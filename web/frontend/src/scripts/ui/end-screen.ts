@@ -11,6 +11,10 @@ import { MenuNav } from "./menu-nav";
 type ActionHandler = (action: "restart" | "menu") => void;
 type Outcome = "won" | "lost" | "draw";
 
+/// Buttons stay inert this long after the end screen appears, so a player
+/// still firing doesn't press one. Longer than the title's 400 ms entrance.
+const ARM_DELAY_MS = 800;
+
 const overlay = document.getElementById("end-overlay")!;
 const card = overlay.querySelector<HTMLElement>(".end-card")!;
 const titleEl = card.querySelector<HTMLElement>(".end-title")!;
@@ -25,6 +29,7 @@ const rowTemplate = document.getElementById(
 ) as HTMLTemplateElement;
 
 let onAction: ActionHandler = () => {};
+let armTimer: number | undefined;
 const nav = new MenuNav(overlay);
 
 overlay.addEventListener("click", (e) => {
@@ -56,11 +61,17 @@ export function showEndScreen(
       break;
   }
 
+  window.clearTimeout(armTimer);
+  overlay.inert = true;
   overlay.hidden = false;
-  nav.activate();
+  armTimer = window.setTimeout(() => {
+    overlay.inert = false;
+    nav.activate();
+  }, ARM_DELAY_MS);
 }
 
 export function hideEndScreen() {
+  window.clearTimeout(armTimer);
   overlay.hidden = true;
 }
 

@@ -9,13 +9,12 @@
 
 #include "test_harness.h"
 
-#include "shared/aliases.h"
 #include "shared/constants.h"
 #include "shared/helpers.h"
 #include "shared/messages.h"
-#include "shared/sim/game_sim.h"
 #include "shared/sim/boss_sim.h"
 #include "shared/sim/enemy_sim.h"
+#include "shared/sim/game_sim.h"
 #include "shared/sim/player_sim.h"
 
 #include <array>
@@ -25,7 +24,7 @@ using namespace shared;
 
 namespace {
 
-using Phase = CoopGameSim::Phase;
+using Phase = CoopGamePhase;
 using CoopInputs = PlayerInputs<MAX_PLAYERS_COOP>;
 
 Phase phaseOf(const CoopGameState &state) {
@@ -56,7 +55,7 @@ std::size_t aliveEnemies(const CoopGameState &state) {
   std::size_t found = 0;
 
   for (const auto &enemy : state.enemies) {
-    if (enemy[0] == 1)
+    if (enemy.first)
       ++found;
   }
 
@@ -149,7 +148,7 @@ TEST(coop_entrance_leaves_enemies_alive_and_boss_inactive) {
 
   std::size_t aliveEnemies = 0;
   for (const auto &enemy : state.enemies) {
-    if (enemy[0] == 1)
+    if (enemy.first)
       ++aliveEnemies;
   }
 
@@ -271,8 +270,7 @@ TEST(coop_enemy_grid_scales_with_the_starting_player_count) {
   CHECK(aliveEnemies(fullState) > aliveEnemies(soloState));
   // A full roster gets the whole grid - the top row of ROWS_PER_PLAYERS_COUNT.
   CHECK_EQ(aliveEnemies(fullState),
-           static_cast<std::size_t>(EnemiesPoolSimState::MAX_ROWS *
-                                    EnemiesPoolSimState::COLS));
+           static_cast<std::size_t>(MAX_ENEMY_ROWS * ENEMY_COLS));
 }
 
 /// The regression this pins: if the grid were sized from live occupancy

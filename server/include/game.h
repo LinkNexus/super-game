@@ -1,9 +1,10 @@
 #pragma once
 
-#include "shared/aliases.h"
 #include "shared/constants.h"
+#include "shared/helpers.h"
 #include "shared/messages.h"
 #include "shared/sim/game_sim.h"
+#include "shared/types.h"
 #include "shared/wire.h"
 #include "types.h"
 #include <array>
@@ -16,15 +17,13 @@
 struct CoopGameType {};
 struct PvPGameType {
   shared::PlayerCount team_size{};
-  shared::PlayerCount team_count{};
+  shared::TeamCount team_count{};
 };
 using GameType = std::variant<CoopGameType, PvPGameType>;
 
-using TeamId = shared::PvPGameSim::TeamId;
-
 struct PlayerConnection {
   ServerPlayerId id{};
-  std::optional<TeamId> team_id{};
+  std::optional<shared::TeamId> team_id{};
   bool is_ready{false};
   /// Tracks whether SHOOT was already held last message, so held-down fire
   /// only counts as one shot per press rather than one per message.
@@ -78,9 +77,7 @@ public:
 
   bool isOver() const;
 
-  /// Updates @p playerId's ready flag and attempts to start the match
-  /// (see `tryStart()`).
-  void setPlayersReady(const WsConnection *ws, bool ready);
+  void setPlayerReady(ServerPlayerId id, bool ready, WsConnection *ws);
 
   bool isRunning() const;
 
@@ -117,9 +114,10 @@ protected:
     }
   }
 
-  void insertPlayers(const PerSocketPlayers &player, WsConnection *ws,
-                     const std::optional<std::pair<std::size_t, TeamId>>
-                         &teamId = std::nullopt);
+  void insertPlayer(const std::pair<ServerPlayerId, std::string> &player,
+                    WsConnection *ws,
+                    const std::optional<std::pair<std::size_t, shared::TeamId>>
+                        &teamId = std::nullopt);
 
 private:
   bool allPlayersReady() const;
@@ -160,7 +158,7 @@ inline auto rankInTeam(std::size_t slot) {
 }
 
 class PvPGame : public Game {
-  using Teams = std::array<std::optional<TeamId>, shared::MAX_TEAMS>;
+  using Teams = std::array<std::optional<shared::TeamId>, shared::MAX_TEAMS>;
 
 private:
   void tryStart() override;
@@ -178,18 +176,22 @@ public:
 
   const Teams &getTeamIds() const;
 
-private:
-  shared::PlayerCount team_size_{};
-  shared::PlayerCount team_count_{};
-  Teams team_ids_{};
+  std::size_t countPlayersOfTeam(shared::TeamId id) const;
+
+  shared::PlayerCount getTeamSize() const;
 
 private:
+  shared::PlayerCount team_size_{};
+  shared::TeamCount team_count_{};
+  Teams team_ids_{};
+
+public:
   // forEachPlayerOfTeam's slot only works because insertPlayers places team
   // members in that team's contiguous slots.
 
   template <typename Fn>
     requires(std::is_invocable_v<Fn, PlayerConnection &, std::size_t>)
-  void forEachPlayerOfTeam(TeamId id, Fn callback) {
+  void forEachPlayerOfTeam(shared::TeamId id, Fn callback) {
     shared::iterateOverOptionals(
         players_, [&](PlayerConnection &player, std::size_t slot) {
           if (player.team_id == id) {
@@ -200,7 +202,7 @@ private:
 
   template <typename Fn>
     requires(std::is_invocable_v<Fn, const PlayerConnection &, std::size_t>)
-  void forEachPlayerOfTeam(TeamId id, Fn callback) const {
+  void forEachPlayerOfTeam(shared::TeamId id, Fn callback) const {
     shared::iterateOverOptionals(
         players_, [&](const PlayerConnection &player, std::size_t slot) {
           if (player.team_id == id) {

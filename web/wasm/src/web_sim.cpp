@@ -1,6 +1,4 @@
-#include "shared/aliases.h"
 #include "shared/constants.h"
-#include "shared/math_utils.h"
 #include "shared/messages.h"
 #include "shared/rnd_generator.h"
 #include "shared/sim/bullet_sim.h"
@@ -8,6 +6,7 @@
 #include "shared/sim/player_sim.h"
 #include "shared/wire.h"
 #include <emscripten/bind.h>
+#include <mathlib.hpp>
 
 static constexpr shared::PlayerCount MAX_PLAYERS_ON_THIS_MACHINE = 2;
 
@@ -113,6 +112,7 @@ EMSCRIPTEN_BINDINGS(supergame) {
   emscripten::constant("FIXED_DT", shared::FIXED_DT);
   emscripten::constant("MAX_PLAYERS_COOP", shared::MAX_PLAYERS_COOP);
   emscripten::constant("MAX_TEAMS", shared::MAX_TEAMS);
+  emscripten::constant("WIRE_BINARY", shared::WIRE_BINARY);
   emscripten::constant("MAX_PLAYERS_PER_TEAM", shared::MAX_PLAYERS_PER_TEAM);
 
   emscripten::constant("SCREEN_WIDTH", shared::SCREEN_WIDTH);
@@ -129,10 +129,8 @@ EMSCRIPTEN_BINDINGS(supergame) {
                        shared::EnemiesPoolSimState::SPACING_X);
   emscripten::constant("SIM_ENEMIES_POOL_SPACING_Y",
                        shared::EnemiesPoolSimState::SPACING_Y);
-  emscripten::constant("SIM_ENEMIES_POOL_COLS",
-                       shared::EnemiesPoolSimState::COLS);
-  emscripten::constant("SIM_ENEMIES_POOL_MAX_ROWS",
-                       shared::EnemiesPoolSimState::MAX_ROWS);
+  emscripten::constant("SIM_ENEMY_COLS", shared::ENEMY_COLS);
+  emscripten::constant("SIM_MAX_ENEMY_ROWS", shared::MAX_ENEMY_ROWS);
 
   emscripten::constant("SIM_BOSS_HEIGHT", shared::BossSimState::HEIGHT);
   emscripten::constant("SIM_BOSS_WIDTH", shared::BossSimState::WIDTH);
@@ -142,19 +140,19 @@ EMSCRIPTEN_BINDINGS(supergame) {
   // To be called once at the TS code entry point
   emscripten::function("rndGeneratorSeed", &shared::RndGenerator::seed);
 
-  emscripten::enum_<shared::PvPGameSim::Phase>(
-      "PvPGamePhase", emscripten::enum_value_type::number)
-      .value("PLAYERS_FIGHT", shared::PvPGameSim::Phase::PLAYERS_FIGHT)
-      .value("END", shared::PvPGameSim::Phase::END);
+  emscripten::enum_<shared::PvPGamePhase>("PvPGamePhase",
+                                          emscripten::enum_value_type::number)
+      .value("PLAYERS_FIGHT", shared::PvPGamePhase::PLAYERS_FIGHT)
+      .value("END", shared::PvPGamePhase::END);
 
-  emscripten::enum_<shared::CoopGameSim::Phase>(
-      "CoopGamePhase", emscripten::enum_value_type::number)
-      .value("ENEMIES_ENTRANCE", shared::CoopGameSim::Phase::ENEMIES_ENTRANCE)
-      .value("FIGHT_ENEMIES", shared::CoopGameSim::Phase::FIGHT_ENEMIES)
-      .value("BOSS_ENTRANCE", shared::CoopGameSim::Phase::BOSS_ENTRANCE)
-      .value("FIGHT_BOSS", shared::CoopGameSim::Phase::FIGHT_BOSS)
-      .value("WON", shared::CoopGameSim::Phase::WON)
-      .value("GAME_OVER", shared::CoopGameSim::Phase::GAME_OVER);
+  emscripten::enum_<shared::CoopGamePhase>("CoopGamePhase",
+                                           emscripten::enum_value_type::number)
+      .value("ENEMIES_ENTRANCE", shared::CoopGamePhase::ENEMIES_ENTRANCE)
+      .value("FIGHT_ENEMIES", shared::CoopGamePhase::FIGHT_ENEMIES)
+      .value("BOSS_ENTRANCE", shared::CoopGamePhase::BOSS_ENTRANCE)
+      .value("FIGHT_BOSS", shared::CoopGamePhase::FIGHT_BOSS)
+      .value("WON", shared::CoopGamePhase::WON)
+      .value("GAME_OVER", shared::CoopGamePhase::GAME_OVER);
 
   emscripten::enum_<shared::ServerMessageType>(
       "ServerMessageType", emscripten::enum_value_type::number)
@@ -169,7 +167,8 @@ EMSCRIPTEN_BINDINGS(supergame) {
   emscripten::enum_<shared::ClientMessageType>(
       "ClientMessageType", emscripten::enum_value_type::number)
       .value("PLAYER_INPUT", shared::ClientMessageType::PLAYER_INPUT)
-      .value("READY", shared::ClientMessageType::READY);
+      .value("READY", shared::ClientMessageType::READY)
+      .value("SWITCH_TEAM", shared::ClientMessageType::SWITCH_TEAM);
 
   emscripten::enum_<shared::Button>("Button",
                                     emscripten::enum_value_type::number)
@@ -184,10 +183,4 @@ EMSCRIPTEN_BINDINGS(supergame) {
       .function("startPvP", &WebSim::startPvP)
       .function("step", &WebSim::step)
       .function("getPlayerIds", &WebSim::getPlayerIds);
-
-  emscripten::class_<shared::Vec2D>("Vec2D")
-      .constructor<float, float>()
-      .property("x", &shared::Vec2D::x)
-      .property("y", &shared::Vec2D::y)
-      .function("rotated", &shared::Vec2D::rotated);
 }

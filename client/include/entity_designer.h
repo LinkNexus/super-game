@@ -27,6 +27,13 @@ private:
                                                       YELLOW, GOLD};
   static constexpr auto PLAYER_ENEMY_COLOR{RED};
 
+  /// Depends on ids and roster slots only, never on who's alive, so a ship
+  /// keeps its colour all match. `slot`: coop, index in `players`; PvP,
+  /// teamIdx * MAX_PLAYERS_PER_TEAM + rank. Same rule as the web client.
+  static Color playerColor(shared::PlayerId id, std::size_t slot,
+                           const ThisMachinePlayerIds &playerIds,
+                           bool isOpponent);
+
 private:
   void drawBossHealthBar(const shared::BossState &state) const;
 
@@ -44,8 +51,8 @@ public:
 
   void drawBoss(const shared::BossState &state, bool canDrawHealthBar) const;
 
-  void drawEnemies(const shared::EnemiesPoolState &enemies, float offsetX,
-                   float offsetY) const;
+  void drawEnemies(const shared::EnemiesPoolState &enemies,
+                   mathlib::Vec2f offsetX) const;
 
   void drawPlayersForPvPGame(Session *session,
                              const shared::PvPGameState &state,

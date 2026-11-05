@@ -1,7 +1,6 @@
 #include "session.h"
 #include "constants.h"
 #include "nlohmann/json.hpp"
-#include "shared/aliases.h"
 #include "shared/constants.h"
 #include "shared/helpers.h"
 #include "shared/messages.h"
@@ -11,6 +10,7 @@
 #include <optional>
 #include <string>
 #include <utility>
+#include <variant>
 
 LocalSession::LocalSession(const GameMode *mode,
                            shared::PlayerCount player_count) {
@@ -120,12 +120,23 @@ ThisMachinePlayerIds OnlineSession::getPlayersIds() {
   return ids;
 }
 
-void OnlineSession::sendReady(bool isReady) {
+void OnlineSession::sendReady(shared::PlayerId playerId, bool isReady) {
   nlohmann::json readyEnvelope;
   readyEnvelope["type"] = shared::ClientMessageType::READY;
-  readyEnvelope["payload"] = shared::ReadyMessage{.is_ready = isReady};
+  readyEnvelope["payload"] =
+      shared::ReadyMessage{.player_id = playerId, .is_ready = isReady};
 
   client_.send(shared::encode(readyEnvelope));
+}
+
+void OnlineSession::sendSwitchTeam(shared::PlayerId playerId,
+                                   shared::TeamId teamId) {
+  nlohmann::json switchEnvelope;
+  switchEnvelope["type"] = shared::ClientMessageType::SWITCH_TEAM;
+  switchEnvelope["payload"] = shared::SwitchTeamMessage{
+      .player_id = playerId, .target_team_id = teamId};
+
+  client_.send(shared::encode(switchEnvelope));
 }
 
 void OnlineSession::onMessage(const std::string &msg) {
@@ -189,20 +200,15 @@ shared::GameState OnlineSession::interpolateState() const {
 
                   (*interPlayerIt)->position =
                       (*previousPlayerIt)
-                          ->position.lerp(targetP->position, alpha);
+                          ->position.lerpedWith(targetP->position, alpha);
                 }
               }
             }
 
             interS.boss.position =
-                prevS.boss.position.lerp(targetS.boss.position, alpha);
-
-            interS.enemies_offset_x =
-                prevS.enemies_offset_x +
-                (targetS.enemies_offset_x - prevS.enemies_offset_x) * alpha;
-            interS.enemies_offset_y =
-                prevS.enemies_offset_y +
-                (targetS.enemies_offset_y - prevS.enemies_offset_y) * alpha;
+                prevS.boss.position.lerpedWith(targetS.boss.position, alpha);
+            interS.enemies_offset =
+                prevS.enemies_offset.lerpedWith(targetS.enemies_offset, alpha);
           },
           [&alpha, &findIt](const shared::PvPGameState &prevS,
                             const shared::PvPGameState &targetS,
@@ -226,7 +232,8 @@ shared::GameState OnlineSession::interpolateState() const {
 
                     (*interPlayerIt)->position =
                         (*prevPlayerIt)
-                            ->position.lerp(targetPlayer->position, alpha);
+                            ->position.lerpedWith(targetPlayer->position,
+                                                  alpha);
                   }
                 }
               }
@@ -235,16 +242,16 @@ shared::GameState OnlineSession::interpolateState() const {
           [](auto &, auto &, auto &) {}},
       previous_state_.value(), target_state_, interpolatedState);
 
-  auto lerpBullets = [](const shared::BaseState &prevS,
-                        const shared::BaseState &targetS,
-                        shared::BaseState &interS, float alpha) {
+  auto lerpBullets = [](const shared::CommonGameState &prevS,
+                        const shared::CommonGameState &targetS,
+                        shared::CommonGameState &interS, float alpha) {
     for (std::size_t idx = 0; idx < interS.bullets.size(); ++idx) {
       auto &targetBullet = targetS.bullets[idx];
       auto &previousBullet = prevS.bullets[idx];
 
       if (targetBullet.active && previousBullet.active)
         interS.bullets[idx].position =
-            previousBullet.position.lerp(targetBullet.position, alpha);
+            previousBullet.position.lerpedWith(targetBullet.position, alpha);
     }
   };
 
@@ -269,4 +276,35 @@ ThisMachinePlayerIds LocalSession::getPlayersIds() { return player_ids_; }
 
 shared::PlayerCount OnlineSession::getPlayerCount() const {
   return player_count_;
+}
+
+std::optional<LobbyPlayer> findLobbyPlayer(const shared::LobbyUpdate &lobby,
+                                           shared::PlayerId id) {
+  const auto inSlots = [id](const auto &slots)
+      -> std::optional<shared::PlayerInfo> {
+    for (const auto &p : slots)
+      if (p && p->id == id)
+        return p;
+    return std::nullopt;
+  };
+
+  return std::visit(
+      shared::overloaded{
+          [&](const shared::CoopGameLobbyUpdate &u)
+              -> std::optional<LobbyPlayer> {
+            if (auto p = inSlots(u.players))
+              return std::pair{*p, std::size_t{0}};
+            return std::nullopt;
+          },
+          [&](const shared::PvPGameLobbyUpdate &u)
+              -> std::optional<LobbyPlayer> {
+            for (std::size_t t = 0; t < u.teams.size(); ++t) {
+              if (!u.teams[t])
+                continue;
+              if (auto p = inSlots(u.teams[t]->players))
+                return std::pair{*p, t};
+            }
+            return std::nullopt;
+          }},
+      lobby);
 }

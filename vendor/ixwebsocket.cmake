@@ -18,9 +18,6 @@ set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 # vendored mbedtls/mbedx509/mbedcrypto targets aren't part of any export set.
 set(IXWEBSOCKET_INSTALL OFF CACHE BOOL "" FORCE)
 
-add_subdirectory(vendor/ixwebsocket)
-
-# See supergame_mark_vendored_system in the root CMakeLists: IXWebSocket's
-# headers reach our translation units through client/src/network_client.cpp,
-# so its include path has to be SYSTEM or our warning flags apply to them.
-supergame_mark_vendored_system(ixwebsocket)
+# SYSTEM: IXWebSocket's headers reach our translation units through
+# client/src/network_client.cpp, so our warning flags would apply to them.
+add_subdirectory(vendor/ixwebsocket SYSTEM)

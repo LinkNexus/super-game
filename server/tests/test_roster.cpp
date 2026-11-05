@@ -2,6 +2,7 @@
 
 #include "fake_connection.h"
 #include "game.h"
+#include "match_support.h"
 #include "game_manager.h"
 #include "helpers.h"
 #include "shared/constants.h"
@@ -10,6 +11,7 @@
 
 using testing::FakeConnection;
 using testing::fakeConnection;
+using testing::readyConnection;
 
 TEST(coop_two_single_slot_connections_occupy_distinct_slots) {
   FakeConnection a, b;
@@ -18,7 +20,7 @@ TEST(coop_two_single_slot_connections_occupy_distinct_slots) {
   REQUIRE(game.addPlayers(fakeConnection(a, {1})));
   REQUIRE(game.addPlayers(fakeConnection(b, {2})));
 
-  CHECK_EQ(shared::count_optional(game.getPlayers()), 2);
+  CHECK_EQ(shared::count_optional(game.getPlayers()), 2u);
   CHECK(game.findPlayerById(1) != nullptr);
   CHECK(game.findPlayerById(2) != nullptr);
   // Nobody has readied, so the match must still be waiting.
@@ -31,7 +33,7 @@ TEST(coop_one_connection_can_claim_two_slots) {
 
   REQUIRE(game.addPlayers(fakeConnection(a, {1, 2})));
 
-  CHECK_EQ(shared::count_optional(game.getPlayers()), 2);
+  CHECK_EQ(shared::count_optional(game.getPlayers()), 2u);
   CHECK_EQ(game.getPlayerSockets().size(), 1u);
   // One connection is not "enough players" for online coop, whatever the slot
   // count - see the L58/L59 decision in ROADMAP.md Phase 4.
@@ -55,7 +57,7 @@ TEST(coop_join_after_mid_lobby_disconnect_keeps_the_later_player) {
 
   REQUIRE(game.addPlayers(fakeConnection(d, {4})));
 
-  CHECK_EQ(shared::count_optional(game.getPlayers()), 3);
+  CHECK_EQ(shared::count_optional(game.getPlayers()), 3u);
   CHECK(game.findPlayerById(3) != nullptr);
   CHECK(game.findPlayerById(4) != nullptr);
   CHECK_EQ(game.getPlayerSockets().size(), 3u);
@@ -86,7 +88,7 @@ TEST(coop_empties_once_every_connection_leaves) {
 
   game.removePlayers(&b);
   CHECK_EQ(game.isEmpty(), true);
-  CHECK_EQ(shared::count_optional(game.getPlayers()), 0);
+  CHECK_EQ(shared::count_optional(game.getPlayers()), 0u);
 }
 
 TEST(coop_starts_once_two_connections_are_ready) {
@@ -96,10 +98,10 @@ TEST(coop_starts_once_two_connections_are_ready) {
   REQUIRE(game.addPlayers(fakeConnection(a, {1})));
   REQUIRE(game.addPlayers(fakeConnection(b, {2})));
 
-  game.setPlayersReady(&a, true);
+  readyConnection(game, &a, true);
   CHECK_EQ(game.isRunning(), false);
 
-  game.setPlayersReady(&b, true);
+  readyConnection(game, &b, true);
   CHECK_EQ(game.isRunning(), true);
 }
 
@@ -129,6 +131,58 @@ TEST(pvp_duo_on_one_connection_lands_on_a_single_team) {
 
   CHECK_EQ(testing::countPlayersInTeam(teamIds[0], players), 2);
   CHECK_EQ(testing::countPlayersInTeam(teamIds[1], players), 0);
+  CHECK_EQ(game.thereIsEnoughPlayers(), false);
+}
+
+/// L74: together first, split if needed. No team fits both, so the duo
+/// splits, which makes a same-machine online 1v1 possible.
+TEST(pvp_duo_splits_across_teams_when_no_team_fits_both) {
+  FakeConnection a;
+  PvPGame game{/*team_size=*/1, /*team_count=*/2};
+
+  REQUIRE(game.addPlayers(fakeConnection(a, {1, 2})));
+
+  const auto *first = game.findPlayerById(1);
+  const auto *second = game.findPlayerById(2);
+  REQUIRE(first != nullptr);
+  REQUIRE(second != nullptr);
+  REQUIRE(first->team_id.has_value());
+  REQUIRE(second->team_id.has_value());
+  CHECK(first->team_id != second->team_id);
+  CHECK_EQ(game.thereIsEnoughPlayers(), true);
+}
+
+/// "Together first" beats "first free slot": team 0 has one seat left, but
+/// team 1 fits the whole duo, so the duo goes there.
+TEST(pvp_duo_prefers_a_team_that_fits_both_over_the_first_free_slot) {
+  FakeConnection a, b;
+  PvPGame game{/*team_size=*/2, /*team_count=*/2};
+
+  REQUIRE(game.addPlayers(fakeConnection(a, {1})));
+  REQUIRE(game.addPlayers(fakeConnection(b, {2, 3})));
+
+  const auto *solo = game.findPlayerById(1);
+  const auto *second = game.findPlayerById(2);
+  const auto *third = game.findPlayerById(3);
+  REQUIRE(solo != nullptr);
+  REQUIRE(second != nullptr);
+  REQUIRE(third != nullptr);
+  CHECK(second->team_id == third->team_id);
+  CHECK(second->team_id != solo->team_id);
+}
+
+/// Splitting needs one free seat per player overall; otherwise nobody from
+/// the connection is placed (no half-joined duo).
+TEST(pvp_join_is_all_or_nothing_when_the_game_lacks_seats) {
+  FakeConnection a, b;
+  PvPGame game{/*team_size=*/1, /*team_count=*/2};
+
+  REQUIRE(game.addPlayers(fakeConnection(a, {1})));
+  CHECK_EQ(game.addPlayers(fakeConnection(b, {2, 3})), false);
+
+  CHECK(game.findPlayerById(2) == nullptr);
+  CHECK(game.findPlayerById(3) == nullptr);
+  CHECK_EQ(game.isEmpty(), false);
   CHECK_EQ(game.thereIsEnoughPlayers(), false);
 }
 

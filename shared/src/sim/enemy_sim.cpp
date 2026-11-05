@@ -1,6 +1,5 @@
 #include "shared/sim/enemy_sim.h"
 #include "shared/constants.h"
-#include "shared/math_utils.h"
 #include "shared/rnd_generator.h"
 #include "shared/sim/bullet_sim.h"
 #include "shared/sim/player_sim.h"
@@ -8,6 +7,7 @@
 #include <array>
 #include <cfloat>
 #include <cstddef>
+#include <mathlib.hpp>
 #include <optional>
 
 using namespace shared;
@@ -18,7 +18,7 @@ void EnemySimState::spawnBullet(
     if (!bullet.active) {
       bullet.active = true;
       bullet.velocity = {0, -BulletSimState::SPEED};
-      bullet.position = position + Vec2D{0, -HEIGHT / 2};
+      bullet.position = position + mathlib::Vec2f{0, -HEIGHT / 2};
       bullet.type = shared::BulletType::ENEMY;
       break;
     }
@@ -27,9 +27,9 @@ void EnemySimState::spawnBullet(
 
 void EnemiesPoolSimState::stepEnemy(EnemySimState &enemy, std::size_t idx) {
   enemy.position.y =
-      offset_y - (idx / COLS) * (EnemySimState::HEIGHT + SPACING_Y);
+      offset.y - (idx / ENEMY_COLS) * (EnemySimState::HEIGHT + SPACING_Y);
   enemy.position.x =
-      offset_x + (idx % COLS) * (EnemySimState::WIDTH + SPACING_X);
+      offset.x + (idx % ENEMY_COLS) * (EnemySimState::WIDTH + SPACING_X);
 }
 
 void EnemiesPoolSimState::init(uint8_t playersCount) {
@@ -41,20 +41,20 @@ void EnemiesPoolSimState::init(uint8_t playersCount) {
       res != ROWS_PER_PLAYERS_COUNT.end()) {
     active_rows = res->second;
   } else {
-    active_rows = MAX_ROWS;
+    active_rows = MAX_ENEMY_ROWS;
   }
 
   const float pool_size_x =
-      (COLS * EnemySimState::WIDTH) + (SPACING_X * (COLS - 1));
-  offset_x = (SCREEN_WIDTH - pool_size_x) / 2.0f;
-  offset_y = MIN_INITIAL_OFFSET_Y + (active_rows - 1) * ROW_PITCH;
+      (ENEMY_COLS * EnemySimState::WIDTH) + (SPACING_X * (ENEMY_COLS - 1));
+  offset.set((SCREEN_WIDTH - pool_size_x) / 2.0f,
+             MIN_INITIAL_OFFSET_Y + (active_rows - 1) * ROW_PITCH);
   direction = 1;
   alive_enemies_count = 0;
 
   for (std::size_t idx = 0; idx < enemies.size(); ++idx) {
     auto &enemy = enemies[idx];
 
-    if (idx / COLS >= active_rows) {
+    if (idx / ENEMY_COLS >= active_rows) {
       enemy.alive = false;
       continue;
     }
@@ -70,8 +70,8 @@ void EnemiesPoolSimState::init(uint8_t playersCount) {
 }
 
 void EnemiesPoolSimState::stepEntrance(float dt) {
-  if (offset_y > FINAL_OFFSET_Y) {
-    offset_y = std::max(offset_y - INITIAL_DESCENT_SPEED * dt, FINAL_OFFSET_Y);
+  if (offset.y > FINAL_OFFSET_Y) {
+    offset.y = std::max(offset.y - INITIAL_DESCENT_SPEED * dt, FINAL_OFFSET_Y);
 
     for (std::size_t idx = 0; idx < enemies.size(); ++idx) {
       stepEnemy(enemies[idx], idx);
@@ -80,7 +80,7 @@ void EnemiesPoolSimState::stepEntrance(float dt) {
 }
 
 bool EnemiesPoolSimState::isEntranceComplete() {
-  return offset_y <= FINAL_OFFSET_Y;
+  return offset.y <= FINAL_OFFSET_Y;
 }
 
 bool EnemiesPoolSimState::allEnemiesDefeated() {
@@ -89,8 +89,8 @@ bool EnemiesPoolSimState::allEnemiesDefeated() {
 
 void EnemiesPoolSimState::step(
     float dt, std::array<BulletSimState, MAX_BULLETS> &bullets_pool) {
-  auto farthest_left = FLT_MAX;
-  auto farthest_right = -FLT_MAX;
+  auto farthestLeft = FLT_MAX;
+  auto farthestRight = -FLT_MAX;
 
   alive_enemies_count = 0;
 
@@ -100,27 +100,26 @@ void EnemiesPoolSimState::step(
 
     alive_enemies_count++;
 
-    if (enemy.position.x < farthest_left)
-      farthest_left = enemy.position.x;
+    if (enemy.position.x < farthestLeft)
+      farthestLeft = enemy.position.x;
 
-    if (enemy.position.x > farthest_right)
-      farthest_right = enemy.position.x;
+    if (enemy.position.x > farthestRight)
+      farthestRight = enemy.position.x;
   }
 
   std::optional<float> overflow = std::nullopt;
 
-  if (farthest_left - EnemySimState::WIDTH / 2 <= 0.0f) {
+  if (farthestLeft - EnemySimState::WIDTH / 2 <= 0.0f) {
     direction *= -1;
-    overflow = -(farthest_left - EnemySimState::WIDTH / 2);
-  } else if (farthest_right >= SCREEN_WIDTH - EnemySimState::WIDTH / 2) {
+    overflow = -(farthestLeft - EnemySimState::WIDTH / 2);
+  } else if (farthestRight >= SCREEN_WIDTH - EnemySimState::WIDTH / 2) {
     direction *= -1;
-    overflow = farthest_right - (SCREEN_WIDTH - EnemySimState::WIDTH / 2);
+    overflow = farthestRight - (SCREEN_WIDTH - EnemySimState::WIDTH / 2);
   }
 
-  offset_x =
-      offset_x + direction * (overflow ? (overflow.value() + 1)
-                                       : (EnemySimState::CYCLE_SPEED * dt));
-  offset_y = offset_y - (overflow ? EnemySimState::DESCENT_SPEED : 0);
+  offset +=
+      {direction * (overflow ? (overflow.value() + 1) : (CYCLE_SPEED * dt)),
+       -(overflow ? DESCENT_SPEED : 0)};
 
   for (std::size_t idx = 0; idx < enemies.size(); ++idx) {
     auto &enemy = enemies[idx];
@@ -131,13 +130,14 @@ void EnemiesPoolSimState::step(
     enemy.shooting_cooldown -= dt;
 
     if (enemy.shooting_cooldown <= 0.0f &&
-        (idx + COLS >= enemies.size() || !enemies[idx + COLS].alive)) {
+        (idx + ENEMY_COLS >= enemies.size() ||
+         !enemies[idx + ENEMY_COLS].alive)) {
       bool ally_ahead = false;
-      auto current_idx = idx + COLS;
+      auto current_idx = idx + ENEMY_COLS;
 
       while (!ally_ahead && current_idx < enemies.size()) {
         ally_ahead = enemies[current_idx].alive;
-        current_idx += COLS;
+        current_idx += ENEMY_COLS;
       }
 
       if (!ally_ahead) {
@@ -161,4 +161,8 @@ bool EnemiesPoolSimState::reachedPlayer() {
   }
 
   return false;
+}
+
+mathlib::Rectanglef shared::EnemySimState::getHitBox() const {
+  return mathlib::Rectanglef::fromCenterAndSize(position, WIDTH, HEIGHT);
 }

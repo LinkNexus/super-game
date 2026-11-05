@@ -14,6 +14,7 @@
 
 #include "fake_connection.h"
 #include "game.h"
+#include "match_support.h"
 #include "shared/helpers.h"
 #include "shared/messages.h"
 #include "test_harness.h"
@@ -21,13 +22,15 @@
 
 using testing::FakeConnection;
 using testing::fakeConnection;
+using testing::readyConnection;
 
 namespace {
 
 /// The coop/PvP alternative of a freshly built lobby snapshot, or nullptr if
 /// the game produced the other one. Pointer rather than a reference so a
 /// mismatch fails a `REQUIRE` instead of throwing `std::bad_variant_access`.
-const shared::CoopGameLobbyUpdate *coopLobby(const shared::LobbyUpdate &update) {
+const shared::CoopGameLobbyUpdate *
+coopLobby(const shared::LobbyUpdate &update) {
   return std::get_if<shared::CoopGameLobbyUpdate>(&update);
 }
 
@@ -56,7 +59,7 @@ TEST(coop_lobby_lists_every_joined_player_by_slot_with_its_name) {
   const auto *lobby = coopLobby(update);
   REQUIRE(lobby != nullptr);
 
-  CHECK_EQ(shared::count_optional(lobby->players), 2);
+  CHECK_EQ(shared::count_optional(lobby->players), 2u);
 
   REQUIRE(lobby->players[0].has_value());
   CHECK_EQ(lobby->players[0]->id, 1u);
@@ -87,7 +90,7 @@ TEST(coop_lobby_leaves_a_departed_players_slot_vacant) {
   const auto *lobby = coopLobby(update);
   REQUIRE(lobby != nullptr);
 
-  CHECK_EQ(shared::count_optional(lobby->players), 1);
+  CHECK_EQ(shared::count_optional(lobby->players), 1u);
   CHECK_EQ(lobby->players[0].has_value(), false);
   CHECK_EQ(lobby->players[1].has_value(), false);
 
@@ -102,7 +105,7 @@ TEST(coop_lobby_reports_a_ready_toggle_per_connection) {
   REQUIRE(game.addPlayers(fakeConnection(a, {1})));
   REQUIRE(game.addPlayers(fakeConnection(b, {2})));
 
-  game.setPlayersReady(&a, true);
+  readyConnection(game, &a, true);
 
   const auto update = game.buildLobbyUpdate();
   const auto *lobby = coopLobby(update);
@@ -115,9 +118,9 @@ TEST(coop_lobby_reports_a_ready_toggle_per_connection) {
   CHECK_EQ(lobby->game_started, false);
 }
 
-/// Both slots of a two-slot connection ready together: `setPlayersReady` keys
-/// on the socket, not on a player id, so one SPACE press from a same-keyboard
-/// duo readies both of them.
+/// `readyConnection(game, ws, …)` readies every slot on the socket. Since L74 the
+/// wire readies one player at a time; this is the whole-connection helper
+/// the other cases use for setup.
 TEST(coop_lobby_readies_both_players_of_a_two_slot_connection) {
   FakeConnection a, b;
   CoopGame game;
@@ -125,7 +128,7 @@ TEST(coop_lobby_readies_both_players_of_a_two_slot_connection) {
   REQUIRE(game.addPlayers(fakeConnection(a, {1, 2})));
   REQUIRE(game.addPlayers(fakeConnection(b, {3})));
 
-  game.setPlayersReady(&a, true);
+  readyConnection(game, &a, true);
 
   const auto update = game.buildLobbyUpdate();
   const auto *lobby = coopLobby(update);
@@ -149,8 +152,8 @@ TEST(coop_lobby_reports_the_match_as_started_once_it_is_running) {
   REQUIRE(game.addPlayers(fakeConnection(a, {1})));
   REQUIRE(game.addPlayers(fakeConnection(b, {2})));
 
-  game.setPlayersReady(&a, true);
-  game.setPlayersReady(&b, true);
+  readyConnection(game, &a, true);
+  readyConnection(game, &b, true);
   REQUIRE(game.isRunning());
 
   const auto update = game.buildLobbyUpdate();
@@ -174,14 +177,14 @@ TEST(pvp_lobby_lists_both_players_of_a_two_player_team) {
   REQUIRE(lobby != nullptr);
 
   REQUIRE(lobby->teams[0].has_value());
-  CHECK_EQ(shared::count_optional(*lobby->teams[0]), 2);
+  CHECK_EQ(shared::count_optional(lobby->teams[0]->players), 2u);
 
-  REQUIRE((*lobby->teams[0])[0].has_value());
-  REQUIRE((*lobby->teams[0])[1].has_value());
-  CHECK_EQ((*lobby->teams[0])[0]->id, 1u);
-  CHECK_EQ((*lobby->teams[0])[0]->name, std::string("P1"));
-  CHECK_EQ((*lobby->teams[0])[1]->id, 2u);
-  CHECK_EQ((*lobby->teams[0])[1]->name, std::string("P2"));
+  REQUIRE(lobby->teams[0]->players[0].has_value());
+  REQUIRE(lobby->teams[0]->players[1].has_value());
+  CHECK_EQ(lobby->teams[0]->players[0]->id, 1u);
+  CHECK_EQ(lobby->teams[0]->players[0]->name, std::string("P1"));
+  CHECK_EQ(lobby->teams[0]->players[1]->id, 2u);
+  CHECK_EQ(lobby->teams[0]->players[1]->name, std::string("P2"));
 }
 
 /// The same claim for a *full* 2v2, which is the case the one above cannot
@@ -206,23 +209,23 @@ TEST(pvp_lobby_lists_both_players_of_both_full_teams) {
 
   REQUIRE(lobby->teams[0].has_value());
   REQUIRE(lobby->teams[1].has_value());
-  CHECK_EQ(shared::count_optional(*lobby->teams[0]), 2);
-  CHECK_EQ(shared::count_optional(*lobby->teams[1]), 2);
+  CHECK_EQ(shared::count_optional(lobby->teams[0]->players), 2u);
+  CHECK_EQ(shared::count_optional(lobby->teams[1]->players), 2u);
 
   // Each team lists its own two players, in its own two slots. Asserted by
   // id rather than only by count: a rank/slot mix-up can leave the right
   // number of entries in the wrong team's array.
-  REQUIRE((*lobby->teams[0])[0].has_value());
-  REQUIRE((*lobby->teams[0])[1].has_value());
-  CHECK_EQ((*lobby->teams[0])[0]->id, 1u);
-  CHECK_EQ((*lobby->teams[0])[1]->id, 2u);
+  REQUIRE(lobby->teams[0]->players[0].has_value());
+  REQUIRE(lobby->teams[0]->players[1].has_value());
+  CHECK_EQ(lobby->teams[0]->players[0]->id, 1u);
+  CHECK_EQ(lobby->teams[0]->players[1]->id, 2u);
 
-  REQUIRE((*lobby->teams[1])[0].has_value());
-  REQUIRE((*lobby->teams[1])[1].has_value());
-  CHECK_EQ((*lobby->teams[1])[0]->id, 3u);
-  CHECK_EQ((*lobby->teams[1])[1]->id, 4u);
-  CHECK_EQ((*lobby->teams[1])[0]->name, std::string("P3"));
-  CHECK_EQ((*lobby->teams[1])[1]->name, std::string("P4"));
+  REQUIRE(lobby->teams[1]->players[0].has_value());
+  REQUIRE(lobby->teams[1]->players[1].has_value());
+  CHECK_EQ(lobby->teams[1]->players[0]->id, 3u);
+  CHECK_EQ(lobby->teams[1]->players[1]->id, 4u);
+  CHECK_EQ(lobby->teams[1]->players[0]->name, std::string("P3"));
+  CHECK_EQ(lobby->teams[1]->players[1]->name, std::string("P4"));
 }
 
 /// A team slot is vacant when the match has no such team, not when nobody has
@@ -239,10 +242,10 @@ TEST(pvp_lobby_keeps_a_configured_but_still_empty_team) {
   const auto *lobby = pvpLobby(update);
   REQUIRE(lobby != nullptr);
 
-  CHECK_EQ(shared::count_optional(lobby->teams), 2);
+  CHECK_EQ(shared::count_optional(lobby->teams), 2u);
 
   REQUIRE(lobby->teams[1].has_value());
-  CHECK_EQ(shared::count_optional(*lobby->teams[1]), 0);
+  CHECK_EQ(shared::count_optional(lobby->teams[1]->players), 0u);
 }
 
 /// A 1v1 engages two of the `MAX_TEAMS` slots, not all of them - the unused
@@ -258,7 +261,7 @@ TEST(pvp_lobby_engages_only_the_teams_the_match_was_configured_with) {
   const auto *lobby = pvpLobby(update);
   REQUIRE(lobby != nullptr);
 
-  CHECK_EQ(shared::count_optional(lobby->teams), 2);
+  CHECK_EQ(shared::count_optional(lobby->teams), 2u);
   CHECK_EQ(lobby->team_size, 1u);
 }
 
@@ -317,7 +320,7 @@ TEST(coop_lobby_frame_decodes_back_into_the_snapshot_that_was_sent) {
 
   REQUIRE(game.addPlayers(fakeConnection(a, {1})));
   REQUIRE(game.addPlayers(fakeConnection(b, {2})));
-  game.setPlayersReady(&a, true);
+  readyConnection(game, &a, true);
 
   game.broadcastLobbyUpdate();
 

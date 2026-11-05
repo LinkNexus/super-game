@@ -4,7 +4,6 @@ add_library(supergame-shared STATIC
     src/sim/player_sim.cpp
     src/sim/boss_sim.cpp
     src/sim/game_sim.cpp
-    src/math_utils.cpp
     src/rnd_generator.cpp
 )
 
@@ -13,6 +12,6 @@ target_include_directories(supergame-shared PUBLIC
 )
 
 target_link_libraries(supergame-shared
-    PUBLIC nlohmann_json
+    PUBLIC nlohmann_json mathlib
     PRIVATE supergame-warnings
 )

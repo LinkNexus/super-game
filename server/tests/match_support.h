@@ -40,6 +40,16 @@ bool stepUntil(Game &game, Predicate predicate, int maxTicks = 1200) {
   return false;
 }
 
+/// Readies every player on @p ws - setup for cases that aren't about ready.
+/// The wire readies one player at a time (L74); this replaces the old
+/// whole-connection `Game::setPlayersReady`.
+inline void readyConnection(Game &game, WsConnection *ws, bool ready) {
+  for (const auto &player : game.getPlayers()) {
+    if (player && player->ws == ws)
+      game.setPlayerReady(player->id, ready, ws);
+  }
+}
+
 /// The coop state carried by @p connection's most recent frame.
 inline shared::CoopGameState coopState(const FakeConnection &connection) {
   return connection.lastEnvelope().at("payload").get<shared::CoopGameState>();
@@ -98,7 +108,7 @@ inline std::size_t livePlayers(const shared::PvPGameState &state) {
 /// The team carrying @p id, or nullptr. Teams are looked up by id rather than
 /// by slot for the same reason players are.
 inline const shared::TeamState *teamById(const shared::PvPGameState &state,
-                                         shared::PvPGameSim::TeamId id) {
+                                         shared::TeamId id) {
   for (const auto &team : state.teams) {
     if (team && team->id == id)
       return &team.value();

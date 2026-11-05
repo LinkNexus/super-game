@@ -20,6 +20,7 @@
 using testing::coopState;
 using testing::FakeConnection;
 using testing::fakeConnection;
+using testing::readyConnection;
 using testing::findPlayer;
 using testing::hasPlayerNamed;
 using testing::livePlayers;
@@ -39,8 +40,8 @@ void startCoopMatch(CoopGame &game, FakeConnection &first,
   REQUIRE(game.addPlayers(fakeConnection(first, {firstId})));
   REQUIRE(game.addPlayers(fakeConnection(second, {secondId})));
 
-  game.setPlayersReady(&first, true);
-  game.setPlayersReady(&second, true);
+  readyConnection(game, &first, true);
+  readyConnection(game, &second, true);
   REQUIRE(game.isRunning());
 }
 
@@ -52,8 +53,8 @@ void startDuelMatch(PvPGame &game, FakeConnection &first,
   REQUIRE(game.addPlayers(fakeConnection(first, {firstId})));
   REQUIRE(game.addPlayers(fakeConnection(second, {secondId})));
 
-  game.setPlayersReady(&first, true);
-  game.setPlayersReady(&second, true);
+  readyConnection(game, &first, true);
+  readyConnection(game, &second, true);
   REQUIRE(game.isRunning());
 }
 
@@ -70,8 +71,8 @@ void startTeamMatch(PvPGame &game, FakeConnection &first,
   REQUIRE(game.addPlayers(fakeConnection(first, {1, 2})));
   REQUIRE(game.addPlayers(fakeConnection(second, {3, 4})));
 
-  game.setPlayersReady(&first, true);
-  game.setPlayersReady(&second, true);
+  readyConnection(game, &first, true);
+  readyConnection(game, &second, true);
   REQUIRE(game.isRunning());
 }
 
@@ -384,8 +385,8 @@ TEST(pvp_2v2_packs_a_distinct_input_for_every_player) {
   startTeamMatch(game, a, b);
 
   game.update(shared::FIXED_DT);
-  const auto before = std::array{playerX(a, 1), playerX(a, 2), playerX(a, 3),
-                                 playerX(a, 4)};
+  const auto before =
+      std::array{playerX(a, 1), playerX(a, 2), playerX(a, 3), playerX(a, 4)};
 
   // One of each direction per team, so a cross-team index collision shows up
   // as a ship moving the wrong way rather than merely not moving.
@@ -407,17 +408,18 @@ TEST(pvp_2v2_packs_a_distinct_input_for_every_player) {
   CHECK(playerX(a, 4) < before[3]);
 }
 
-/// The 2v2 reading of `coop_routes_a_held_movement_press_to_only_that_players_ship`:
-/// one press must move one ship, with the player's own teammate and both
-/// opponents untouched.
+/// The 2v2 reading of
+/// `coop_routes_a_held_movement_press_to_only_that_players_ship`: one press
+/// must move one ship, with the player's own teammate and both opponents
+/// untouched.
 TEST(pvp_2v2_routes_a_press_to_only_that_players_ship) {
   FakeConnection a, b;
   PvPGame game{/*team_size=*/2, /*team_count=*/2};
   startTeamMatch(game, a, b);
 
   game.update(shared::FIXED_DT);
-  const auto before = std::array{playerX(a, 1), playerX(a, 2), playerX(a, 3),
-                                 playerX(a, 4)};
+  const auto before =
+      std::array{playerX(a, 1), playerX(a, 2), playerX(a, 3), playerX(a, 4)};
 
   // Player 3 deliberately: it is the first player of the *second* team, so it
   // is the one whose flat slot (2) and in-team rank (0) disagree.
@@ -491,19 +493,16 @@ TEST(pvp_duel_ends_with_the_remaining_team_winning_after_a_disconnect) {
 
   // The death check only runs once both teams have finished entering.
   REQUIRE(stepUntil(game, [&] {
-    return pvpState(b).phase ==
-           static_cast<uint8_t>(shared::PvPGameSim::Phase::PLAYERS_FIGHT);
+    return pvpState(b).phase == shared::PvPGamePhase::PLAYERS_FIGHT;
   }));
 
   game.removePlayers(&a);
   game.update(shared::FIXED_DT);
 
   const auto state = pvpState(b);
-  CHECK_EQ(state.phase, static_cast<uint8_t>(shared::PvPGameSim::Phase::END));
-  CHECK_EQ(state.teams[1]->outcome,
-           static_cast<uint8_t>(shared::PvPGameSim::TeamOutcome::WON));
-  CHECK_EQ(state.teams[0]->outcome,
-           static_cast<uint8_t>(shared::PvPGameSim::TeamOutcome::LOST));
+  CHECK_EQ(state.phase, shared::PvPGamePhase::END);
+  CHECK_EQ(state.teams[1]->outcome, shared::TeamOutcome::WON);
+  CHECK_EQ(state.teams[0]->outcome, shared::TeamOutcome::LOST);
   CHECK_EQ(game.isOver(), true);
   CHECK_EQ(game.isRunning(), false);
 }
@@ -523,9 +522,9 @@ TEST(pvp_2v2_keeps_the_match_running_when_a_team_loses_one_of_two) {
   REQUIRE(game.addPlayers(fakeConnection(a, {1, 2})));
   REQUIRE(game.addPlayers(fakeConnection(b, {3})));
   REQUIRE(game.addPlayers(fakeConnection(c, {4})));
-  game.setPlayersReady(&a, true);
-  game.setPlayersReady(&b, true);
-  game.setPlayersReady(&c, true);
+  readyConnection(game, &a, true);
+  readyConnection(game, &b, true);
+  readyConnection(game, &c, true);
   REQUIRE(game.isRunning());
 
   const auto &teamIds = game.getTeamIds();
@@ -541,17 +540,17 @@ TEST(pvp_2v2_keeps_the_match_running_when_a_team_loses_one_of_two) {
   // The survivor is still playing, and the departed player is gone from the
   // frame rather than lingering as a shipless slot.
   const auto state = pvpState(a);
-  CHECK_EQ(state.phase,
-           static_cast<uint8_t>(shared::PvPGameSim::Phase::PLAYERS_FIGHT));
+  CHECK_EQ(state.phase, shared::PvPGamePhase::PLAYERS_FIGHT);
   CHECK(findPlayer(state, 4).has_value());
   CHECK(findPlayer(state, 3).has_value() == false);
   CHECK_EQ(livePlayers(state), 3u);
 }
 
 /// A whole team leaving ends the match with the other one winning - the 2v2
-/// reading of `pvp_duel_ends_with_the_remaining_team_winning_after_a_disconnect`,
-/// and the smallest case where the surviving team still holds two slots at
-/// the moment the other empties.
+/// reading of
+/// `pvp_duel_ends_with_the_remaining_team_winning_after_a_disconnect`, and the
+/// smallest case where the surviving team still holds two slots at the moment
+/// the other empties.
 ///
 /// Note this does *not* pin L80's other half, the `Phase::END` check moving
 /// out of the per-team loop: with the check back inside the loop every case
@@ -566,8 +565,7 @@ TEST(pvp_2v2_ends_once_a_whole_team_is_eliminated) {
   startTeamMatch(game, a, b);
 
   REQUIRE(stepUntil(game, [&] {
-    return pvpState(a).phase ==
-           static_cast<uint8_t>(shared::PvPGameSim::Phase::PLAYERS_FIGHT);
+    return pvpState(a).phase == shared::PvPGamePhase::PLAYERS_FIGHT;
   }));
 
   // Both of team 1's players sit on b's socket, so one close empties the team.
@@ -575,16 +573,14 @@ TEST(pvp_2v2_ends_once_a_whole_team_is_eliminated) {
   game.update(shared::FIXED_DT);
 
   const auto state = pvpState(a);
-  CHECK_EQ(state.phase, static_cast<uint8_t>(shared::PvPGameSim::Phase::END));
+  CHECK_EQ(state.phase, shared::PvPGamePhase::END);
 
   const auto *winner = testing::teamById(state, 1);
   const auto *loser = testing::teamById(state, 2);
   REQUIRE(winner != nullptr);
   REQUIRE(loser != nullptr);
-  CHECK_EQ(winner->outcome,
-           static_cast<uint8_t>(shared::PvPGameSim::TeamOutcome::WON));
-  CHECK_EQ(loser->outcome,
-           static_cast<uint8_t>(shared::PvPGameSim::TeamOutcome::LOST));
+  CHECK_EQ(winner->outcome, shared::TeamOutcome::WON);
+  CHECK_EQ(loser->outcome, shared::TeamOutcome::LOST);
 
   CHECK_EQ(game.isOver(), true);
   CHECK_EQ(game.isRunning(), false);
@@ -596,8 +592,7 @@ TEST(pvp_stops_broadcasting_once_the_match_is_over) {
   startDuelMatch(game, a, b);
 
   REQUIRE(stepUntil(game, [&] {
-    return pvpState(b).phase ==
-           static_cast<uint8_t>(shared::PvPGameSim::Phase::PLAYERS_FIGHT);
+    return pvpState(b).phase == shared::PvPGamePhase::PLAYERS_FIGHT;
   }));
 
   game.removePlayers(&a);
@@ -638,8 +633,7 @@ TEST(pvp_disconnect_after_the_match_is_over_still_frees_the_socket) {
   startDuelMatch(game, a, b);
 
   REQUIRE(stepUntil(game, [&] {
-    return pvpState(b).phase ==
-           static_cast<uint8_t>(shared::PvPGameSim::Phase::PLAYERS_FIGHT);
+    return pvpState(b).phase == shared::PvPGamePhase::PLAYERS_FIGHT;
   }));
 
   game.removePlayers(&a);
@@ -684,13 +678,12 @@ TEST(manager_destroys_a_finished_duel_once_its_last_connection_closes) {
   // the handle.
   const auto id = game->id;
 
-  game->setPlayersReady(&a, true);
-  game->setPlayersReady(&b, true);
+  readyConnection(*game, &a, true);
+  readyConnection(*game, &b, true);
   REQUIRE(game->isRunning());
 
   REQUIRE(stepUntil(*game, [&] {
-    return pvpState(b).phase ==
-           static_cast<uint8_t>(shared::PvPGameSim::Phase::PLAYERS_FIGHT);
+    return pvpState(b).phase == shared::PvPGamePhase::PLAYERS_FIGHT;
   }));
 
   // First close: the match ends on the following tick, but b is still
@@ -723,7 +716,7 @@ TEST(coop_rejects_a_joiner_once_the_match_is_running) {
   startCoopMatch(game, a, b);
 
   CHECK_EQ(game.addPlayers(fakeConnection(late, {3})), false);
-  CHECK_EQ(shared::count_optional(game.getPlayers()), 2);
+  CHECK_EQ(shared::count_optional(game.getPlayers()), 2u);
   CHECK_EQ(game.getPlayerSockets().size(), 2u);
 }
 

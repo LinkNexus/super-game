@@ -1,5 +1,6 @@
 #pragma once
 
+#include "shared/types.h"
 #include <algorithm>
 #include <cstdint>
 
@@ -13,18 +14,24 @@ static constexpr uint16_t SCREEN_HEIGHT = 800;
 /// Fixed simulation timestep (seconds) driving GameSim::step() at 60 Hz.
 static constexpr float FIXED_DT = 1.0f / 60.0f;
 /// Capacity of the fixed-size bullet pool shared by player/enemy/boss shots.
-static constexpr uint8_t MAX_BULLETS = 64;
+static constexpr BulletCount MAX_BULLETS = 64;
 /// Score awarded to a player for each enemy or boss hit they land.
 static constexpr int POINTS_PER_HIT = 10;
 
-static constexpr uint8_t MAX_PLAYERS_COOP = 4;
+static constexpr PlayerCount MAX_PLAYERS_COOP = 4;
 
-static constexpr uint8_t MAX_TEAMS = 2;
+static constexpr TeamCount MAX_TEAMS = 2;
 
-static constexpr uint8_t MAX_PLAYERS_PER_TEAM = 2;
+static constexpr PlayerCount MAX_PLAYERS_PER_TEAM = 2;
 
-static constexpr uint8_t MAX_PLAYERS_PER_CLIENT = 2;
+static constexpr PlayerCount MAX_PLAYERS_PER_CLIENT = 2;
+
+static constexpr EnemyCount MAX_ENEMY_ROWS = 8;
+
+static constexpr EnemyCount ENEMY_COLS = 10;
 
 static constexpr auto MAX_PLAYERS_PER_GAME =
-    std::max<uint8_t>(MAX_PLAYERS_COOP, MAX_TEAMS *MAX_PLAYERS_PER_TEAM);
+    std::max<PlayerCount>(MAX_PLAYERS_COOP, MAX_TEAMS *MAX_PLAYERS_PER_TEAM);
+
+constexpr std::size_t MAX_NAME_LENGTH = 9;
 } // namespace shared

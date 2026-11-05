@@ -1,14 +1,15 @@
 #include "entity_designer.h"
 #include "constants.h"
+#include "mathlib.hpp"
 #include "raylib.h"
-#include "shared/aliases.h"
 #include "shared/constants.h"
 #include "shared/helpers.h"
-#include "shared/math_utils.h"
 #include "shared/messages.h"
 #include "types.h"
 #include "utils.h"
+#include <algorithm>
 #include <cstddef>
+#include <optional>
 #include <utility>
 
 void EntityDesigner::loadTextures() {
@@ -70,18 +71,17 @@ void EntityDesigner::drawBoss(const shared::BossState &state,
 }
 
 void EntityDesigner::drawEnemies(const shared::EnemiesPoolState &enemies,
-                                 float offsetX, float offsetY) const {
+                                 mathlib::Vec2f offset) const {
   for (std::size_t idx = 0; idx < enemies.size(); ++idx) {
-    if (enemies[idx][0] == 1) {
-      float pos_x = offsetX + (idx % shared::EnemiesPoolSimState::COLS) *
-                                  (shared::EnemySimState::WIDTH +
-                                   shared::EnemiesPoolSimState::SPACING_X);
-      float pos_y = offsetY - (idx / shared::EnemiesPoolSimState::COLS) *
-                                  (shared::EnemySimState::HEIGHT +
-                                   shared::EnemiesPoolSimState::SPACING_Y);
+    if (enemies[idx].first) {
+      float pos_x = offset.x + (idx % shared::ENEMY_COLS) *
+                                   (shared::EnemySimState::WIDTH +
+                                    shared::EnemiesPoolSimState::SPACING_X);
+      float pos_y = offset.y - (idx / shared::ENEMY_COLS) *
+                                   (shared::EnemySimState::HEIGHT +
+                                    shared::EnemiesPoolSimState::SPACING_Y);
 
-      drawEnemy(toRaylibVec({pos_x, pos_y}),
-                static_cast<shared::EnemyType>(enemies[idx][1]));
+      drawEnemy(toRaylibVec({pos_x, pos_y}), enemies[idx].second);
     }
   }
 }
@@ -190,7 +190,7 @@ void EntityDesigner::drawPlayer(const shared::PlayerState &state, Color color,
     Vector2 origin{dest.width / 2.0f, dest.height / 2.0f};
 
     DrawTexturePro(player_ship_texture_, source, dest, origin,
-                   shared::toDegrees(state.orientation), color);
+                   mathlib::toDegrees(state.orientation), color);
   } else {
     Vector2 tip = {positionOnScreen.x, positionOnScreen.y - size};
     Vector2 left = {positionOnScreen.x - size * 0.7f,
@@ -211,7 +211,7 @@ void EntityDesigner::drawPlayer(const shared::PlayerState &state, Color color,
             : size * 0.7f;
 
     auto markerPos = toScreen(state.position +
-                              shared::Vec2D(0, -(drawnHalfHeight + MARKER_GAP))
+                              mathlib::Vec2f(0, -(drawnHalfHeight + MARKER_GAP))
                                   .rotated(state.orientation));
     auto marker = std::string("P") + std::to_string(playerIdx + 1);
 
@@ -241,8 +241,7 @@ void EntityDesigner::drawPlayersForCoopGame(const shared::CoopGameState &state,
     drawPlayerStats(*player, yOffset, gameType, playerIdx >= 0);
 
     if (player->lives > 0)
-      drawPlayer(*player,
-                 playerIdx == 0 ? MAIN_PLAYER_COLOR : PLAYER_COLORS[idx],
+      drawPlayer(*player, playerColor(player->id, idx, playerIds, false),
                  playerIdx);
   }
 }
@@ -253,20 +252,25 @@ void EntityDesigner::drawPlayersForPvPGame(Session *session,
   auto yOffset = 10.0f;
   const auto playerIds = session->getPlayersIds();
 
-  const auto isOnThisMachine = [&playerIds](shared::PlayerId id) {
-    return id != 0 &&
-           std::find(playerIds.begin(), playerIds.end(), id) != playerIds.end();
+  const auto ownsTeam = [&playerIds](const auto &team) {
+    return team && std::any_of(team->players.begin(), team->players.end(),
+                               [&playerIds](const auto &player) {
+                                 return player &&
+                                        std::find(playerIds.begin(),
+                                                  playerIds.end(),
+                                                  player->id) !=
+                                            playerIds.end();
+                               });
   };
-  const auto thisMachineTeam = std::find_if(
-      state.teams.begin(), state.teams.end(), [&](const auto &team) {
-        return team && std::any_of(team->players.begin(), team->players.end(),
-                                   [&isOnThisMachine](const auto &player) {
-                                     return player &&
-                                            isOnThisMachine(player->id);
-                                   });
-      });
 
-  std::size_t colorIdx{0};
+  // One team of mine online: that's "my team". None or both: no opponents,
+  // every ship its own colour, like local.
+  std::optional<std::size_t> myTeamIdx{};
+  if (gameType == GameType::ONLINE &&
+      std::count_if(state.teams.begin(), state.teams.end(), ownsTeam) == 1)
+    myTeamIdx = std::distance(
+        state.teams.begin(),
+        std::find_if(state.teams.begin(), state.teams.end(), ownsTeam));
 
   for (std::size_t teamIdx{0}; teamIdx < state.teams.size(); ++teamIdx) {
     const auto &team = state.teams[teamIdx];
@@ -283,28 +287,19 @@ void EntityDesigner::drawPlayersForPvPGame(Session *session,
       yOffset += STATUS_FONT_SIZE + 10;
     }
 
-    for (const auto &player : team->players) {
+    for (std::size_t rank{0}; rank < team->players.size(); ++rank) {
+      const auto &player = team->players[rank];
+
       if (!player)
         continue;
 
-      Color color{PLAYER_ENEMY_COLOR};
       auto it = std::find(playerIds.begin(), playerIds.end(), player->id);
       int64_t playerIdxOnThisMachine =
           (it != playerIds.end()) ? std::distance(playerIds.begin(), it) : -1;
 
-      if (gameType == GameType::LOCAL) {
-        color = playerIdxOnThisMachine == 0
-                    ? MAIN_PLAYER_COLOR
-                    : PLAYER_COLORS[colorIdx++ % PLAYER_COLORS.size()];
-      } else {
-        if (thisMachineTeam != state.teams.end() &&
-            std::cmp_equal(std::distance(state.teams.begin(), thisMachineTeam),
-                           teamIdx)) {
-          color = playerIdxOnThisMachine == 0
-                      ? MAIN_PLAYER_COLOR
-                      : PLAYER_COLORS[colorIdx++ % PLAYER_COLORS.size()];
-        }
-      }
+      const auto color = playerColor(
+          player->id, teamIdx * shared::MAX_PLAYERS_PER_TEAM + rank, playerIds,
+          myTeamIdx && *myTeamIdx != teamIdx);
 
       drawPlayerStats(*player, yOffset, gameType, playerIdxOnThisMachine >= 0);
 
@@ -356,4 +351,24 @@ void EntityDesigner::drawBullet(const shared::BulletState &state) const {
                 (int)screenPosition.y - shared::BulletSimState::HEIGHT / 2,
                 shared::BulletSimState::WIDTH, shared::BulletSimState::HEIGHT,
                 YELLOW);
+}
+
+Color EntityDesigner::playerColor(shared::PlayerId id, std::size_t slot,
+                                  const ThisMachinePlayerIds &playerIds,
+                                  bool isOpponent) {
+  if (isOpponent)
+    return PLAYER_ENEMY_COLOR;
+
+  const auto it = std::find(playerIds.begin(), playerIds.end(), id);
+  if (it == playerIds.begin())
+    return MAIN_PLAYER_COLOR;
+
+  // This machine's players take the first colours, everyone else follows by
+  // slot, so the two groups never collide.
+  const auto idx = it != playerIds.end()
+                       ? static_cast<std::size_t>(
+                             std::distance(playerIds.begin(), it)) -
+                             1
+                       : shared::MAX_PLAYERS_PER_CLIENT - 1 + slot;
+  return PLAYER_COLORS[idx % PLAYER_COLORS.size()];
 }

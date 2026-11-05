@@ -22,9 +22,11 @@ import {
   drawPvPGame,
 } from "./scripts/ui/game-renderer";
 import { clearHud, updateHud } from "./scripts/ui/hud";
+import { hideLobby, showLobby } from "./scripts/ui/lobby";
 import { hideMenu, type MenuPage, showMenu } from "./scripts/ui/menu";
 import { spawnEnemyExplosion, updateParticles } from "./scripts/ui/particles";
 import { drawStars, updateStars } from "./scripts/ui/stars";
+import { showToast } from "./scripts/ui/toast";
 import "./styles/game-ui.css";
 import "./styles/game.css";
 
@@ -39,16 +41,6 @@ const backToMenu = () => {
   clearHud();
   showMenu(mainPage);
 };
-
-const connectingToServerPage = (
-  session: OnlineSession,
-  maxPlayersCount: number,
-): MenuPage => ({
-  title: "Connecting to server...",
-  hero: true,
-  items: [],
-  back: () => showMenu(namesPage(session.getConfig(), maxPlayersCount)),
-});
 
 const namesPage = (config: Config, maxPlayersCount: number): MenuPage => ({
   title: "Who is playing?",
@@ -68,12 +60,15 @@ const namesPage = (config: Config, maxPlayersCount: number): MenuPage => ({
     })),
     submitLabel: "Start",
     onSubmit: (values) =>
-      startOnlineMatch({
-        ...config,
-        playerNames: Array.from({ length: config.playerCount }).map(
-          (_, i) => values[`name${i + 1}`]!,
-        ),
-      }),
+      startOnlineMatch(
+        {
+          ...config,
+          playerNames: Array.from({ length: config.playerCount }).map(
+            (_, i) => values[`name${i + 1}`]!,
+          ),
+        },
+        maxPlayersCount,
+      ),
   },
   back: () =>
     showMenu(numberOfPlayersOnThisMachinePage(config, maxPlayersCount)),
@@ -113,12 +108,17 @@ const pausePage = (
     },
     {
       label: "Restart",
-      action: () =>
-        restart(currentScreen.match.config, currentScreen.match.session),
+      action: () => restart(currentScreen.match.session),
     },
     {
       label: "Quit to menu",
-      action: backToMenu,
+      action: () => {
+        if (currentScreen.match.session instanceof OnlineSession) {
+          currentScreen.match.session.end();
+          return;
+        }
+        backToMenu();
+      },
     },
   ],
   back: () => {
@@ -206,7 +206,7 @@ const modePage = (gameType: GameType): MenuPage => ({
                 kind: "coop",
               },
               Math.min(
-                appModule.MAX_PLAYERS_COOP,
+                appModule.MAX_PLAYERS_PER_CLIENT,
                 appModule.MAX_PLAYERS_ON_THIS_MACHINE,
               ),
             ),
@@ -260,14 +260,23 @@ function init() {
   showMenu(mainPage);
 }
 
-function restart(config: Config, session: GameSession) {
+function restart(session: GameSession) {
   hideEndScreen();
   clearHud();
 
   if (session instanceof LocalSession) {
-    startLocalMatch(config);
+    startLocalMatch(session.getConfig());
   } else if (session instanceof OnlineSession) {
-    startOnlineMatch(session.getConfig());
+    session.end(false);
+    const config = session.getConfig();
+    const maxPlayersCount =
+      config.kind === "pvp"
+        ? config.teamSize
+        : Math.min(
+            appModule.MAX_PLAYERS_PER_CLIENT,
+            appModule.MAX_PLAYERS_ON_THIS_MACHINE,
+          );
+    startOnlineMatch(config, maxPlayersCount);
   }
 }
 
@@ -313,6 +322,7 @@ function handleInputs() {
       }
       break;
 
+    case "lobby":
     case "pause":
     case "menu":
     case "end":
@@ -328,11 +338,13 @@ function update() {
 
   switch (screen.kind) {
     case "playing": {
-      const { session, config } = screen.match;
+      const { session } = screen.match;
       setGameHasKeyboard(true);
       const state = session.step(
         pollPlayerInputsInGame(session.getPlayerIds()),
       );
+
+      if (!state) break;
 
       screen.match.state = state;
 
@@ -347,11 +359,12 @@ function update() {
         showEndScreen(state, session.getPlayerIds(), (action) => {
           switch (action) {
             case "restart":
-              restart(config, session);
+              restart(session);
               break;
 
             case "menu":
               hideEndScreen();
+              session instanceof OnlineSession && session.end(false);
               backToMenu();
               break;
           }
@@ -366,6 +379,7 @@ function update() {
     }
 
     case "menu":
+    case "lobby":
     case "pause":
     case "end":
       break;
@@ -392,7 +406,6 @@ function startLocalMatch(config: Config) {
   screen = {
     kind: "playing",
     match: {
-      config,
       session: new LocalSession(config),
       state: null,
       prevState: null,
@@ -402,43 +415,62 @@ function startLocalMatch(config: Config) {
 }
 
 function startOnlineMatch(
-  config:
-    | Omit<OnlineSessionConfig & { kind: "coop" }, "ready" | "serverUrl">
-    | Omit<OnlineSessionConfig & { kind: "pvp" }, "ready" | "serverUrl">,
+  config: OnlineSessionConfig,
+  maxPlayersCount: number,
 ) {
-  const onlineConfig: OnlineSessionConfig = {
-    ...config,
-    ready: false,
-    serverUrl: new URL(import.meta.env.VITE_GAME_SERVER_URL),
-  };
+  const dismiss = showToast("Connecting to the server...", { durationMs: 0 });
 
-  for (let i = 0; i < config.playerCount; i++) {
-    if (i >= config.playerNames.length) break;
-    onlineConfig.serverUrl.searchParams.append(
-      `name${i + 1}`,
-      config.playerNames[i]!,
-    );
-  }
+  new OnlineSession({
+    config,
+    onLobbyUpdateReceived: (currentSession, u) => {
+      hideMenu();
+      dismiss();
 
-  onlineConfig.serverUrl.searchParams.append(
-    "slots",
-    onlineConfig.playerCount.toString(),
-  );
+      if (u.update.game_started) {
+        hideLobby();
+        screen = {
+          kind: "playing",
+          match: {
+            session: currentSession,
+            state: null,
+            prevState: null,
+          },
+        };
+        return;
+      }
 
-  if (onlineConfig.kind === "pvp") {
-    onlineConfig.serverUrl.searchParams.append(
-      "team_count",
-      onlineConfig.teamCount.toString(),
-    );
-    onlineConfig.serverUrl.searchParams.append(
-      "team_size",
-      onlineConfig.teamSize.toString(),
-    );
-  }
+      screen = {
+        kind: "lobby",
+        session: currentSession,
+      };
+      showLobby(u, currentSession.getPlayerIds(), {
+        onReady: (id, r) => currentSession.sendReady(r, id),
+        onSwitchTeam: (id, t) => currentSession.switchTeam(id, t),
+        onLeave: () => {
+          currentSession.leaveLobby();
+        },
+      });
+    },
+    onConnectionError: () => {
+      dismiss();
+      showMenu(namesPage(config, maxPlayersCount));
+    },
+    onConnectionClosed: ({ leaving, returnBackToMenu }) => {
+      dismiss();
+      hideLobby();
 
-  showMenu(
-    connectingToServerPage(new OnlineSession(onlineConfig), config.playerCount),
-  );
+      if (typeof returnBackToMenu === "boolean") {
+        if (returnBackToMenu) backToMenu();
+        else showMenu(namesPage(config, maxPlayersCount));
+      }
+
+      if (!leaving)
+        showToast("A problem occured with the connection to the server", {
+          title: "Connection Error",
+          kind: "error",
+        });
+    },
+  });
 }
 
 function executeEventsOnStateChange() {
@@ -463,18 +495,18 @@ function executeEventsOnStateChange() {
 
 function spawnEnemiesExplosions(before: CoopGameState, after: CoopGameState) {
   for (let i = 0; i < after.enemies.length; ++i) {
-    const wasAlive = before.enemies[i]?.[0] === 1;
-    const isAlive = after.enemies[i]?.[0] === 1;
+    const wasAlive = before.enemies[i]?.[0];
+    const isAlive = after.enemies[i]?.[0];
 
     if (wasAlive && !isAlive) {
       const x =
-        after.enemies_offset_x +
-        (i % appModule.SIM_ENEMIES_POOL_COLS) *
+        after.enemies_offset.x +
+        (i % appModule.SIM_ENEMY_COLS) *
           (appModule.SIM_ENEMY_WIDTH + appModule.SIM_ENEMIES_POOL_SPACING_X);
 
       const y =
-        after.enemies_offset_y -
-        Math.floor(i / appModule.SIM_ENEMIES_POOL_COLS) *
+        after.enemies_offset.y -
+        Math.floor(i / appModule.SIM_ENEMY_COLS) *
           (appModule.SIM_ENEMY_HEIGHT + appModule.SIM_ENEMIES_POOL_SPACING_Y);
 
       spawnEnemyExplosion(toScreen({ x, y }), after.enemies[i]![1]);

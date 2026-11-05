@@ -2,7 +2,7 @@
 
 ## Requirements
 
-- CMake ≥ 3.20
+- CMake ≥ 3.25
 - Ninja (`winget install Ninja-build.Ninja` on Windows)
 - A C++23 compiler (MSVC / Clang on Windows, GCC/Clang on Linux)
 
@@ -11,7 +11,7 @@
 ```bash
 git clone git@github.com:LinkNexus/super-game.git
 cd super-game
-git submodule update --init vendor/raylib vendor/uWebSockets vendor/ixwebsocket vendor/mbedtls
+git submodule update --init vendor/raylib vendor/uWebSockets vendor/ixwebsocket vendor/mbedtls vendor/mathlib
 git -C vendor/uWebSockets submodule update --init uSockets
 git -C vendor/mbedtls submodule update --init framework
 ```
@@ -65,7 +65,7 @@ cmake -S . -B build/mine -G Ninja -DBUILD_CLIENT=OFF -DBUILD_TESTS=OFF
 
 The browser version lives in `web/`: `web/wasm/` compiles `shared/` to WebAssembly
 (Emscripten) and `web/frontend/` is a TypeScript + Vite app. Both need Emscripten and
-node, which the repo's nix flake provides; no submodules needed.
+node, which the repo's nix flake provides; the only submodule needed is `vendor/mathlib`.
 
 ```bash
 nix develop .#web       # then, inside that shell:
@@ -84,7 +84,7 @@ make test
 ```
 
 That configures and builds a headless `tests` preset (no raylib, no client, and with
-`BUILD_SERVER=OFF` no uWebSockets either - so it needs **no submodules at all**) and runs both
+`BUILD_SERVER=OFF` no uWebSockets either - so the only submodule it needs is `vendor/mathlib`) and runs both
 suites through CTest — the simulation in `shared/tests/` and the server's matchmaking,
 rosters and broadcast loop in `server/tests/`. Neither needs a graphics stack or a listening
 port, so this also works on Windows, where the server *executable* isn't buildable.

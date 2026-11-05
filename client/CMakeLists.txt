@@ -3,7 +3,6 @@ add_executable(supergame-client
     src/game.cpp
     src/network_client.cpp
     src/session.cpp
-    src/utils.cpp
     src/elements/text_input.cpp
     src/types.cpp
     src/audio_manager.cpp

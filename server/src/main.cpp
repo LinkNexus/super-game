@@ -5,7 +5,6 @@
 #include "game_manager.h"
 #include "internal/eventing/epoll_kqueue.h"
 #include "libusockets.h"
-#include "shared/aliases.h"
 #include "shared/constants.h"
 #include "shared/helpers.h"
 #include "shared/messages.h"
@@ -83,44 +82,44 @@ int main(int, char *[]) {
                [](auto *res, auto *req, auto *context) {
                  PerSocketData data{};
 
-                 auto teamSize = shared::toInt(req->getQuery("team_size"));
-                 auto slotsCount = shared::toInt(req->getQuery("slots"));
-                 auto slotsCountIsValid =
-                     slotsCount && *slotsCount > 0 &&
-                     *slotsCount <= shared::MAX_PLAYERS_PER_CLIENT;
+                 auto teamSize = shared::toNumber<shared::PlayerCount>(
+                     req->getQuery("team_size"));
+                 auto slotCount = shared::toNumber<shared::PlayerCount>(
+                     req->getQuery("slots"));
+                 auto slotCountIsValid =
+                     slotCount && *slotCount > 0 &&
+                     *slotCount <= shared::MAX_PLAYERS_PER_CLIENT;
 
-                 auto initPlayers = [slotsCount,
-                                     players = &data.players_data.players,
-                                     &req]() {
-                   std::array<std::string, shared::MAX_PLAYERS_PER_CLIENT>
-                       names;
+                 auto initPlayers =
+                     [slotCount, players = &data.players_data.players, &req]() {
+                       std::array<std::string, shared::MAX_PLAYERS_PER_CLIENT>
+                           names;
 
-                   const auto slots = static_cast<std::size_t>(*slotsCount);
+                       for (std::size_t i{0}; i < slotCount; ++i) {
+                         auto reqName =
+                             req->getQuery("name" + std::to_string(i + 1));
 
-                   for (std::size_t i{0}; i < slots; ++i) {
-                     auto reqName =
-                         req->getQuery("name" + std::to_string(i + 1));
+                         if (!shared::isNameValid(reqName))
+                           return false;
 
-                     if (!shared::isNameValid(reqName))
-                       return false;
+                         names[i] = std::string(reqName);
+                       }
 
-                     names[i] = std::string(reqName);
-                   }
+                       for (std::size_t i{0}; i < slotCount; ++i) {
+                         auto &[_, name] = (*players)[i].emplace();
+                         name = names[i];
+                       }
 
-                   for (std::size_t i{0}; i < slots; ++i) {
-                     auto &[_, name] = (*players)[i].emplace();
-                     name = names[i];
-                   }
+                       return true;
+                     };
 
-                   return true;
-                 };
-
-                 if (!teamSize && slotsCountIsValid) {
+                 if (!teamSize && slotCountIsValid) {
                    if (!initPlayers())
                      goto bad_request;
                    data.game_type = CoopGameType{};
-                 } else if (teamSize && slotsCountIsValid) {
-                   auto teamCount = shared::toInt(req->getQuery("team_count"));
+                 } else if (teamSize && slotCountIsValid) {
+                   auto teamCount = shared::toNumber<shared::TeamCount>(
+                       req->getQuery("team_count"));
                    auto teamCountIsValid = teamCount && *teamCount > 0 &&
                                            *teamCount <= shared::MAX_TEAMS;
                    auto teamSizeIsValid =
@@ -128,14 +127,11 @@ int main(int, char *[]) {
                        *teamSize <= shared::MAX_PLAYERS_PER_TEAM;
 
                    if (teamSizeIsValid && teamCountIsValid &&
-                       *slotsCount <= *teamSize) {
+                       *slotCount <= *teamSize) {
                      if (!initPlayers())
                        goto bad_request;
-                     data.game_type = PvPGameType{
-                         .team_size =
-                             static_cast<shared::PlayerCount>(*teamSize),
-                         .team_count =
-                             static_cast<shared::PlayerCount>(*teamCount)};
+                     data.game_type = PvPGameType{.team_size = *teamSize,
+                                                  .team_count = *teamCount};
                    } else
                      goto bad_request;
 
@@ -194,7 +190,7 @@ int main(int, char *[]) {
 
                  welcomeEnvelope["payload"] =
                      shared::WelcomeMessage{.players_ids = ids};
-                 ws->send(shared::encode(welcomeEnvelope));
+                 data->connection.send(shared::encode(welcomeEnvelope));
 
                  if (game) {
                    data->game_id = game->id;

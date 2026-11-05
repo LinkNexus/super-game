@@ -5,7 +5,7 @@
 #
 # Build context must already have submodules populated the same way the
 # README describes (selective, not --recursive):
-#   git submodule update --init vendor/uWebSockets
+#   git submodule update --init vendor/uWebSockets vendor/mathlib
 #   git -C vendor/uWebSockets submodule update --init uSockets
 # vendor/raylib and vendor/ixwebsocket don't need to be populated at all for
 # this image - they're excluded via .dockerignore and never referenced when

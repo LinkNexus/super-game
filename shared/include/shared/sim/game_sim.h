@@ -1,12 +1,11 @@
 #pragma once
 
-#include "shared/aliases.h"
 #include "shared/constants.h"
 #include "shared/helpers.h"
-#include "shared/messages.h"
 #include "shared/sim/boss_sim.h"
 #include "shared/sim/enemy_sim.h"
 #include "shared/sim/player_sim.h"
+#include "shared/types.h"
 #include <cstdint>
 
 namespace shared {
@@ -20,25 +19,17 @@ static inline void stepPlayer(const PlayerInputs<MAX_PLAYERS_COUNT> &inputs,
       });
 
   if (playerInput != inputs.end()) {
-    player.step((*playerInput).value(), dt, bullets_pool, canFire);
+    player.step(static_cast<Button>((*playerInput)->buttons), dt, bullets_pool,
+                canFire);
   }
 }
 
 class CoopGameSim {
 public:
-  enum class Phase : uint8_t {
-    ENEMIES_ENTRANCE,
-    FIGHT_ENEMIES,
-    BOSS_ENTRANCE,
-    FIGHT_BOSS,
-    WON,
-    GAME_OVER
-  };
-
   void removePlayer(PlayerId player_id);
 
 private:
-  Phase phase_{Phase::ENEMIES_ENTRANCE};
+  CoopGamePhase phase_{CoopGamePhase::ENEMIES_ENTRANCE};
   EnemiesPoolSimState enemies_pool_{};
   BossSimState boss_{};
   std::array<std::optional<PlayerSimState>, MAX_PLAYERS_COOP> players_{};
@@ -72,7 +63,7 @@ public:
 
     enemies_pool_.init(initial_player_count_);
     boss_ = BossSimState();
-    phase_ = Phase::ENEMIES_ENTRANCE;
+    phase_ = CoopGamePhase::ENEMIES_ENTRANCE;
     bullets_pool_.fill(BulletSimState());
   }
 
@@ -80,8 +71,8 @@ public:
     requires(N > 0 && N <= MAX_PLAYERS_COOP)
   void step(CoopGameState &state, const PlayerInputs<N> &inputs, float dt) {
     auto allPlayersDead = true;
-    auto canFire =
-        phase_ == Phase::FIGHT_ENEMIES || phase_ == Phase::FIGHT_BOSS;
+    auto canFire = phase_ == CoopGamePhase::FIGHT_ENEMIES ||
+                   phase_ == CoopGamePhase::FIGHT_BOSS;
 
     for (auto &player : players_) {
       if (player && player->lives > 0) {
@@ -90,15 +81,15 @@ public:
     }
 
     switch (phase_) {
-    case Phase::ENEMIES_ENTRANCE:
+    case CoopGamePhase::ENEMIES_ENTRANCE:
       enemies_pool_.stepEntrance(dt);
 
       if (enemies_pool_.isEntranceComplete()) {
-        phase_ = Phase::FIGHT_ENEMIES;
+        phase_ = CoopGamePhase::FIGHT_ENEMIES;
       }
       break;
 
-    case Phase::FIGHT_ENEMIES:
+    case CoopGamePhase::FIGHT_ENEMIES:
       enemies_pool_.step(dt, bullets_pool_);
 
       for (auto &bullet : bullets_pool_) {
@@ -110,16 +101,16 @@ public:
       checkCollisions();
 
       if (enemies_pool_.allEnemiesDefeated()) {
-        phase_ = Phase::BOSS_ENTRANCE;
+        phase_ = CoopGamePhase::BOSS_ENTRANCE;
         boss_.init(initial_player_count_);
       }
 
       if (enemies_pool_.reachedPlayer()) {
-        phase_ = Phase::GAME_OVER;
+        phase_ = CoopGamePhase::GAME_OVER;
       }
       break;
 
-    case Phase::BOSS_ENTRANCE:
+    case CoopGamePhase::BOSS_ENTRANCE:
       boss_.stepEntrance(dt);
 
       for (auto &bullet : bullets_pool_) {
@@ -129,11 +120,11 @@ public:
       }
 
       if (boss_.isEntranceComplete()) {
-        phase_ = Phase::FIGHT_BOSS;
+        phase_ = CoopGamePhase::FIGHT_BOSS;
       }
       break;
 
-    case Phase::FIGHT_BOSS:
+    case CoopGamePhase::FIGHT_BOSS:
       boss_.step(dt, bullets_pool_);
 
       for (auto &bullet : bullets_pool_) {
@@ -145,13 +136,13 @@ public:
       checkCollisions();
 
       if (boss_.health <= 0) {
-        phase_ = Phase::WON;
+        phase_ = CoopGamePhase::WON;
       }
 
       break;
 
-    case Phase::WON:
-    case Phase::GAME_OVER:
+    case CoopGamePhase::WON:
+    case CoopGamePhase::GAME_OVER:
       setGameState(state);
       return;
     }
@@ -164,7 +155,7 @@ public:
     }
 
     if (allPlayersDead)
-      phase_ = Phase::GAME_OVER;
+      phase_ = CoopGamePhase::GAME_OVER;
 
     setGameState(state);
   }
@@ -172,9 +163,6 @@ public:
 
 class PvPGameSim {
 public:
-  enum class TeamOutcome { PLAYING, WON, LOST, DREW };
-
-  using TeamId = uint8_t;
   using TeamRosters = std::array<
       std::optional<std::pair<TeamId, PlayerIds<MAX_PLAYERS_PER_TEAM>>>,
       MAX_TEAMS>;
@@ -191,20 +179,18 @@ public:
     static constexpr float ENTRANCE_SPEED = 50.0f;
   };
 
-  enum class Phase : uint8_t { PLAYERS_FIGHT, END };
-
   void start(const TeamRosters &ids);
 
   void removePlayer(PlayerId player_id);
 
 private:
   std::array<std::optional<Team>, MAX_TEAMS> teams_{};
-  Phase phase_{Phase::PLAYERS_FIGHT};
+  PvPGamePhase phase_{PvPGamePhase::PLAYERS_FIGHT};
   BulletsPool bullets_pool_;
 
-  static constexpr float PLAYERS_SPACING = 30.0f;
+  static constexpr auto PLAYERS_SPACING = 30.0f;
   static constexpr int POINTS_PER_HIT = 50;
-  static constexpr int INITIAL_LIVES = 10;
+  static constexpr uint8_t INITIAL_LIVES = 10;
 
 private:
   void setGameState(PvPGameState &state);
@@ -215,7 +201,7 @@ public:
     requires(N > 0 && N <= MAX_TEAMS * MAX_PLAYERS_PER_TEAM)
   void step(PvPGameState &state, const PlayerInputs<N> &inputs, float dt) {
     switch (phase_) {
-    case Phase::PLAYERS_FIGHT: {
+    case PvPGamePhase::PLAYERS_FIGHT: {
       for (auto &team : teams_) {
         if (team) {
           for (auto &player : team->players) {
@@ -267,7 +253,7 @@ public:
           }
         }
 
-        phase_ = Phase::END;
+        phase_ = PvPGamePhase::END;
       } else {
         TeamId winningTeamId{0};
 
@@ -293,14 +279,14 @@ public:
             }
           }
 
-          phase_ = Phase::END;
+          phase_ = PvPGamePhase::END;
         }
       }
 
       break;
     }
 
-    case Phase::END: {
+    case PvPGamePhase::END: {
       break;
     }
     }

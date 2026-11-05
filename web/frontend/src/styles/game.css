@@ -135,7 +135,7 @@ body {
   max-height: 100vh;
 }
 
-#layout[data-screen]:is([data-screen="menu"], [data-screen="end"]) {
+#layout[data-screen]:is([data-screen="menu"], [data-screen="lobby"], [data-screen="end"]) {
   visibility: hidden;
 }
 
@@ -316,4 +316,152 @@ body {
 
 .end-actions {
   margin-top: calc(var(--px) * 8);
+  transition: opacity 160ms steps(2);
+}
+
+/* Not clickable yet (end-screen.ts arms them after a moment): say so. */
+#end-overlay[inert] .end-actions {
+  opacity: 0.35;
+}
+
+/* --- Lobby (ui/lobby.ts) ------------------------------------------------ */
+
+#lobby-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.lobby-card {
+  min-width: min(480px, 90%);
+  text-align: center;
+}
+
+.lobby-title {
+  margin: 0 0 calc(var(--px) * 2);
+  font-size: 48px;
+  color: var(--accent);
+  text-shadow:
+    4px 4px 0 rgba(0, 0, 0, 0.6),
+    0 0 16px var(--accent);
+}
+
+.lobby-subtitle {
+  margin: 0 0 calc(var(--px) * 6);
+  color: var(--ink-dim);
+}
+
+.lobby-groups {
+  display: flex;
+  gap: calc(var(--px) * 6);
+  justify-content: center;
+}
+
+/* PvP: each team in its own colour. */
+.lobby-group {
+  --accent: var(--neon-cyan);
+  flex: 1;
+  min-width: 260px;
+
+  &:nth-child(2) {
+    --accent: var(--neon-pink);
+  }
+}
+
+.lobby-group-name {
+  margin: 0 0 calc(var(--px) * 3);
+  font-size: 20px;
+  color: var(--accent);
+
+  &:empty {
+    display: none;
+  }
+}
+
+.lobby-seats {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: calc(var(--px) * 3);
+}
+
+/* Name, "You", state on one line; this machine's buttons below. */
+.lobby-seat {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: calc(var(--px) * 2) calc(var(--px) * 3);
+  padding: calc(var(--px) * 2) calc(var(--px) * 3);
+  border: var(--px) solid color-mix(in srgb, var(--accent) 45%, black);
+  background: rgba(0, 0, 0, 0.35);
+  text-align: left;
+
+  & .lobby-seat-tag {
+    display: none;
+    font-size: 13px;
+    padding: 2px 6px;
+    color: var(--bg-deep);
+    background: var(--accent);
+  }
+
+  & .lobby-seat-state {
+    font-size: 14px;
+    color: var(--ink-dim);
+    text-transform: uppercase;
+  }
+
+  & .lobby-seat-actions {
+    grid-column: 1 / -1;
+    display: flex;
+    gap: calc(var(--px) * 2);
+
+    &:empty {
+      display: none;
+    }
+  }
+
+  /* Smaller than menu buttons: they sit inside a seat. */
+  & .btn {
+    --gutter: calc(var(--px) * 6);
+    min-width: 0;
+    flex: 1;
+    font-size: 16px;
+    padding: calc(var(--px) * 2) var(--gutter);
+  }
+
+  &.mine {
+    border-color: var(--accent);
+
+    & .lobby-seat-tag {
+      display: inline;
+    }
+  }
+
+  &.ready .lobby-seat-state {
+    color: var(--neon-gold);
+    text-shadow: 0 0 8px var(--neon-gold);
+  }
+
+  &.open {
+    border-style: dashed;
+    color: var(--ink-dim);
+    opacity: 0.6;
+  }
+}
+
+.lobby-status {
+  margin: calc(var(--px) * 6) 0 0;
+  color: var(--ink-dim);
+
+  &:empty {
+    display: none;
+  }
+}
+
+.lobby-actions {
+  margin-top: calc(var(--px) * 6);
 }

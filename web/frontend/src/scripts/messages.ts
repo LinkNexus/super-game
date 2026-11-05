@@ -13,7 +13,8 @@ type Bound = MainModule;
 
 export type ServerMessageType = Bound["ServerMessageType"];
 export type ClientMessageType = Bound["ClientMessageType"];
-export type CoopGamePhase = Bound["CoopGamePhase"][keyof Bound["CoopGamePhase"]];
+export type CoopGamePhase =
+  Bound["CoopGamePhase"][keyof Bound["CoopGamePhase"]];
 export type PvPGamePhase = Bound["PvPGamePhase"][keyof Bound["PvPGamePhase"]];
 
 /// shared::Button (messages.h), a bitmask: OR them together.
@@ -40,8 +41,8 @@ export type PlayerId = number;
 /// PlayerIds<N>: N slots, null where no player.
 export type PlayerIds = (PlayerId | null)[];
 
-/// shared::Vec2D (math_utils.h).
-export interface Vec2D {
+/// mathlib::Vec2f (vendor/mathlib, JSON from messages.h).
+export interface Vec2 {
   x: number;
   y: number;
 }
@@ -59,6 +60,12 @@ export type PlayerInputs = (PlayerInput | null)[];
 
 export interface ReadyMessage {
   is_ready: boolean;
+  player_id: PlayerId;
+}
+
+export interface SwitchTeamMessage {
+  player_id: PlayerId;
+  target_team_id: number;
 }
 
 // --- Server -> client: lobby -------------------------------------------
@@ -78,8 +85,13 @@ export interface CoopGameLobbyUpdate {
   game_started: boolean;
 }
 
+export interface TeamInfo {
+  id: number;
+  players: (PlayerInfo | null)[];
+}
+
 export interface PvPGameLobbyUpdate {
-  teams: ((PlayerInfo | null)[] | null)[];
+  teams: (TeamInfo | null)[];
   team_size: number;
   game_started: boolean;
 }
@@ -87,7 +99,7 @@ export interface PvPGameLobbyUpdate {
 // --- Server -> client: game state --------------------------------------
 
 export interface PlayerState {
-  position: Vec2D;
+  position: Vec2;
   lives: number;
   points: number;
   orientation: number;
@@ -96,30 +108,28 @@ export interface PlayerState {
 }
 
 export interface BulletState {
-  position: Vec2D;
+  position: Vec2;
   type: BulletType;
-  /// 0/1 (uint8_t on the wire): whether this pool slot is in flight.
-  active: number;
+  /// Whether this pool slot is in flight.
+  active: boolean;
 }
 
 export interface BossState {
-  position: Vec2D;
-  /// 0/1 (uint8_t on the wire).
-  active: number;
+  position: Vec2;
+  active: boolean;
   health: number;
   max_health: number;
 }
 
-/// One EnemiesPoolState slot: [alive (0/1), EnemyType], COLS * MAX_ROWS of them.
-export type EnemySlot = [alive: number, type: EnemyType];
+/// One EnemiesPoolState slot: [alive, EnemyType], COLS * MAX_ROWS of them.
+export type EnemySlot = [alive: boolean, type: EnemyType];
 
 export interface CoopGameState {
   phase: CoopGamePhase;
   bullets: BulletState[];
   players: (PlayerState | null)[];
   enemies: EnemySlot[];
-  enemies_offset_x: number;
-  enemies_offset_y: number;
+  enemies_offset: Vec2;
   boss: BossState;
 }
 
@@ -161,6 +171,11 @@ export type GameState =
   | { mode: "coop"; state: CoopGameState }
   | { mode: "pvp"; state: PvPGameState };
 
+export type LobbyUpdate =
+  | { mode: "coop"; update: CoopGameLobbyUpdate }
+  | { mode: "pvp"; update: PvPGameLobbyUpdate };
+
 export type ClientMessage =
   | Envelope<ClientMessageType["PLAYER_INPUT"], PlayerInputs>
-  | Envelope<ClientMessageType["READY"], ReadyMessage>;
+  | Envelope<ClientMessageType["READY"], ReadyMessage>
+  | Envelope<ClientMessageType["SWITCH_TEAM"], SwitchTeamMessage>;

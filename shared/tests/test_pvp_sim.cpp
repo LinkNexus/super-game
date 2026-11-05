@@ -4,7 +4,6 @@
 
 #include "test_harness.h"
 
-#include "shared/aliases.h"
 #include "shared/constants.h"
 #include "shared/helpers.h"
 #include "shared/messages.h"
@@ -19,9 +18,7 @@ using namespace shared;
 
 namespace {
 
-using Phase = PvPGameSim::Phase;
-using Outcome = PvPGameSim::TeamOutcome;
-using TeamId = PvPGameSim::TeamId;
+using Phase = PvPGamePhase;
 using PvPInputs = PlayerInputs<MAX_TEAMS * MAX_PLAYERS_PER_TEAM>;
 using TeamRoster = std::pair<TeamId, PlayerIds<MAX_PLAYERS_PER_TEAM>>;
 
@@ -29,15 +26,10 @@ Phase phaseOf(const PvPGameState &state) {
   return static_cast<Phase>(state.phase);
 }
 
-Outcome outcomeOf(const TeamState &team) {
-  return static_cast<Outcome>(team.outcome);
-}
-
 /// Two teams, each roster given as the ids on that team. Team ids are 1-based
 /// because the sim indexes an internal status array by `id - 1`.
-PvPGameSim::TeamRosters
-rosters(const PlayerIds<MAX_PLAYERS_PER_TEAM> &first,
-        const PlayerIds<MAX_PLAYERS_PER_TEAM> &second) {
+PvPGameSim::TeamRosters rosters(const PlayerIds<MAX_PLAYERS_PER_TEAM> &first,
+                                const PlayerIds<MAX_PLAYERS_PER_TEAM> &second) {
   PvPGameSim::TeamRosters ids{};
   ids[0] = TeamRoster{1, first};
   ids[1] = TeamRoster{2, second};
@@ -377,8 +369,8 @@ TEST(pvp_last_team_standing_wins_once_the_other_empties) {
   const auto *winner = teamById(state, 2);
   REQUIRE(loser != nullptr);
   REQUIRE(winner != nullptr);
-  CHECK_EQ(outcomeOf(*winner), Outcome::WON);
-  CHECK_EQ(outcomeOf(*loser), Outcome::LOST);
+  CHECK_EQ(winner->outcome, TeamOutcome::WON);
+  CHECK_EQ(loser->outcome, TeamOutcome::LOST);
 }
 
 } // namespace

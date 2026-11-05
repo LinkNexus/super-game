@@ -10,3 +10,6 @@
 [submodule "vendor/mbedtls"]
 	path = vendor/mbedtls
 	url = https://github.com/Mbed-TLS/mbedtls
+[submodule "vendor/mathlib"]
+	path = vendor/mathlib
+	url = https://github.com/LinkNexus/mathlib-cpp

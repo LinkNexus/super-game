@@ -1,10 +1,11 @@
 #pragma once
 
 #include "shared/constants.h"
-#include "shared/math_utils.h"
 #include "shared/sim/bullet_sim.h"
+#include "shared/types.h"
 #include <array>
 #include <cstdint>
+#include <mathlib.hpp>
 
 namespace shared {
 
@@ -21,46 +22,46 @@ enum class BossPattern {
 /// Full internal boss state, owned by GameSim. Health/bullet counts scale
 /// with player count (see init()) so co-op stays challenging.
 struct BossSimState {
-  Vec2D position;
-  int32_t health;
+  mathlib::Vec2f position;
+  BossHealth health;
   /// Health at the start of the fight for the current player count; used
   /// both for phase-switch thresholds (as a fraction, see
   /// MIN_LP_PER_SWITCH) and for the client's health-bar fill ratio.
-  int32_t max_health;
+  BossHealth max_health;
   bool active;
   /// 1-indexed fight phase (1..PHASES_COUNT), advances as health drops
   /// below each MIN_LP_PER_SWITCH threshold.
-  int8_t current_phase;
+  uint8_t current_phase;
   float pattern_switching_cooldown;
   BossPattern shooting_pattern;
 
   float phase2_shooting_cooldown;
-  int phase2_bullets_shot;
+  BulletCount phase2_bullets_shot;
 
-  uint8_t spread_shot_bullets_count;
-  uint8_t successive_shots_bullets_count;
+  BulletCount spread_shot_bullets_count;
+  BulletCount successive_shots_bullets_count;
 
   /// Horizontal movement direction: +1 or -1.
-  int direction;
+  int8_t direction;
 
   static constexpr float WIDTH = 100.0f;
   static constexpr float HEIGHT = 87.0f;
 
   /// Base health for a single player; scaled by player count in init().
-  static constexpr int INITIAL_LP = 100;
-  static constexpr float INITIAL_POSITION_Y = SCREEN_HEIGHT + 30.0f;
-  static constexpr float FINAL_POSITION_Y = SCREEN_HEIGHT - 80.0f;
-  static constexpr float INITIAL_DESCENT_SPEED = 70.0f;
-  static constexpr float CYCLE_SPEED = 400.0f;
+  static constexpr BossHealth INITIAL_LP = 100;
+  static constexpr auto INITIAL_POSITION_Y = SCREEN_HEIGHT + 30.0f;
+  static constexpr auto FINAL_POSITION_Y = SCREEN_HEIGHT - 80.0f;
+  static constexpr auto INITIAL_DESCENT_SPEED = 70.0f;
+  static constexpr auto CYCLE_SPEED = 400.0f;
 
-  static constexpr float BULLETS_SPEED = BulletSimState::SPEED * 1.5f;
+  static constexpr auto BULLETS_SPEED = BulletSimState::SPEED * 1.5f;
 
-  static constexpr int MAX_SPREAD_SHOT_BULLETS = 16;
-  static constexpr int MAX_SUCCESSIVE_SHOTS_BULLETS = 12;
+  static constexpr BulletCount MAX_SPREAD_SHOT_BULLETS = 16;
+  static constexpr BulletCount MAX_SUCCESSIVE_SHOTS_BULLETS = 12;
 
-  static constexpr float PHASE2_SHOOTING_COOLDOWN = 0.3f;
+  static constexpr auto PHASE2_SHOOTING_COOLDOWN = 0.3f;
 
-  static constexpr int PHASES_COUNT = 3;
+  static constexpr uint8_t PHASES_COUNT = 3;
   /// Health fractions (of `max_health`) at which the fight advances to the
   /// next phase - fractions rather than absolute values so phase timing
   /// stays proportional regardless of player-count scaling.
@@ -71,7 +72,8 @@ struct BossSimState {
 
   /// Maps active player count to how many bullets a SPREAD_SHOT fires.
   /// Falls back to MAX_SPREAD_SHOT_BULLETS for any count not listed here.
-  static constexpr std::array<std::pair<uint8_t, int>, MAX_PLAYERS_COOP>
+  static constexpr std::array<std::pair<PlayerCount, BulletCount>,
+                              MAX_PLAYERS_COOP>
       SPREAD_SHOT_BULLETS_COUNT_PER_PLAYERS_COUNT = {{
           {MAX_PLAYERS_COOP, MAX_SPREAD_SHOT_BULLETS},
           {MAX_PLAYERS_COOP - 1, MAX_SPREAD_SHOT_BULLETS - 2},
@@ -80,7 +82,8 @@ struct BossSimState {
       }};
   /// Maps active player count to how many bullets a SUCCESSIVE_SHOTS burst
   /// fires. Falls back to MAX_SUCCESSIVE_SHOTS_BULLETS otherwise.
-  static constexpr std::array<std::pair<uint8_t, int>, MAX_PLAYERS_COOP>
+  static constexpr std::array<std::pair<PlayerCount, BulletCount>,
+                              MAX_PLAYERS_COOP>
       SUCCESSIVE_SHOTS_BULLETS_COUNT_PER_PLAYERS_COUNT = {{
           {MAX_PLAYERS_COOP, MAX_SUCCESSIVE_SHOTS_BULLETS},
           {MAX_PLAYERS_COOP - 1, MAX_SUCCESSIVE_SHOTS_BULLETS - 2},
@@ -95,7 +98,7 @@ struct BossSimState {
 
   /// Resets the boss for a new fight, scaling health and bullet counts by
   /// @p playersCount.
-  void init(uint8_t playersCount);
+  void init(PlayerCount playersCount);
 
   /// Advances the entrance descent from off-screen to `FINAL_POSITION_Y`.
   void stepEntrance(float dt);
@@ -106,5 +109,8 @@ struct BossSimState {
   /// Advances one tick of the fight: side-to-side movement, phase
   /// progression based on remaining health, and attack pattern firing.
   void step(float dt, std::array<BulletSimState, MAX_BULLETS> &bullets_pool);
+
+  [[nodiscard]]
+  mathlib::Rectanglef getHitBox() const;
 };
 } // namespace shared

@@ -56,6 +56,22 @@
     </div>
   </div>
 
+  <div id="lobby-overlay" hidden>
+    <div class="lobby-card panel">
+      <h1 class="lobby-title"></h1>
+      <p class="lobby-subtitle"></p>
+      <div class="lobby-groups"></div>
+      <p class="lobby-status"></p>
+
+      <div class="menu lobby-actions">
+        <button type="button" class="btn secondary" data-action="leave" data-key="leave">Leave</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toasts (ui/toast.ts): above every overlay, never focused -->
+  <div id="toasts"></div>
+
   <template id="player-hud-template">
     <div class="player-hud">
       <div class="name"></div>
@@ -80,6 +96,22 @@
   </template>
 
 
+  <!-- Lobby: one group per team (coop is a single, unnamed one), one seat per slot -->
+  <template id="lobby-group-template">
+    <section class="lobby-group">
+      <h2 class="lobby-group-name"></h2>
+      <ol class="lobby-seats"></ol>
+    </section>
+  </template>
+
+  <template id="lobby-seat-template">
+    <li class="lobby-seat">
+      <span class="lobby-seat-name"></span>
+      <span class="lobby-seat-tag">You</span>
+      <span class="lobby-seat-state"></span>
+      <div class="lobby-seat-actions"></div>
+    </li>
+  </template>
 
   <script type="module" src="/src/main.ts"></script>
 </body>

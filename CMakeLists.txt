@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.20)
+cmake_minimum_required(VERSION 3.25)
 project(supergame VERSION 0.1.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 23)
@@ -6,6 +6,11 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+
+# Debug must say -O0 out loud: nix's clang wrapper adds -O2 (fortify hardening)
+# to any command without an -O flag, and CMake's Debug only passes -g.
+string(APPEND CMAKE_C_FLAGS_DEBUG " -O0")
+string(APPEND CMAKE_CXX_FLAGS_DEBUG " -O0")
 
 # Warning flags for this project's own three targets. Carried on an INTERFACE
 # target that each target links, rather than a directory-scoped
@@ -16,10 +21,11 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 #
 # -Werror is on (L64): the warning list is clear, so any new warning in our own
 # code fails the build rather than scrolling past. Two things make that safe to
-# leave on. Vendored include paths are marked SYSTEM (see
-# supergame_mark_vendored_system below, plus the uwebsockets and nlohmann_json
-# targets), so a warning in raylib.h or json.hpp compiled inside one of our
-# translation units is not ours to fail on. And vendored *targets* never link
+# leave on. Vendored include paths are SYSTEM (`add_subdirectory(... SYSTEM)`
+# for vendored CMake projects, SYSTEM on target_include_directories for the
+# uwebsockets and nlohmann_json targets we define ourselves), so a warning in
+# raylib.h or json.hpp compiled inside one of our translation units is not ours
+# to fail on. And vendored *targets* never link
 # this interface, so raylib compiling its own stb_vorbis.c is unaffected.
 #
 # If a new warning ever has to be tolerated temporarily, suppress that one
@@ -31,40 +37,6 @@ if(MSVC)
 else()
     target_compile_options(supergame-warnings INTERFACE -Wall -Wextra -Werror)
 endif()
-
-# Marks a vendored target's interface include directories as SYSTEM, so that
-# -Wall -Wextra (and, once L64 lands, -Werror) stay off *their* headers when
-# those headers are compiled as part of *our* translation units.
-#
-# supergame-warnings already keeps our flags off vendored *targets* - but a
-# vendored header pulled into one of our .cpp files is compiled with our flags,
-# so the suppression has to travel with the include path instead. Without this,
-# -Werror would fail on warnings in raylib.h or IXWebSocket.h that aren't ours
-# to fix.
-#
-# `add_subdirectory(... SYSTEM)` and the SYSTEM target property both do this in
-# one line, but they are CMake 3.25+ and this project's floor is 3.20 (see
-# cmake_minimum_required above), so copy the interface includes across by hand.
-# Targets we define ourselves (uwebsockets, nlohmann_json) pass SYSTEM straight
-# to target_include_directories and don't need this.
-function(supergame_mark_vendored_system target)
-    if(NOT TARGET ${target})
-        message(AUTHOR_WARNING
-            "supergame_mark_vendored_system: no target '${target}'")
-        return()
-    endif()
-
-    get_target_property(_aliased ${target} ALIASED_TARGET)
-    if(_aliased)
-        set(target ${_aliased})
-    endif()
-
-    get_target_property(_includes ${target} INTERFACE_INCLUDE_DIRECTORIES)
-    if(_includes)
-        set_target_properties(${target} PROPERTIES
-            INTERFACE_SYSTEM_INCLUDE_DIRECTORIES "${_includes}")
-    endif()
-endfunction()
 
 # Unit tests cover the two headless halves of the codebase: shared/ (the
 # simulation) and server/ (matchmaking and connection lifetime, via
@@ -139,8 +111,7 @@ if(BUILD_CLIENT)
     set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
     set(BUILD_GAMES OFF CACHE BOOL "" FORCE)
 
-    add_subdirectory(vendor/raylib)
-    supergame_mark_vendored_system(raylib)
+    add_subdirectory(vendor/raylib SYSTEM)
 
     # IXWebSocket (client-side WebSocket connection)
     include(vendor/ixwebsocket.cmake)
@@ -153,6 +124,9 @@ endif()
 
 # nlohmann/json (message serialization)
 include(vendor/json.cmake)
+
+# mathlib-cpp (Vec2/Vec3), needed by shared/ and so by every build
+include(vendor/mathlib.cmake)
 
 #Targets
 add_subdirectory(shared)
