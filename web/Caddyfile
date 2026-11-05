@@ -1,0 +1,40 @@
+# Front door for supergame.levynkeneng.dev (L41). Dokploy's Traefik terminates
+# TLS and sends everything here; this serves the web client and passes the
+# game server's traffic through to it.
+{
+	admin off
+	auto_https off
+}
+
+:80 {
+	# The game server: the web client's WebSocket (/ws), the probes CI and
+	# Docker poll, and any other WebSocket upgrade - v2.0.0 desktop clients
+	# connect to `/`, not /ws.
+	@server path /ws /ws/* /health /version
+	@upgrade header_regexp Upgrade (?i)^websocket$
+
+	handle @server {
+		reverse_proxy supergame-server:9001
+	}
+	handle @upgrade {
+		reverse_proxy supergame-server:9001
+	}
+
+	handle /web-version {
+		respond {env.SUPERGAME_WEB_VERSION}
+	}
+
+	handle {
+		root * /srv
+		encode zstd gzip
+
+		# Vite content-hashes everything under /assets; the rest (index.html,
+		# sprites, sounds) keeps its name across deploys.
+		@hashed path /assets/*
+		@unhashed not path /assets/*
+		header @hashed Cache-Control "public, max-age=31536000, immutable"
+		header @unhashed Cache-Control "no-cache"
+
+		file_server
+	}
+}
