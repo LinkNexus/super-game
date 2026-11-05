@@ -15,9 +15,10 @@ entries appear here as one-line stubs so the numbering stays readable.
 ## Where things stand — 2026-11-05 (run on branch `l39`)
 
 **Now: L39 + L74 done and hand-checked** (desktop ↔ web in one PvP match works), pushed as
-`l39` (`1e0020c`), PR not yet opened. Local dev: `supergame-server` listens on
+`l39`, PR open. Local dev: `supergame-server` listens on
 `ws://localhost:9001`. **Left:**
-1. `windows-client-release` build (`nix develop .#mingw`) — not run this time. Then PR.
+1. ~~`windows-client-release` build~~ — builds clean (2026-11-05); the `.exe` still needs a
+   first launch on a real Windows machine (no Wine here).
 2. ~~Canvas too small on narrow pages, jumping bigger with the boss bar~~ — fixed (2026-11-05):
    a %-wide canvas counted ~0 in the grid's `auto` column, so the side panels took their 240 px
    first and only `#boss-bar`'s fixed 600 px gave the field a real minimum. `#game` is now sized
