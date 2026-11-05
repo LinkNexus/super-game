@@ -121,6 +121,16 @@
         "BUILD_SERVER": "OFF",
         "BUILD_TESTS": "ON"
       }
+    },
+    {
+      "name": "web-release",
+      "displayName": "Web: WASM sim only (Release, Emscripten)",
+      "description": "What L41 deploys (web/Dockerfile). Same as `web` minus the tests, optimized.",
+      "inherits": "web",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "BUILD_TESTS": "OFF"
+      }
     }
   ],
   "buildPresets": [
@@ -168,6 +178,10 @@
     {
       "name": "web",
       "configurePreset": "web"
+    },
+    {
+      "name": "web-release",
+      "configurePreset": "web-release"
     }
   ],
   "testPresets": [

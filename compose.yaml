@@ -1,4 +1,4 @@
-# For deploying supergame-server as a Dokploy "Compose" app in "Docker
+# For deploying supergame-server + the web client (L41) as a Dokploy "Compose" app in "Docker
 # Compose" mode (plain `docker compose up`, not Docker Stack/Swarm) - avoids
 # the Swarm VIP endpoint-mode issue that "Application"-type (always Swarm)
 # deployments hit on this Proxmox LXC-hosted VPS. See ROADMAP.md L17.
@@ -9,14 +9,18 @@
 # (Method 1), not hardcoded here - Dokploy injects the necessary Traefik
 # labels and network attachment itself at deploy time.
 #
-# IMAGE SOURCE: ghcr.io, pushed by the `docker-server` job in
-# .github/workflows/ci.yml - which is also the job that fires the Dokploy
-# redeploy webhook. Keeping those two in the same pipeline is the point: a
-# redeploy now always pulls the image that same run just published.
+# IMAGE SOURCE: ghcr.io, pushed by the `docker-server` and `docker-web` jobs in
+# .github/workflows/ci.yml; its `deploy` job fires the Dokploy redeploy webhook
+# only after both pushed, so a redeploy always pulls images that same run
+# published.
+#
+# ROUTING (L41): the Dokploy domain points at `web` (port 80), not `server`.
+# Caddy in `web` serves the client and proxies /ws, /health, /version and any
+# WebSocket upgrade to the server - see web/Caddyfile. `server` needs no domain.
 #
 # ONE-TIME SETUP: ghcr packages default to *private* even for a public repo,
-# so the VPS cannot pull this until either
-#   - the package is made public (GitHub -> Packages -> supergame-server ->
+# so the VPS cannot pull a new one (super-game-web did this at L41) until either
+#   - the package is made public (GitHub -> Packages -> <package> ->
 #     Package settings -> Change visibility -> Public), or
 #   - Dokploy is given a registry credential (a PAT with `read:packages`)
 # Without one of those, `docker compose up` fails with "denied".
@@ -29,6 +33,26 @@ services:
     # logs are the first place to look if a redeploy comes up unreachable.
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:9001/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    # Caddy proxies to this alias, not to `server`: `web` also sits on the
+    # shared dokploy-network (it has the domain), where another app's `server`
+    # could answer that name.
+    networks:
+      default:
+        aliases: [supergame-server]
+
+  web:
+    image: ghcr.io/linknexus/super-game-web:latest
+    restart: unless-stopped
+    depends_on: [server]
+    # Listed explicitly so the default network survives Dokploy adding
+    # dokploy-network for the domain - Caddy reaches the server over it.
+    networks: [default]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/web-version"]
       interval: 30s
       timeout: 3s
       retries: 3

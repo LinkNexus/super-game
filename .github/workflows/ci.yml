@@ -95,8 +95,8 @@ jobs:
   # suite run under node: proves the simulation behaves the same on wasm32
   # (32-bit size_t/long) as natively, and that supergame-web-sim links. Same
   # emscripten as flake.nix's `web` shell - bump together. Only vendor/mathlib:
-  # the preset builds only shared/, its tests and the web target. Deploying the
-  # web client is L41; this is a check only, not in any `needs:`.
+  # the preset builds only shared/, its tests and the web target. docker-web
+  # `needs:` it, so a failing wasm test blocks a deploy.
   test-web:
     runs-on: ubuntu-latest
     container:
@@ -294,14 +294,14 @@ jobs:
 
   # The only server build: the Dockerfile compiles it (Release, trixie GCC),
   # so what CI checks is exactly what ships. Runs on every event so PRs get
-  # the compile check; pushing the image and the redeploy happen only on a
-  # master push or a version tag - never from a PR (which may come from a fork
-  # with no registry access anyway). Debug-only code (asserts) in shared/ and
-  # the server lib is still compiled by test-shared.
+  # the compile check; pushing the image happens only on a master push or a
+  # version tag - never from a PR (which may come from a fork with no registry
+  # access anyway). The redeploy is the `deploy` job's. Debug-only code
+  # (asserts) in shared/ and the server lib is still compiled by test-shared.
   docker-server:
     runs-on: ubuntu-latest
-    # Gated on the tests: this job fires the Dokploy redeploy webhook, so a
-    # failing test must not be able to reach production.
+    # Gated on the tests: its image is what `deploy` ships, so a failing test
+    # must not be able to reach production.
     needs: [test-shared]
     env:
       DEPLOY: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v')) }}
@@ -355,32 +355,110 @@ jobs:
           push: ${{ env.DEPLOY == 'true' }}
           build-args: GIT_SHA=${{ github.sha }}
           tags: ${{ env.IMAGE_TAGS }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # Own scope: docker-web caches through the same gha backend, and a
+          # shared scope would make the two jobs evict each other.
+          cache-from: type=gha,scope=server
+          cache-to: type=gha,mode=max,scope=server
 
-      # The VPS's Dokploy deployment tracks :latest - once a fresh image
-      # lands (master push or a version tag, both retag :latest above),
-      # this tells it to pull and redeploy. The URL itself is a bearer
-      # credential (anyone with it can trigger a redeploy), so it's a
-      # secret, never a literal in this public repo.
-      - name: Trigger Dokploy redeploy
+  # The web client image (web/Dockerfile): Release wasm + Vite bundle, served
+  # by Caddy, which also fronts the server (web/Caddyfile). Same build-on-PR,
+  # push-on-master/tag split as docker-server. Only vendor/mathlib: the wasm
+  # build needs nothing else from vendor/.
+  docker-web:
+    runs-on: ubuntu-latest
+    needs: [test-web]
+    env:
+      DEPLOY: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v')) }}
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      - name: Init mathlib submodule
+        run: git submodule update --init vendor/mathlib
+
+      - name: Compute image tags
+        run: |
+          IMAGE_NAME=$(echo "ghcr.io/${{ github.repository }}-web" | tr '[:upper:]' '[:lower:]')
+          {
+            echo "IMAGE_TAGS<<TAGEOF"
+            echo "${IMAGE_NAME}:${GITHUB_SHA}"
+            echo "${IMAGE_NAME}:latest"
+            if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+              echo "${IMAGE_NAME}:${GITHUB_REF_NAME}"
+            fi
+            echo "TAGEOF"
+          } >> "$GITHUB_ENV"
+
+      - uses: docker/login-action@v3
         if: env.DEPLOY == 'true'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: web/Dockerfile
+          push: ${{ env.DEPLOY == 'true' }}
+          build-args: GIT_SHA=${{ github.sha }}
+          tags: ${{ env.IMAGE_TAGS }}
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,mode=max,scope=web
+
+  # One Dokploy compose app runs both images (compose.yaml), and one webhook
+  # redeploys it - so this waits for both pushes, or the compose could pull a
+  # :latest the other job hasn't replaced yet.
+  deploy:
+    runs-on: ubuntu-latest
+    needs: [docker-server, docker-web]
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v'))
+    steps:
+      # The VPS pulls anonymously, and a new ghcr package starts private. A
+      # failed pull would abort `docker compose up` on the VPS, so check first
+      # and say what to do rather than fire a redeploy that cannot work.
+      - name: Check both images are publicly pullable
+        run: |
+          for pkg in super-game super-game-web; do
+            repo=$(echo "${{ github.repository_owner }}/$pkg" | tr '[:upper:]' '[:lower:]')
+            token=$(curl -sS "https://ghcr.io/token?scope=repository:$repo:pull" | sed -n 's/.*"token":"\([^"]*\)".*/\1/p')
+            status=$(curl -s -o /dev/null -w '%{http_code}' \
+              -H "Authorization: Bearer $token" \
+              -H "Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.v2+json" \
+              "https://ghcr.io/v2/$repo/manifests/$GITHUB_SHA")
+            if [ "$status" != 200 ]; then
+              echo "::error::ghcr.io/$repo:$GITHUB_SHA is not anonymously pullable (HTTP $status). Make the package public: GitHub -> Packages -> $pkg -> Package settings -> Change visibility. Then re-run this job."
+              exit 1
+            fi
+          done
+
+      # The URL itself is a bearer credential (anyone with it can trigger a
+      # redeploy), so it's a secret, never a literal in this public repo.
+      - name: Trigger Dokploy redeploy
         run: curl -fsS "${{ secrets.DOKPLOY_DEPLOY_WEBHOOK_URL }}"
 
       # The webhook returns before the redeploy finishes, so /health alone
       # could be answered by the old container. Wait until prod reports this
-      # run's commit: catches both "site unreachable" (e.g. the 2026-10-24
-      # missing Dokploy domain) and "new container never came up".
+      # run's commit, from both containers: /version is the server (through
+      # Caddy), /web-version is Caddy itself. Catches "site unreachable" (e.g.
+      # the 2026-10-24 missing Dokploy domain), "new container never came up",
+      # and a Dokploy domain still pointing at the server instead of `web`.
       - name: Wait for prod to serve this commit
-        if: env.DEPLOY == 'true'
         run: |
           for attempt in $(seq 1 30); do
-            served=$(curl -fsS -m 5 https://supergame.levynkeneng.dev/version || true)
-            if [ "$served" = "$GITHUB_SHA" ]; then
-              echo "prod serves $served"
+            server=$(curl -fsS -m 5 https://supergame.levynkeneng.dev/version || true)
+            web=$(curl -fsS -m 5 https://supergame.levynkeneng.dev/web-version || true)
+            if [ "$server" = "$GITHUB_SHA" ] && [ "$web" = "$GITHUB_SHA" ]; then
+              echo "prod serves $GITHUB_SHA (server + web)"
               exit 0
             fi
-            echo "attempt $attempt: prod serves '${served:-<no answer>}', want $GITHUB_SHA"
+            echo "attempt $attempt: server '${server:-<no answer>}', web '${web:-<no answer>}', want $GITHUB_SHA"
             sleep 10
           done
           exit 1
@@ -398,6 +476,7 @@ jobs:
         build-client-macos,
         build-client-windows,
         docker-server,
+        docker-web,
       ]
     if: startsWith(github.ref, 'refs/tags/v')
     permissions:

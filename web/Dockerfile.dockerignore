@@ -1,0 +1,17 @@
+# Used instead of the root .dockerignore when building web/Dockerfile. The wasm
+# build needs vendor/mathlib, vendor/json and the vendor/*.cmake wiring; the
+# rest of vendor/ is the native client's and server's.
+vendor/raylib
+vendor/uWebSockets
+vendor/mbedtls
+vendor/ixwebsocket
+
+build/
+client/
+server/
+.git
+.direnv
+**/node_modules
+web/frontend/dist
+# Points at ws://localhost:9001; Vite would load it in a production build too.
+web/frontend/.env.local
