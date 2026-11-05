@@ -195,11 +195,13 @@ jobs:
           retention-days: 14
 
   build-client-macos:
+    # macos-15: GitHub stopped accepting macos-14 jobs (2026-11-05, "configuration
+    # 'macos-14-arm64-us-default' is not supported").
     # Apple Silicon (arm64) hosted runner - a genuine native build, not a
     # cross-compile trick like the Windows job below. Builds natively for
     # the runner's own arch only; producing an Intel or universal binary
     # too would need an explicit CMAKE_OSX_ARCHITECTURES, not done here.
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
         with:
