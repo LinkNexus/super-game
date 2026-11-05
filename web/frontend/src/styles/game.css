@@ -49,9 +49,9 @@ body {
 
 #game {
   display: block;
-  width: min(1000px, 100%);
+  /* From the viewport, not 100%: a %-wide canvas counts as ~0 in the auto column. */
+  width: min(1000px, 100vw - 2 * 140px - 4 * 24px, (100vh - 120px) * 1.25);
   aspect-ratio: 1000 / 800;
-  max-height: calc(100vh - 120px);
   box-shadow:
     0 0 0 1px rgba(255, 255, 255, 0.15),
     0 0 40px rgba(80, 120, 255, 0.15);
@@ -67,8 +67,7 @@ body {
   display: flex;
   align-items: center;
   gap: 12px;
-  width: 600px;
-  max-width: 100%;
+  width: min(600px, 100%);
 
   & .track {
     flex: 1;
@@ -123,6 +122,11 @@ body {
   #center {
     grid-column: 1 / -1;
     grid-row: 1;
+  }
+
+  /* The side panels sit below the field here, so they take no width. */
+  #game {
+    width: min(1000px, 100vw - 2 * 24px, (100vh - 120px) * 1.25);
   }
 }
 

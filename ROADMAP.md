@@ -14,14 +14,17 @@ entries appear here as one-line stubs so the numbering stays readable.
 
 ## Where things stand — 2026-11-05 (run on branch `l39`)
 
-**Now: L39 + L74 code-complete** (online mode on web), branch `l39` off `origin/master`, not yet
-pushed. Local dev: `supergame-server` listens on `ws://localhost:9001`. Responsive/mobile is a
-later, separate pass (see L38). **Left — manual checks only, then PR and close L39/L74:**
-1. **Desktop against the server** — built clean, never run online: per-player ready (P1 SPACE,
-   P2 W), team switch (P1 ←/→, P2 A/D, no wrap), the per-player key hints in the lobby, and
-   `EntityDesigner::playerColor` (same rule as the web's `playerColor`).
-2. **Web ↔ desktop in one 2v2 lobby**, plus a same-machine online 1v1 (the split join) from each.
-3. `windows-client-release` build (`nix develop .#mingw`) — not run this time.
+**Now: L39 + L74 done and hand-checked** (desktop ↔ web in one PvP match works), pushed as
+`l39` (`1e0020c`), PR not yet opened. Local dev: `supergame-server` listens on
+`ws://localhost:9001`. **Left:**
+1. `windows-client-release` build (`nix develop .#mingw`) — not run this time. Then PR.
+2. ~~Canvas too small on narrow pages, jumping bigger with the boss bar~~ — fixed (2026-11-05):
+   a %-wide canvas counted ~0 in the grid's `auto` column, so the side panels took their 240 px
+   first and only `#boss-bar`'s fixed 600 px gave the field a real minimum. `#game` is now sized
+   from the viewport (minus the side panels, or not below 900 px), `#boss-bar` is
+   `min(600px, 100%)`. Touch/portrait still belong to the responsive pass (L38).
+3. **After web parity: PvP needs more gameplay** — playtesting the cross-client 1v1 showed it is
+   too simple. Not designed yet.
 4. Optional: `PvPGame`'s constructor trusts `team_count ≤ MAX_TEAMS` (handshake-validated); an
    assert would make a misuse loud.
 
