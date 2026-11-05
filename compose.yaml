@@ -5,6 +5,10 @@
 #
 # No `build:` here on purpose - Compose mode doesn't support it, and it's
 # not needed anyway since the image is already built + pushed by CI.
+# Dokploy holds this file as raw text, not pulled from git: paste the whole
+# file after changing it here, so the two never drift (L41's first redeploy
+# kept an old web container because the pasted copy lacked `pull_policy`).
+#
 # Domain/TLS/Traefik routing is configured through Dokploy's own Domains tab
 # (Method 1), not hardcoded here - Dokploy injects the necessary Traefik
 # labels and network attachment itself at deploy time.
@@ -28,6 +32,8 @@
 services:
   server:
     image: ghcr.io/linknexus/super-game:latest
+    # :latest is a moving tag: without this, a redeploy reuses the cached image.
+    pull_policy: always
     restart: unless-stopped
     # The server logs bind success/failure to stdout unbuffered, so container
     # logs are the first place to look if a redeploy comes up unreachable.
@@ -46,6 +52,8 @@ services:
 
   web:
     image: ghcr.io/linknexus/super-game-web:latest
+    # :latest is a moving tag: without this, a redeploy reuses the cached image.
+    pull_policy: always
     restart: unless-stopped
     depends_on: [server]
     # Listed explicitly so the default network survives Dokploy adding
