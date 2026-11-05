@@ -22,6 +22,7 @@ import {
   drawPvPGame,
 } from "./scripts/ui/game-renderer";
 import { clearHud, updateHud } from "./scripts/ui/hud";
+import { showKeyboardNoticeIfTouchOnly } from "./scripts/ui/keyboard-notice";
 import { hideLobby, showLobby } from "./scripts/ui/lobby";
 import { hideMenu, type MenuPage, showMenu } from "./scripts/ui/menu";
 import { spawnEnemyExplosion, updateParticles } from "./scripts/ui/particles";
@@ -258,6 +259,7 @@ function step(now: number) {
 function init() {
   screen = { kind: "menu" };
   showMenu(mainPage);
+  showKeyboardNoticeIfTouchOnly();
 }
 
 function restart(session: GameSession) {

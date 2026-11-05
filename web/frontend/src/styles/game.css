@@ -469,3 +469,39 @@ body {
 .lobby-actions {
   margin-top: calc(var(--px) * 6);
 }
+
+/* Touch-only devices (ui/keyboard-notice.ts): above the menus, below toasts. */
+#keyboard-notice {
+  position: fixed;
+  inset: 0;
+  z-index: 15;
+  display: grid;
+  place-items: center;
+  padding: calc(var(--px) * 4);
+  background: rgba(0, 0, 0, 0.6);
+}
+
+.notice-card {
+  --accent: var(--neon-pink);
+  max-width: 420px;
+  text-align: center;
+  padding: calc(var(--px) * 6);
+
+  & .btn {
+    min-width: 0;
+    font-size: 16px;
+  }
+}
+
+.notice-title {
+  margin: 0 0 calc(var(--px) * 4);
+  font-size: 32px;
+  color: var(--accent);
+  text-shadow: 0 0 12px var(--accent);
+}
+
+.notice-text {
+  margin: 0 0 calc(var(--px) * 6);
+  color: var(--ink-dim);
+  line-height: 1.5;
+}
