@@ -26,24 +26,34 @@
 namespace testing {
 
 /// A `WsConnection` that keeps every frame instead of writing it anywhere.
+/// JSON unless a case asks for another format (L82).
 struct FakeConnection final : WsConnection {
   std::vector<std::string> sent{};
 
+  explicit FakeConnection(shared::WireFormat format = shared::WireFormat::JSON)
+      : format_{format} {}
+
+  shared::WireFormat format() const override { return format_; }
+
   void send(std::string_view payload) override { sent.emplace_back(payload); }
 
-  /// The most recent frame, parsed as a `{type, payload}` envelope. Throws if
-  /// nothing was sent or the frame isn't JSON - the runner reports either as
-  /// a failed case rather than crashing the binary.
+  /// The most recent frame, decoded in this connection's format as a
+  /// `{type, payload}` envelope. Throws if nothing was sent or the frame
+  /// doesn't decode - the runner reports either as a failed case rather than
+  /// crashing the binary.
   nlohmann::json lastEnvelope() const {
     if (sent.empty())
       throw std::runtime_error("no frame was sent on this connection");
 
-    return shared::decode(sent.back());
+    return shared::decode(sent.back(), format_);
   }
 
   shared::ServerMessageType lastType() const {
     return lastEnvelope().at("type").get<shared::ServerMessageType>();
   }
+
+private:
+  shared::WireFormat format_;
 };
 
 /// The payload `.upgrade`/`.open` hands to `addPlayers`: @p ids claimed as

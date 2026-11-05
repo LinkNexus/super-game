@@ -4,6 +4,7 @@ add_executable(supergame-server-tests
     test_lobby.cpp
     test_inbound.cpp
     test_team_switch.cpp
+    test_wire_format.cpp
 )
 
 target_link_libraries(supergame-server-tests PRIVATE
