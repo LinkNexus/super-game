@@ -20,9 +20,9 @@ concurrency:
 
 # Artifacts (client binaries bundle ~52MB of game audio each) are only
 # uploaded for master pushes and version tags - the "official" build history.
-# PRs still compile on every job below (so breakage is caught before merge),
-# they just don't persist any output, since a PR build is superseded the
-# moment it merges anyway.
+# PRs still compile every job below that their changes can affect (see
+# `changes`), they just don't persist any output, since a PR build is
+# superseded the moment it merges anyway.
 env:
   IS_MASTER_PUSH: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
   IS_RELEASE: ${{ startsWith(github.ref, 'refs/tags/v') }}
@@ -132,8 +132,41 @@ jobs:
           npm ci --no-fund --no-audit
           npm run build
 
+  # Desktop client builds only run when something they compile or bundle
+  # changed (web-only work is the common case now). Tags always build them:
+  # publish-release needs the zips. A missing or rewritten base (new branch,
+  # force push) counts as "changed". Server/web jobs aren't filtered: deploy
+  # waits for both /version and /web-version to report this commit.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      desktop: ${{ steps.diff.outputs.desktop }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Did anything the desktop client depends on change?
+        id: diff
+        env:
+          BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]] || ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
+            echo "desktop=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          files=$(git diff --name-only "$BASE" "$GITHUB_SHA")
+          echo "$files"
+          if grep -qE '^(client/|shared/|assets/|vendor/|cmake/|tests/harness/|CMakeLists\.txt$|CMakePresets\.json$|\.gitmodules$|\.github/workflows/ci\.yml$)' <<< "$files"; then
+            echo "desktop=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "desktop=false" >> "$GITHUB_OUTPUT"
+          fi
+
   build-client-linux:
     runs-on: ubuntu-latest
+    needs: [changes]
+    if: needs.changes.outputs.desktop == 'true'
     container: *toolchain
     steps:
       - name: Install build deps
@@ -202,6 +235,8 @@ jobs:
     # the runner's own arch only; producing an Intel or universal binary
     # too would need an explicit CMAKE_OSX_ARCHITECTURES, not done here.
     runs-on: macos-15
+    needs: [changes]
+    if: needs.changes.outputs.desktop == 'true'
     steps:
       - uses: actions/checkout@v4
         with:
@@ -247,6 +282,8 @@ jobs:
 
   build-client-windows:
     runs-on: ubuntu-latest
+    needs: [changes]
+    if: needs.changes.outputs.desktop == 'true'
     container: *toolchain
     steps:
       - name: Install cross-compile toolchain
