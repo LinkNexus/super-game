@@ -14,7 +14,8 @@ namespace shared {
 
 enum class WireFormat { JSON, MSGPACK };
 
-inline std::string encode(const nlohmann::json &envelope, WireFormat format) {
+static inline std::string encode(const nlohmann::json &envelope,
+                                 WireFormat format) {
   switch (format) {
   case WireFormat::MSGPACK: {
     const auto bytes = nlohmann::json::to_msgpack(envelope);
@@ -22,37 +23,40 @@ inline std::string encode(const nlohmann::json &envelope, WireFormat format) {
   }
 
   case WireFormat::JSON:
+  default:
     return envelope.dump();
   }
 }
 
-inline nlohmann::json decode(std::string_view frame, WireFormat format) {
+static inline nlohmann::json decode(std::string_view frame, WireFormat format) {
   switch (format) {
   case WireFormat::MSGPACK:
     return nlohmann::json::from_msgpack(frame.begin(), frame.end());
 
   case WireFormat::JSON:
+  default:
     return nlohmann::json::parse(frame);
   }
 }
 
-constexpr inline std::string_view subprotocolName(WireFormat format) {
+static constexpr inline std::string_view subprotocolName(WireFormat format) {
   switch (format) {
-  case WireFormat::JSON:
-    return "supergame.json";
-
   case WireFormat::MSGPACK:
     return "supergame.msgpack";
+
+  case WireFormat::JSON:
+  default:
+    return "supergame.json";
   }
 }
 
-constexpr std::array<std::pair<std::string_view, WireFormat>, 2>
+static constexpr std::array<std::pair<std::string_view, WireFormat>, 2>
     wireFormatSubprotocols = {
         std::pair{"supergame.json", WireFormat::JSON},
         std::pair{"supergame.msgpack", WireFormat::MSGPACK},
 };
 
-inline std::optional<WireFormat>
+static inline std::optional<WireFormat>
 negotiateWireFormat(const std::string_view offered) {
   if (offered.empty())
     return WireFormat::JSON;
