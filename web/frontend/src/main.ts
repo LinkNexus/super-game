@@ -460,6 +460,7 @@ function startOnlineMatch(
     onConnectionClosed: ({ leaving, returnBackToMenu }) => {
       dismiss();
       hideLobby();
+      hideEndScreen();
 
       if (typeof returnBackToMenu === "boolean") {
         if (returnBackToMenu) backToMenu();

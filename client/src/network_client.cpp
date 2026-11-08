@@ -40,19 +40,30 @@ void NetworkClient::connect() {
   ws_->setOnMessageCallback([this](const ix::WebSocketMessagePtr &msg) {
     if (msg->type == ix::WebSocketMessageType::Open) {
       std::cout << "Connected to server" << std::endl;
+      format_.store(shared::negotiateWireFormat(msg->openInfo.protocol)
+                        .value_or(shared::WireFormat::JSON));
     } else if (msg->type == ix::WebSocketMessageType::Close) {
       std::cout << "Disconnected from server" << std::endl;
     } else if (msg->type == ix::WebSocketMessageType::Message) {
-      onMessageCallback_(msg->str);
+      try {
+        onMessageCallback_(shared::decode(msg->str, format_.load()));
+      } catch (nlohmann::json::exception &e) {
+        std::cerr << "Failed to decode message: " << e.what() << std::endl;
+      }
     }
   });
+
+  for (auto &protocol : PROTOCOLS) {
+    ws_->addSubProtocol(std::string(protocol));
+  }
 
   ws_->start();
 }
 
-bool NetworkClient::send(const std::string &message) {
+bool NetworkClient::send(const nlohmann::json &envelope) {
   if (ws_) {
-    ws_->send(message, shared::WIRE_BINARY);
+    const auto f = format_.load();
+    ws_->send(shared::encode(envelope, f), f == shared::WireFormat::MSGPACK);
     return true;
   }
   return false;

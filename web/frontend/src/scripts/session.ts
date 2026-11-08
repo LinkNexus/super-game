@@ -1,3 +1,4 @@
+import { decode, encode } from "@msgpack/msgpack";
 import { appModule, sim } from "./constants";
 import type {
   ClientMessage,
@@ -126,7 +127,11 @@ export class OnlineSession extends GameSession {
     super();
 
     this.config = config;
-    this.ws = new WebSocket(this.buildServerUrl());
+    this.ws = new WebSocket(this.buildServerUrl(), [
+      "supergame.msgpack",
+      "supergame.json",
+    ]);
+    this.ws.binaryType = "arraybuffer";
 
     this.ws.addEventListener("open", (e) => {
       console.log("Connected to server", e);
@@ -159,33 +164,37 @@ export class OnlineSession extends GameSession {
   }
 
   end(redirect: boolean = true) {
-    this.returnBackToMenu = redirect ?? "undefined";
+    this.returnBackToMenu = redirect ?? undefined;
     this.leaving = true;
     this.ws.close();
   }
 
-  sendReady(ready: boolean, playerId: PlayerId) {
+  send(msg: ClientMessage) {
     this.ws.send(
-      JSON.stringify({
-        type: appModule.ClientMessageType.READY,
-        payload: {
-          is_ready: ready,
-          player_id: playerId,
-        },
-      } satisfies ClientMessage),
+      this.ws.protocol === "supergame.msgpack"
+        ? encode(msg)
+        : JSON.stringify(msg),
     );
   }
 
+  sendReady(ready: boolean, playerId: PlayerId) {
+    this.send({
+      type: appModule.ClientMessageType.READY,
+      payload: {
+        is_ready: ready,
+        player_id: playerId,
+      },
+    });
+  }
+
   switchTeam(playerId: PlayerId, targetTeamId: number) {
-    this.ws.send(
-      JSON.stringify({
-        type: appModule.ClientMessageType.SWITCH_TEAM,
-        payload: {
-          player_id: playerId,
-          target_team_id: targetTeamId,
-        },
-      } satisfies ClientMessage),
-    );
+    this.send({
+      type: appModule.ClientMessageType.SWITCH_TEAM,
+      payload: {
+        player_id: playerId,
+        target_team_id: targetTeamId,
+      },
+    });
   }
 
   onWsMessage({
@@ -195,9 +204,11 @@ export class OnlineSession extends GameSession {
     event: MessageEvent;
     onLobbyUpdateReceived: LobbyUpdateHandler;
   }) {
-    if (typeof event.data !== "string") return;
-
-    const msg = JSON.parse(event.data) as ServerMessage;
+    const msg = (
+      event.data instanceof ArrayBuffer
+        ? decode(new Uint8Array(event.data))
+        : JSON.parse(event.data)
+    ) as ServerMessage;
 
     switch (msg.type) {
       case appModule.ServerMessageType.WELCOME: {
@@ -245,17 +256,15 @@ export class OnlineSession extends GameSession {
 
   step(inputs: PlayerInputs): GameState | null {
     if (this.ws.readyState === WebSocket.OPEN) {
-      this.ws.send(
-        JSON.stringify({
-          type: appModule.ClientMessageType.PLAYER_INPUT,
-          payload: Array.from({
-            length: appModule.MAX_PLAYERS_PER_CLIENT,
-          }).map((_, i) => {
-            if (i >= inputs.length) return null;
-            return inputs[i]!;
-          }),
-        } satisfies ClientMessage),
-      );
+      this.send({
+        type: appModule.ClientMessageType.PLAYER_INPUT,
+        payload: Array.from({
+          length: appModule.MAX_PLAYERS_PER_CLIENT,
+        }).map((_, i) => {
+          if (i >= inputs.length) return null;
+          return inputs[i]!;
+        }),
+      });
     }
 
     if (this.currentState) {

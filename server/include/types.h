@@ -1,6 +1,7 @@
 #pragma once
 
 #include "shared/constants.h"
+#include "shared/wire.h"
 #include <array>
 #include <cstdint>
 #include <optional>
@@ -13,6 +14,7 @@ using ServerPlayerId = uint32_t;
 struct WsConnection {
   virtual ~WsConnection() = default;
   virtual void send(std::string_view payload) = 0;
+  virtual shared::WireFormat format() const = 0;
 };
 
 struct PerSocketPlayers {

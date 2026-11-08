@@ -12,3 +12,7 @@ add_library(nlohmann_json INTERFACE)
 target_include_directories(nlohmann_json SYSTEM INTERFACE
     ${CMAKE_CURRENT_SOURCE_DIR}/vendor/json/include
 )
+
+# No implicit json -> T conversions: they turn type mistakes into runtime
+# throws (a json passed where a std::string is expected). Use .get<T>().
+target_compile_definitions(nlohmann_json INTERFACE JSON_USE_IMPLICIT_CONVERSIONS=0)

@@ -19,7 +19,7 @@
 /// input polling that gets packaged into `PlayerInput`s for the session.
 class Game {
 public:
-  explicit Game(std::string_view server_url = default_server_url);
+  explicit Game(std::string_view server_url = DEFAULT_SERVER_URL);
 
   /// Runs the full window/game loop until the window is closed: polls
   /// input, steps the active session at a fixed timestep, and renders.

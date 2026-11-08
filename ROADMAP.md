@@ -12,30 +12,27 @@ entries appear here as one-line stubs so the numbering stays readable.
 
 ---
 
-## Where things stand — 2026-11-05 (run on branch `l41`)
+## Where things stand — 2026-11-08 (run on branch `l82`)
 
-**This run: a playable public web game — L82 + L40 + L41.** L41 is live; left: L82 (Levy),
-then L40. Then a desktop release tag. Next run: mobile (L83).
+**This run: a playable public web game — L82 + L40 + L41.** L41 and L82 are done; **left:
+L40 (web audio)**. Next run: mobile (L83).
 
-1. **L82 — per-connection wire format** *(Levy)*. Tests are written first (Claude):
-   `shared/tests/test_wire.cpp` and `server/tests/test_wire_format.cpp`, on branch `l82`
-   (off `l41`). They pin the API in the L82 entry and **do not compile until it exists** —
-   checked against a throwaway prototype: shared 34/34, server suite green.
-2. **L40 — web audio** *(Levy, after L82)*. Claude walks through how browser audio works
+1. **L40 — web audio** *(Levy)*. Next up. Claude walks through how browser audio works
    (`AudioContext`, the user-gesture unlock, decoding `.ogg` into buffers), Levy writes it.
    The web frontend has **no audio code at all** yet, so this is music + SFX, not a gesture tweak.
-3. ~~L41 — CI + deploy of the web target~~ — **done, live** (PR #30): Caddy in front of the
-   server, one compose app, one Dokploy domain. CI's macOS job moved to `macos-15` (GitHub
-   stopped accepting `macos-14`).
-4. ~~Mobile notice~~ — **done** (branch `mobile-notice`, Claude): `ui/keyboard-notice.ts`
-   covers the page on touch-only devices (`pointer: coarse` and no fine pointer), with
-   "Continue anyway" for tablets with a keyboard. Deleted again by L83.
+2. ~~L82 — per-connection wire format~~ — **done** (branch `l82`, not merged yet). Web and
+   desktop both offer `supergame.msgpack, supergame.json` and get msgpack; v3.0.0 desktop
+   builds offer nothing and keep JSON, so **no new desktop release is needed for L82**.
+   Rebase `l82` onto master before the PR (it branched before PR #31/#32).
+3. ~~L41 — CI + deploy of the web target~~ — **done, live** (PR #30).
+4. ~~Mobile notice~~ — **done, live** (PR #31). Deleted again by L83.
+5. ~~Desktop release~~ — **v3.0.0 tagged and published** (Linux/macOS/Windows zips). Prod
+   compose now has `pull_policy: always` on both services (PR #32) — Dokploy holds the compose
+   as pasted text, so re-paste it whenever `compose.yaml` changes.
 
-**Desktop release (`v*` tag → `publish-release`) — sooner is better.** v2.0.0 (2026-10-22)
-predates L74: its READY is `{is_ready}` with no `player_id`, which the server live since PR #29
-drops as a bad envelope, so **v2.0.0 desktop players can join a lobby but never ready up**.
-Master's desktop client already speaks L74's protocol, and L82 keeps JSON for clients that
-offer no subprotocol, so a release cut now stays compatible after L82 — no need to wait for it.
+**Local setup note:** the `.#web` nix shell isn't a GC root (direnv only pins the default
+shell), so `nix-collect-garbage` deletes emscripten. Pin it once with
+`nix develop .#web --profile .direnv/web-profile --command true`.
 
 **Manual checks still open** (nothing automated covers them):
 - Launch `supergame-client.exe` from `windows-client-release` on a real Windows machine. It
@@ -226,7 +223,7 @@ All tasks below are Levy's.
 | L39 | ✅ Online mode via native browser `WebSocket` | [archive](ROADMAP-ARCHIVE.md#phase-5--web-client-wasm-no-deadline) |
 | L40 | **Web audio** | **This run, after L82 (Levy writes it; Claude explains browser audio first).** **Left:** everything — `web/frontend/src` has no audio code. Music (`backgroundsound.ogg`) + SFX (`boss_hit.ogg`, `explosion.ogg`), unlocked on the first click/keypress (browsers keep an `AudioContext` suspended until a user gesture). Assets are already web-sized (~2 MB total, `.ogg`). <br><br>*Original entry:* Lazy-load audio behind a user-gesture "Play" button (browsers block autoplay pre-interaction anyway, so this is required, not optional), and re-encode `Backgroundsound.wav` (48MB) to a compressed web-friendly format — bundling the raw wav would make first load brutal. *(2026-10-25: already done — it's `assets/backgroundsound.ogg`, and all assets are ~2 MB, so only the user-gesture part is left.)* |
 | L41 | ✅ CI: build + deploy the web target (Caddy in front of the server) | [archive](ROADMAP-ARCHIVE.md#phase-5--web-client-wasm-no-deadline) |
-| L82 | **Per-connection wire format, negotiated at the handshake** | **This run (Levy); tests by Claude, written first.** **API the tests pin** (change the tests if you change the API): `shared/wire.h` — `enum class WireFormat { JSON, MSGPACK }`, `encode(envelope, WireFormat)`, `decode(frame, WireFormat)`, `negotiateWireFormat(std::string_view offered) -> std::optional<WireFormat>` taking the raw `Sec-WebSocket-Protocol` header (empty → JSON; first supported entry wins; only unknown entries → `nullopt`, i.e. reject), and `subprotocolName(WireFormat)` → `"supergame.json"`/`"supergame.msgpack"`. Server: `WsConnection::format()` (pure virtual; `FakeConnection` takes one in its constructor, default JSON, so existing cases are unchanged). Existing test frames now pass `WireFormat::JSON` explicitly. Call sites you'll also need to update: `client/src/session.cpp`, `client/src/network_client.cpp`, `web/wasm/src/web_sim.cpp` (incl. its `WIRE_BINARY` constant). `WIRE_BINARY` goes away. Tests: `shared/tests/test_wire.cpp`, `server/tests/test_wire_format.cpp` (mixed-format lobby + match broadcasts, msgpack inbound, a JSON frame on a msgpack connection dropped by value). Not reachable from the suites: echoing the header in `.upgrade` and the per-format opcode in `UwsConnection::send` — check those by hand (browser network tab). The desktop client sends no subprotocol, so stays JSON. <br><br>*Original entry:* Not urgent — do it when `WIRE_BINARY` is about to be turned on, not before. Today the format is a compile-time flag (`shared/wire.h`), so every client gets the same one. Instead: the client offers WebSocket subprotocols (`new WebSocket(url, ["supergame.msgpack", "supergame.json"])`), the server picks one in `.upgrade`, echoes it back, and stores a `WireFormat` in `PerSocketData`; a missing header means JSON, so the desktop client keeps working unchanged. `UwsConnection::send` takes encoding *and* opcode from that per-socket format; `shared::encode/decode` take the format as a parameter instead of reading `WIRE_BINARY` (`web_sim.cpp` passes JSON — the local path never hits the network). Broadcasts keep L69's encode-once: lazily once *per format* used in that broadcast, so at most two. Payoff: readable JSON in the browser's network tab while debugging, msgpack size elsewhere. **Not** mirroring the client's opcode: the server speaks first (WELCOME + lobby in `.open`, before any client frame), the format could flip mid-connection, and a binary opcode doesn't say *which* bytes (JSON is legal in a binary frame). |
+| L82 | ✅ Per-connection wire format, negotiated at the handshake | [archive](ROADMAP-ARCHIVE.md#phase-5--web-client-wasm-no-deadline) |
 | L83 | **Mobile: responsive layout + touch controls** | **Next run, after L41 is live** (test on real phones against the deployed URL, iOS Safari especially). Layout: portrait/narrow screens (L38 left touch/portrait to "the responsive pass"). Input: on-screen move + fire feeding `inputs.ts` (Levy's) — open questions: fire on a touchscreen (hold vs. auto-fire), two local players on one phone (probably not), landscape-only or portrait too. Removes this run's "needs a keyboard" notice. |
 
 ---

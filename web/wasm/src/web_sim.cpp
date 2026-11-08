@@ -4,6 +4,7 @@
 #include "shared/sim/bullet_sim.h"
 #include "shared/sim/game_sim.h"
 #include "shared/sim/player_sim.h"
+#include "shared/types.h"
 #include "shared/wire.h"
 #include <emscripten/bind.h>
 #include <mathlib.hpp>
@@ -17,6 +18,8 @@ private:
   shared::PlayerIds<MAX_PLAYERS_ON_THIS_MACHINE> player_ids_{};
 
 public:
+  WebSim() { shared::RndGenerator::seed(); }
+
   void startCoop(shared::PlayerCount playerCount) {
     if (playerCount == 0)
       throw std::runtime_error("Player count must be greater than 0");
@@ -77,7 +80,7 @@ public:
   }
 
   std::string step(std::string inputPayload) {
-    auto inputs = shared::decode(inputPayload)
+    auto inputs = shared::decode(inputPayload, shared::WireFormat::JSON)
                       .get<shared::PlayerInputs<MAX_PLAYERS_ON_THIS_MACHINE>>();
 
     std::string envelope;
@@ -86,12 +89,12 @@ public:
                    [&inputs, &envelope](shared::CoopGameSim &sim,
                                         shared::CoopGameState &state) {
                      sim.step(state, inputs, shared::FIXED_DT);
-                     envelope = shared::encode(state);
+                     envelope = shared::encode(state, shared::WireFormat::JSON);
                    },
                    [&inputs, &envelope](shared::PvPGameSim &sim,
                                         shared::PvPGameState &state) {
                      sim.step(state, inputs, shared::FIXED_DT);
-                     envelope = shared::encode(state);
+                     envelope = shared::encode(state, shared::WireFormat::JSON);
                    },
                    [](auto &, auto &) {
                      throw std::runtime_error("Invalid sim/state variant");
@@ -101,7 +104,9 @@ public:
     return envelope;
   }
 
-  std::string getPlayerIds() const { return shared::encode(player_ids_); }
+  std::string getPlayerIds() const {
+    return shared::encode(player_ids_, shared::WireFormat::JSON);
+  }
 };
 
 EMSCRIPTEN_BINDINGS(supergame) {
@@ -112,7 +117,6 @@ EMSCRIPTEN_BINDINGS(supergame) {
   emscripten::constant("FIXED_DT", shared::FIXED_DT);
   emscripten::constant("MAX_PLAYERS_COOP", shared::MAX_PLAYERS_COOP);
   emscripten::constant("MAX_TEAMS", shared::MAX_TEAMS);
-  emscripten::constant("WIRE_BINARY", shared::WIRE_BINARY);
   emscripten::constant("MAX_PLAYERS_PER_TEAM", shared::MAX_PLAYERS_PER_TEAM);
 
   emscripten::constant("SCREEN_WIDTH", shared::SCREEN_WIDTH);
@@ -136,9 +140,6 @@ EMSCRIPTEN_BINDINGS(supergame) {
   emscripten::constant("SIM_BOSS_WIDTH", shared::BossSimState::WIDTH);
 
   emscripten::constant("MAX_USERNAME_LENGTH", shared::MAX_NAME_LENGTH);
-
-  // To be called once at the TS code entry point
-  emscripten::function("rndGeneratorSeed", &shared::RndGenerator::seed);
 
   emscripten::enum_<shared::PvPGamePhase>("PvPGamePhase",
                                           emscripten::enum_value_type::number)
