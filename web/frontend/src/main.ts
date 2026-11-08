@@ -1,4 +1,5 @@
 import { loadAssets } from "./scripts/assets";
+import { loadAudio, playSfx, setMusicVolume } from "./scripts/audio";
 import { appModule } from "./scripts/constants";
 import { assertNeverForScreen, toScreen } from "./scripts/helpers";
 import {
@@ -250,6 +251,7 @@ function step(now: number) {
     acc -= appModule.FIXED_DT;
   }
 
+  setMusicVolume(screen.kind === "playing" ? 0.25 : 0.7);
   drawStars();
   draw();
   endInputFrame();
@@ -491,6 +493,13 @@ function executeEventsOnStateChange() {
 
       spawnEnemiesExplosions(prevState, state);
 
+      if (
+        prevState.boss.active &&
+        state.boss.active &&
+        prevState.boss.health > state.boss.health
+      )
+        playSfx("boss_hit");
+
       break;
     }
   }
@@ -512,11 +521,12 @@ function spawnEnemiesExplosions(before: CoopGameState, after: CoopGameState) {
         Math.floor(i / appModule.SIM_ENEMY_COLS) *
           (appModule.SIM_ENEMY_HEIGHT + appModule.SIM_ENEMIES_POOL_SPACING_Y);
 
+      playSfx("explosion");
       spawnEnemyExplosion(toScreen({ x, y }), after.enemies[i]![1]);
     }
   }
 }
 
-await loadAssets();
+await Promise.all([loadAssets(), loadAudio()]);
 init();
 requestAnimationFrame(step);
