@@ -116,7 +116,7 @@ public:
 private:
   /// Dispatches an incoming `{type, payload}` envelope to the matching
   /// mailbox based on `ServerMessageType`.
-  void onMessage(const std::string &msg);
+  void onMessage(const nlohmann::json &msg);
 
   /// @return `target_state_` lerped from `previous_state_` based on
   /// elapsed time since the last snapshot, vs. `shared::FIXED_DT`.

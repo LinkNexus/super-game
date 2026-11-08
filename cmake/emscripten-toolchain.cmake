@@ -10,6 +10,11 @@
 # Emscripten.cmake sits next to `emcc` in an emsdk checkout, and under
 # share/emscripten in nix's package, whose bin/emcc is a wrapper script.
 
+# find_program never re-searches a cached hit, and a nix GC can delete it.
+if(SUPERGAME_EMCC AND NOT EXISTS "${SUPERGAME_EMCC}")
+    unset(SUPERGAME_EMCC CACHE)
+endif()
+
 find_program(SUPERGAME_EMCC NAMES emcc)
 
 if(NOT SUPERGAME_EMCC)

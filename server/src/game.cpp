@@ -317,7 +317,7 @@ Game::ClientMessageOutcome
 Game::handleClientMessage(const PerSocketPlayers &players_data,
                           std::string_view message) {
   try {
-    auto j = shared::decode(message);
+    auto j = shared::decode(message, players_data.ws->format());
 
     const auto type = j.at("type").get<shared::ClientMessageType>();
 

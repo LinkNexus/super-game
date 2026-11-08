@@ -1,7 +1,6 @@
 import createModule from "@wasm/supergame-web-sim.mjs";
 
 export const appModule = await createModule();
-appModule.rndGeneratorSeed();
 
 export const sim = new appModule.WebSim();
 

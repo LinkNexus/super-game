@@ -20,10 +20,20 @@ struct PerSocketData;
 
 struct UwsConnection final : WsConnection {
   uWS::WebSocket<false, true, PerSocketData> *ws{};
+
+  UwsConnection(shared::WireFormat format = shared::WireFormat::JSON)
+      : format_{format} {}
+
   void send(std::string_view payload) override {
-    ws->send(payload,
-             shared::WIRE_BINARY ? uWS::OpCode::BINARY : uWS::OpCode::TEXT);
+    ws->send(payload, format_ == shared::WireFormat::MSGPACK
+                          ? uWS::OpCode::BINARY
+                          : uWS::OpCode::TEXT);
   }
+
+  shared::WireFormat format() const override { return format_; }
+
+private:
+  shared::WireFormat format_;
 };
 
 struct PerSocketData {
@@ -80,7 +90,18 @@ int main(int, char *[]) {
            // WebSocket itself with no access to the original request.
            .upgrade =
                [](auto *res, auto *req, auto *context) {
-                 PerSocketData data{};
+                 const auto badRequest = [&res]() {
+                   res->writeStatus("400 Bad Request")->end();
+                 };
+                 const auto offered = req->getHeader("sec-websocket-protocol");
+                 const auto format = shared::negotiateWireFormat(offered);
+
+                 if (!format) {
+                   badRequest();
+                   return;
+                 }
+
+                 PerSocketData data{.connection = UwsConnection(*format)};
 
                  auto teamSize = shared::toNumber<shared::PlayerCount>(
                      req->getQuery("team_size"));
@@ -141,12 +162,13 @@ int main(int, char *[]) {
 
                  res->template upgrade<PerSocketData>(
                      std::move(data), req->getHeader("sec-websocket-key"),
-                     req->getHeader("sec-websocket-protocol"),
+                     offered.empty() ? std::string_view{}
+                                     : shared::subprotocolName(*format),
                      req->getHeader("sec-websocket-extensions"), context);
                  return;
 
                bad_request:
-                 res->writeStatus("400 Bad Request")->end();
+                 badRequest();
                },
            // Connection established: assigns the real player id (the
            // server never trusts a client-supplied id), joins/creates a
@@ -190,7 +212,8 @@ int main(int, char *[]) {
 
                  welcomeEnvelope["payload"] =
                      shared::WelcomeMessage{.players_ids = ids};
-                 data->connection.send(shared::encode(welcomeEnvelope));
+                 data->connection.send(shared::encode(
+                     welcomeEnvelope, data->connection.format()));
 
                  if (game) {
                    data->game_id = game->id;

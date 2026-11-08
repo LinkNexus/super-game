@@ -4,7 +4,7 @@
 int main(int argc, char *argv[]) {
   shared::RndGenerator::seed();
 
-  auto server_url = default_server_url;
+  auto server_url = DEFAULT_SERVER_URL;
   if (argc > 1)
     server_url = argv[1];
 

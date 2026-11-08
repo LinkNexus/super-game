@@ -106,11 +106,12 @@ protected:
     nlohmann::json envelope{};
     envelope["type"] = Payload::TYPE;
     envelope["payload"] = payload;
-    const auto frame = shared::encode(envelope);
 
     for (auto *ws : player_sockets_) {
-      if (ws)
+      if (ws) {
+        const auto frame = shared::encode(envelope, ws->format());
         ws->send({reinterpret_cast<const char *>(frame.data()), frame.size()});
+      }
     }
   }
 

@@ -74,7 +74,7 @@ shared::GameState LocalSession::step(
 
 OnlineSession::OnlineSession(const std::string &url,
                              shared::PlayerCount playerCount)
-    : client_(url, [this](const std::string &msg) { onMessage(msg); }) {
+    : client_(url, [this](const nlohmann::json &msg) { onMessage(msg); }) {
   player_count_ = playerCount;
   client_.connect();
 }
@@ -91,7 +91,7 @@ shared::GameState OnlineSession::step(
   }
 
   inputEnvelope["payload"] = inputsToSend;
-  client_.send(shared::encode(inputEnvelope));
+  client_.send(inputEnvelope);
 
   if (auto s = state_box_.take()) {
     last_update_time_ = std::chrono::steady_clock::now();
@@ -126,7 +126,7 @@ void OnlineSession::sendReady(shared::PlayerId playerId, bool isReady) {
   readyEnvelope["payload"] =
       shared::ReadyMessage{.player_id = playerId, .is_ready = isReady};
 
-  client_.send(shared::encode(readyEnvelope));
+  client_.send(readyEnvelope);
 }
 
 void OnlineSession::sendSwitchTeam(shared::PlayerId playerId,
@@ -136,12 +136,11 @@ void OnlineSession::sendSwitchTeam(shared::PlayerId playerId,
   switchEnvelope["payload"] = shared::SwitchTeamMessage{
       .player_id = playerId, .target_team_id = teamId};
 
-  client_.send(shared::encode(switchEnvelope));
+  client_.send(switchEnvelope);
 }
 
-void OnlineSession::onMessage(const std::string &msg) {
+void OnlineSession::onMessage(const nlohmann::json &j) {
   try {
-    auto j = shared::decode(msg);
     auto payload = j.at("payload");
 
     switch (j.at("type").get<shared::ServerMessageType>()) {
@@ -280,8 +279,8 @@ shared::PlayerCount OnlineSession::getPlayerCount() const {
 
 std::optional<LobbyPlayer> findLobbyPlayer(const shared::LobbyUpdate &lobby,
                                            shared::PlayerId id) {
-  const auto inSlots = [id](const auto &slots)
-      -> std::optional<shared::PlayerInfo> {
+  const auto inSlots =
+      [id](const auto &slots) -> std::optional<shared::PlayerInfo> {
     for (const auto &p : slots)
       if (p && p->id == id)
         return p;
@@ -289,22 +288,21 @@ std::optional<LobbyPlayer> findLobbyPlayer(const shared::LobbyUpdate &lobby,
   };
 
   return std::visit(
-      shared::overloaded{
-          [&](const shared::CoopGameLobbyUpdate &u)
-              -> std::optional<LobbyPlayer> {
-            if (auto p = inSlots(u.players))
-              return std::pair{*p, std::size_t{0}};
-            return std::nullopt;
-          },
-          [&](const shared::PvPGameLobbyUpdate &u)
-              -> std::optional<LobbyPlayer> {
-            for (std::size_t t = 0; t < u.teams.size(); ++t) {
-              if (!u.teams[t])
-                continue;
-              if (auto p = inSlots(u.teams[t]->players))
-                return std::pair{*p, t};
-            }
-            return std::nullopt;
-          }},
+      shared::overloaded{[&](const shared::CoopGameLobbyUpdate &u)
+                             -> std::optional<LobbyPlayer> {
+                           if (auto p = inSlots(u.players))
+                             return std::pair{*p, std::size_t{0}};
+                           return std::nullopt;
+                         },
+                         [&](const shared::PvPGameLobbyUpdate &u)
+                             -> std::optional<LobbyPlayer> {
+                           for (std::size_t t = 0; t < u.teams.size(); ++t) {
+                             if (!u.teams[t])
+                               continue;
+                             if (auto p = inSlots(u.teams[t]->players))
+                               return std::pair{*p, t};
+                           }
+                           return std::nullopt;
+                         }},
       lobby);
 }
