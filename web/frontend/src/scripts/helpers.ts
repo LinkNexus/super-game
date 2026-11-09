@@ -23,3 +23,22 @@ export function toScreen({ x, y }: { x: number; y: number }) {
     y: appModule.SCREEN_HEIGHT - y,
   };
 }
+
+export function isTouchOnly() {
+  return (
+    matchMedia("(pointer: coarse)").matches &&
+    !matchMedia("(any-pointer: fine)").matches
+  );
+}
+
+/// Android only: iOS has no element fullscreen (Add to Home Screen instead).
+/// Browsers allow it only inside a tap, so call it from a click handler.
+export function enterFullscreenOnTouch() {
+  if (
+    isTouchOnly() &&
+    document.fullscreenEnabled &&
+    !document.fullscreenElement
+  ) {
+    document.documentElement.requestFullscreen().catch(() => {});
+  }
+}

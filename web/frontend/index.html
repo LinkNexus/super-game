@@ -3,8 +3,16 @@
 
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>Super Game</title>
+  <!-- "Add to Home Screen" opens it without browser bars (L83: the field is
+       height-bound on phones, so the bars cost it size). -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Super Game" />
+  <meta name="theme-color" content="#05060f" />
+  <link rel="apple-touch-icon" href="/src/icons/apple-touch-icon.png" />
 </head>
 
 <body>
@@ -31,6 +39,20 @@
     </section>
 
     <aside id="hud-right" class="hud-side"></aside>
+
+    <!-- Touch controls (L83): shown by CSS on touch-only devices in a match.
+         data-button names the input; tabindex -1 keeps them out of MenuNav. -->
+    <div id="touch-move" class="touch-pad">
+      <button type="button" class="touch-btn" data-button="left" tabindex="-1" aria-label="Move left">◀</button>
+      <button type="button" class="touch-btn" data-button="right" tabindex="-1" aria-label="Move right">▶</button>
+    </div>
+
+    <div id="touch-fire" class="touch-pad">
+      <button type="button" class="touch-btn fire" data-button="shoot" tabindex="-1">Fire</button>
+    </div>
+
+    <button type="button" id="touch-pause" class="touch-btn" data-button="pause" tabindex="-1"
+      aria-label="Pause"></button>
 
   </main>
 
@@ -69,15 +91,12 @@
     </div>
   </div>
 
-  <!-- Touch-only devices (ui/keyboard-notice.ts), until L83 adds touch controls -->
-  <div id="keyboard-notice" hidden>
-    <div class="notice-card panel">
-      <h1 class="notice-title">Keyboard needed</h1>
-      <p class="notice-text">Super Game is played with a keyboard for now. Touch controls are on the way.</p>
 
-      <div class="menu">
-        <button type="button" class="btn secondary" data-action="continue">Continue anyway</button>
-      </div>
+  <!-- Touch-only devices held upright: CSS only, landscape is the only layout -->
+  <div id="rotate-notice">
+    <div class="notice-card panel">
+      <h1 class="notice-title">Turn sideways</h1>
+      <p class="notice-text">Super Game plays in landscape. Rotate your phone to continue.</p>
     </div>
   </div>
 

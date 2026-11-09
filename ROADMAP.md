@@ -12,27 +12,27 @@ entries appear here as one-line stubs so the numbering stays readable.
 
 ---
 
-## Where things stand — 2026-11-08 (run on branch `l82`)
+## Where things stand — 2026-11-10 (run on branch `l83`)
 
-**This run: a playable public web game — L82 + L40 + L41.** L41 and L82 are done; **left:
-L40 (web audio)**. Next run: mobile (L83).
+**This run: L83 — mobile. Done; PR open.** Landscape layout with on-screen controls (movement
+left thumb, FIRE right thumb, pause top right), one player per phone, a "turn sideways" screen
+in portrait, full screen from the iOS home screen or on Android at match start. Tested on a
+real phone (Safari and Chrome) for speed, zoom, sound and size. Details in the
+[archive](ROADMAP-ARCHIVE.md#phase-5--web-client-wasm-no-deadline).
 
-1. **L40 — web audio** *(Levy)*. Next up. Claude walks through how browser audio works
-   (`AudioContext`, the user-gesture unlock, decoding `.ogg` into buffers), Levy writes it.
-   The web frontend has **no audio code at all** yet, so this is music + SFX, not a gesture tweak.
-2. ~~L82 — per-connection wire format~~ — **done** (branch `l82`, not merged yet). Web and
-   desktop both offer `supergame.msgpack, supergame.json` and get msgpack; v3.0.0 desktop
-   builds offer nothing and keep JSON, so **no new desktop release is needed for L82**.
-   Rebase `l82` onto master before the PR (it branched before PR #31/#32).
-3. ~~L41 — CI + deploy of the web target~~ — **done, live** (PR #30).
-4. ~~Mobile notice~~ — **done, live** (PR #31). Deleted again by L83.
-5. ~~Desktop release~~ — **v3.0.0 tagged and published** (Linux/macOS/Windows zips). Prod
-   compose now has `pull_policy: always` on both services (PR #32) — Dokploy holds the compose
-   as pasted text, so re-paste it whenever `compose.yaml` changes.
+**Check after merge:**
+- The PR's three `build-client-*` checks should show as **skipped** — the first real test of
+  #35's filter. If they ran, the filter list in `ci.yml` is wrong.
+- Android: does a match start enter full screen? (Untested — no Android device or emulator.)
+
+**Next run: PvP gameplay.** The cross-client 1v1 playtest showed it is too simple; nothing
+designed yet. Start with a design conversation, not code. L84 (a wider field) is worth
+deciding alongside it, since both change what a match looks like.
 
 **Local setup note:** the `.#web` nix shell isn't a GC root (direnv only pins the default
 shell), so `nix-collect-garbage` deletes emscripten. Pin it once with
-`nix develop .#web --profile .direnv/web-profile --command true`.
+`nix develop .#web --profile .direnv/web-profile --command true`. Test phone performance with
+the Release wasm (`--preset web-release -B build/web`): the Debug sim is ~8x slower.
 
 **Manual checks still open** (nothing automated covers them):
 - Launch `supergame-client.exe` from `windows-client-release` on a real Windows machine. It
@@ -40,15 +40,8 @@ shell), so `nix-collect-garbage` deletes emscripten. Pin it once with
 - Play a local PvP game to its end screen and confirm "Team 1"/"Team 2" in their own colours
   (L68's (c) fix is compile-verified only — the client has no test suite).
 
-**After this run:** L83 (mobile), then PvP needs more gameplay — the cross-client 1v1 playtest
-showed it is too simple; nothing designed yet.
-
 **Not blocking anything:** an assert for `PvPGame`'s `team_count ≤ MAX_TEAMS` (handshake-
 validated today); L77; L70/L78 (native client internals — `client/` is retired at web parity).
-
-**Last run (L39 + L74, PR #29, merged 2026-11-05):** online mode on web, per-player
-ready/team switch, canvas sized from the viewport. Details in the
-[archive](ROADMAP-ARCHIVE.md#phase-5--web-client-wasm-no-deadline).
 
 ---
 
@@ -221,10 +214,11 @@ All tasks below are Levy's.
 | L37 | ✅ `web/frontend/` scaffold | [archive](ROADMAP-ARCHIVE.md#phase-5--web-client-wasm-no-deadline) |
 | L38 | ✅ Unified `draw(gameState)` on the TS side | [archive](ROADMAP-ARCHIVE.md#phase-5--web-client-wasm-no-deadline) |
 | L39 | ✅ Online mode via native browser `WebSocket` | [archive](ROADMAP-ARCHIVE.md#phase-5--web-client-wasm-no-deadline) |
-| L40 | **Web audio** | **This run, after L82 (Levy writes it; Claude explains browser audio first).** **Left:** everything — `web/frontend/src` has no audio code. Music (`backgroundsound.ogg`) + SFX (`boss_hit.ogg`, `explosion.ogg`), unlocked on the first click/keypress (browsers keep an `AudioContext` suspended until a user gesture). Assets are already web-sized (~2 MB total, `.ogg`). <br><br>*Original entry:* Lazy-load audio behind a user-gesture "Play" button (browsers block autoplay pre-interaction anyway, so this is required, not optional), and re-encode `Backgroundsound.wav` (48MB) to a compressed web-friendly format — bundling the raw wav would make first load brutal. *(2026-10-25: already done — it's `assets/backgroundsound.ogg`, and all assets are ~2 MB, so only the user-gesture part is left.)* |
+| L40 | ✅ Web audio | [archive](ROADMAP-ARCHIVE.md#phase-5--web-client-wasm-no-deadline) |
 | L41 | ✅ CI: build + deploy the web target (Caddy in front of the server) | [archive](ROADMAP-ARCHIVE.md#phase-5--web-client-wasm-no-deadline) |
 | L82 | ✅ Per-connection wire format, negotiated at the handshake | [archive](ROADMAP-ARCHIVE.md#phase-5--web-client-wasm-no-deadline) |
-| L83 | **Mobile: responsive layout + touch controls** | **Next run, after L41 is live** (test on real phones against the deployed URL, iOS Safari especially). Layout: portrait/narrow screens (L38 left touch/portrait to "the responsive pass"). Input: on-screen move + fire feeding `inputs.ts` (Levy's) — open questions: fire on a touchscreen (hold vs. auto-fire), two local players on one phone (probably not), landscape-only or portrait too. Removes this run's "needs a keyboard" notice. |
+| L83 | ✅ Mobile: responsive layout + touch controls | [archive](ROADMAP-ARCHIVE.md#phase-5--web-client-wasm-no-deadline) |
+| L84 | **A wider field for phones** | **Undecided; not scheduled.** On a phone the 5:4 field (1000×800, `shared/`) is height-bound: an iPhone 14 in landscape fits at most 488×390, about 58% of the width, with the controls in the side bars. L83 got it to that cap; more size needs a different field shape. Options: a wider field for everyone (changes enemy formation spacing, movement range, the desktop client's window, and online fairness stays intact since all clients share it), or per-device shapes (unfair online: players see different amounts of the field). Decide together with the PvP gameplay design, since both change the match. |
 
 ---
 
