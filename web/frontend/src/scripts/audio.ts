@@ -36,6 +36,11 @@ export async function loadAudio() {
 function unlock() {
   if (ctx.state === "suspended") ctx.resume();
   music.play().catch(() => {});
+
+  if (ctx.state === "running") {
+    for (const type of ["pointerup", "click", "keydown"])
+      window.removeEventListener(type, unlock as EventListener);
+  }
 }
 
 export function playSfx(name: SfxName) {
@@ -65,3 +70,9 @@ window.addEventListener("keydown", unlock, {
 window.addEventListener("pointerdown", unlock, {
   once: true,
 });
+
+for (const type of ["pointerup", "click", "keydown"])
+  window.addEventListener(type, unlock);
+
+if ("audioSession" in navigator)
+  (navigator.audioSession as any).type = "playback";

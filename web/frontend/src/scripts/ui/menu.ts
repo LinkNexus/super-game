@@ -49,7 +49,7 @@ export type MenuPage = {
   title: string;
   subtitle?: string;
   form?: MenuForm;
-  items: MenuItem[];
+  items: MenuItem[] | (() => MenuItem[]);
   /// Escape, and an automatic "Back" button at the end. Omit on pages
   /// with nowhere to go back to (the main menu).
   back?: () => void;
@@ -71,11 +71,12 @@ export function showMenu(page: MenuPage) {
   subtitleEl.textContent = page.subtitle ?? "";
   card.classList.toggle("hero", page.hero ?? false);
 
-  const items =
+  const items = typeof page.items === "function" ? page.items() : page.items;
+  const buttons = (
     page.back && !page.doNotShowBackButton
-      ? [...page.items, { label: "Back", action: page.back, secondary: true }]
-      : page.items;
-  const buttons = items.map(button);
+      ? [...items, { label: "Back", action: page.back, secondary: true }]
+      : items
+  ).map(button);
 
   itemsEl.replaceChildren(
     ...(page.form ? [form(page.form, buttons)] : buttons),

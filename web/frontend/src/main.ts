@@ -1,7 +1,12 @@
 import { loadAssets } from "./scripts/assets";
 import { loadAudio, playSfx, setMusicVolume } from "./scripts/audio";
 import { appModule } from "./scripts/constants";
-import { assertNeverForScreen, toScreen } from "./scripts/helpers";
+import {
+  assertNeverForScreen,
+  enterFullscreenOnTouch,
+  isTouchOnly,
+  toScreen,
+} from "./scripts/helpers";
 import {
   endInputFrame,
   keysPressed,
@@ -23,9 +28,13 @@ import {
   drawPvPGame,
 } from "./scripts/ui/game-renderer";
 import { clearHud, updateHud } from "./scripts/ui/hud";
-import { showKeyboardNoticeIfTouchOnly } from "./scripts/ui/keyboard-notice";
 import { hideLobby, showLobby } from "./scripts/ui/lobby";
-import { hideMenu, type MenuPage, showMenu } from "./scripts/ui/menu";
+import {
+  hideMenu,
+  type MenuItem,
+  type MenuPage,
+  showMenu,
+} from "./scripts/ui/menu";
 import { spawnEnemyExplosion, updateParticles } from "./scripts/ui/particles";
 import { drawStars, updateStars } from "./scripts/ui/stars";
 import { showToast } from "./scripts/ui/toast";
@@ -84,7 +93,10 @@ const numberOfPlayersOnThisMachinePage = (
 ): MenuPage => ({
   title: "Choose the number of players from this machine",
   items: Array.from({
-    length: Math.min(maxPlayerCount, appModule.MAX_PLAYERS_PER_CLIENT),
+    length: Math.min(
+      maxPlayerCount,
+      isTouchOnly() ? 1 : appModule.MAX_PLAYERS_PER_CLIENT,
+    ),
   }).map((_, i) => ({
     label: `${i + 1} player${i > 0 ? "s" : ""}`,
     action: () =>
@@ -133,10 +145,12 @@ const pausePage = (
 const coopPage: MenuPage = {
   title: "Fighting the invasion",
   items: Array.from({
-    length: Math.min(
-      appModule.MAX_PLAYERS_COOP,
-      appModule.MAX_PLAYERS_ON_THIS_MACHINE,
-    ),
+    length: isTouchOnly()
+      ? 1
+      : Math.min(
+          appModule.MAX_PLAYERS_COOP,
+          appModule.MAX_PLAYERS_ON_THIS_MACHINE,
+        ),
   }).map((_, i) => ({
     label: `${i + 1} player${i > 0 ? "s" : ""}`,
     action: () =>
@@ -196,30 +210,36 @@ const pvpPage = (gameType: GameType): MenuPage => {
 
 const modePage = (gameType: GameType): MenuPage => ({
   title: "Select mode",
-  items: [
-    {
+  items: () => {
+    const commonMenu: MenuItem = {
       label: "Single/Coop against enemies",
       action: () => {
         if (gameType === "local") showMenu(coopPage);
         else
           showMenu(
             numberOfPlayersOnThisMachinePage(
-              {
-                kind: "coop",
-              },
-              Math.min(
-                appModule.MAX_PLAYERS_PER_CLIENT,
-                appModule.MAX_PLAYERS_ON_THIS_MACHINE,
-              ),
+              { kind: "coop" },
+              isTouchOnly()
+                ? 1
+                : Math.min(
+                    appModule.MAX_PLAYERS_PER_CLIENT,
+                    appModule.MAX_PLAYERS_ON_THIS_MACHINE,
+                  ),
             ),
           );
       },
-    },
-    {
-      label: "PvP against other players",
-      action: () => showMenu(pvpPage(gameType)),
-    },
-  ],
+    };
+
+    return gameType === "local" && isTouchOnly()
+      ? [commonMenu]
+      : [
+          commonMenu,
+          {
+            label: "PvP against other players",
+            action: () => showMenu(pvpPage(gameType)),
+          },
+        ];
+  },
   back: () => showMenu(mainPage),
 });
 
@@ -261,7 +281,6 @@ function step(now: number) {
 function init() {
   screen = { kind: "menu" };
   showMenu(mainPage);
-  showKeyboardNoticeIfTouchOnly();
 }
 
 function restart(session: GameSession) {
@@ -276,10 +295,12 @@ function restart(session: GameSession) {
     const maxPlayersCount =
       config.kind === "pvp"
         ? config.teamSize
-        : Math.min(
-            appModule.MAX_PLAYERS_PER_CLIENT,
-            appModule.MAX_PLAYERS_ON_THIS_MACHINE,
-          );
+        : isTouchOnly()
+          ? 1
+          : Math.min(
+              appModule.MAX_PLAYERS_PER_CLIENT,
+              appModule.MAX_PLAYERS_ON_THIS_MACHINE,
+            );
     startOnlineMatch(config, maxPlayersCount);
   }
 }
@@ -407,6 +428,7 @@ function isOver(s: GameState) {
 }
 
 function startLocalMatch(config: Config) {
+  enterFullscreenOnTouch();
   screen = {
     kind: "playing",
     match: {
@@ -422,6 +444,7 @@ function startOnlineMatch(
   config: OnlineSessionConfig,
   maxPlayersCount: number,
 ) {
+  enterFullscreenOnTouch();
   const dismiss = showToast("Connecting to the server...", { durationMs: 0 });
 
   new OnlineSession({
@@ -527,6 +550,9 @@ function spawnEnemiesExplosions(before: CoopGameState, after: CoopGameState) {
   }
 }
 
+document
+  .getElementById("layout")
+  ?.addEventListener("contextmenu", (e) => e.preventDefault());
 await Promise.all([loadAssets(), loadAudio()]);
 init();
 requestAnimationFrame(step);

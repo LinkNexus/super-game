@@ -6,6 +6,8 @@ type Star = {
   alpha: number;
 };
 
+let width = 0,
+  height = 0;
 const reduceMotion = window.matchMedia(
   "(prefers-reduced-motion: reduce)",
 ).matches;
@@ -15,16 +17,18 @@ let stars: Star[] = [];
 
 function resize() {
   const dpr = window.devicePixelRatio || 1;
-  bg.width = innerWidth * dpr;
-  bg.height = innerHeight * dpr;
+  width = bg.clientWidth;
+  height = bg.clientHeight;
+  bg.width = width * dpr;
+  bg.height = height * dpr;
   bgCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-  const count = Math.round((innerWidth * innerHeight) / 10000);
+  const count = Math.round((width * height) / 10000);
   stars = Array.from(
     {
       length: count,
     },
-    () => randomStar(Math.random() * innerHeight),
+    () => randomStar(Math.random() * height),
   );
 }
 
@@ -55,5 +59,4 @@ export function drawStars() {
   }
 }
 
-window.addEventListener("resize", resize);
-resize();
+new ResizeObserver(resize).observe(bg);
