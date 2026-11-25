@@ -15,17 +15,12 @@ canvasCtx.scale(dpr, dpr);
 
 export const GAME_TYPES = ["local", "online"] as const;
 export const MODES = ["coop", "pvp"] as const;
-export const CONTROLS = [
-  {
-    ArrowLeft: appModule.Button.BUTTON_LEFT,
-    ArrowRight: appModule.Button.BUTTON_RIGHT,
-    Space: appModule.Button.BUTTON_SHOOT,
-  },
-  {
-    KeyA: appModule.Button.BUTTON_LEFT,
-    KeyD: appModule.Button.BUTTON_RIGHT,
-    KeyW: appModule.Button.BUTTON_SHOOT,
-  },
-] as const;
+export const CONTROLS = {
+  [appModule.Button.LEFT]: ["ArrowLeft", "KeyA"],
+  [appModule.Button.RIGHT]: ["ArrowRight", "KeyD"],
+  [appModule.Button.UP]: ["ArrowUp", "KeyW"],
+  [appModule.Button.DOWN]: ["ArrowDown", "KeyS"],
+  [appModule.Button.SHOOT]: ["Space", "KeyJ"],
+} as const;
 
 export const ARM_DELAY_MS = 800;

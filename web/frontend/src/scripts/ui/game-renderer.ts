@@ -1,3 +1,4 @@
+import type { Vec3 } from "@wasm/supergame-web-sim.mjs";
 import { getAsset } from "../assets";
 import { appModule, canvasCtx } from "../constants";
 import { setFont, toScreen } from "../helpers";
@@ -11,7 +12,6 @@ import {
   type PlayerIds,
   type PlayerState,
   type PvPGameState,
-  type Vec2,
 } from "../messages";
 import type { GameType } from "../types";
 import { drawParticles } from "./particles";
@@ -186,7 +186,7 @@ function playerColor(
 
 function drawPlayer(player: PlayerState, playerIdx: number, color: string) {
   const playerShipImage = getAsset("playerShip");
-  const size = appModule.SIM_PLAYER_SIZE;
+  const size = appModule.SIM_PLAYER_SIZE.x / 2;
   const scale = (size * 2) / playerShipImage.naturalWidth;
 
   const screenPos = toScreen(player.position);
@@ -210,7 +210,8 @@ function drawPlayer(player: PlayerState, playerIdx: number, color: string) {
 
     const markerPos = toScreen({
       x: player.position.x + d * Math.sin(player.orientation),
-      y: player.position.y - d * Math.cos(player.orientation),
+      y: 0,
+      z: player.position.z - d * Math.cos(player.orientation),
     });
 
     drawText(`P${playerIdx + 1}`, markerPos.x, markerPos.y, {
@@ -228,15 +229,15 @@ function drawBullets(bullets: BulletState[]) {
 
     canvasCtx.fillStyle = BULLET_COLOR;
     canvasCtx.fillRect(
-      screenPos.x - appModule.SIM_BULLET_WIDTH / 2,
-      screenPos.y - appModule.SIM_BULLET_HEIGHT / 2,
-      appModule.SIM_BULLET_WIDTH,
-      appModule.SIM_BULLET_HEIGHT,
+      screenPos.x - appModule.SIM_BULLET_SIZE.x / 2,
+      screenPos.y - appModule.SIM_BULLET_SIZE.z / 2,
+      appModule.SIM_BULLET_SIZE.x,
+      appModule.SIM_BULLET_SIZE.z,
     );
   }
 }
 
-function drawEnemies(enemies: EnemySlot[], offset: Vec2) {
+function drawEnemies(enemies: EnemySlot[], offset: Vec3) {
   for (let i = 0; i < enemies.length; ++i) {
     if (!enemies[i]![0]) continue;
 
@@ -246,15 +247,16 @@ function drawEnemies(enemies: EnemySlot[], offset: Vec2) {
     const posX =
       offset.x +
       (i % appModule.SIM_ENEMY_COLS) *
-        (appModule.SIM_ENEMY_WIDTH + appModule.SIM_ENEMIES_POOL_SPACING_X);
-    const poxY =
-      offset.y -
+        (appModule.SIM_ENEMY_SIZE.x + appModule.SIM_ENEMIES_POOL_SPACING_X);
+    const poxZ =
+      offset.z -
       Math.floor(i / appModule.SIM_ENEMY_COLS) *
-        (appModule.SIM_ENEMY_HEIGHT + appModule.SIM_ENEMIES_POOL_SPACING_Y);
-    const scale = appModule.SIM_ENEMY_WIDTH / image.naturalWidth;
+        (appModule.SIM_ENEMY_SIZE.z + appModule.SIM_ENEMIES_POOL_SPACING_Z);
+    const scale = appModule.SIM_ENEMY_SIZE.x / image.naturalWidth;
     const screenPos = toScreen({
       x: posX,
-      y: poxY,
+      y: offset.y,
+      z: poxZ,
     });
 
     drawImage(
@@ -274,9 +276,9 @@ function drawBoss(boss: BossState) {
 
   drawImage(
     getAsset("boss"),
-    screenPos.x - appModule.SIM_BOSS_WIDTH / 2,
-    screenPos.y - appModule.SIM_BOSS_HEIGHT / 2,
-    appModule.SIM_BOSS_WIDTH,
-    appModule.SIM_BOSS_HEIGHT,
+    screenPos.x - appModule.SIM_BOSS_SIZE.x / 2,
+    screenPos.y - appModule.SIM_BOSS_SIZE.z / 2,
+    appModule.SIM_BOSS_SIZE.x,
+    appModule.SIM_BOSS_SIZE.z,
   );
 }

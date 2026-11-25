@@ -1,0 +1,10 @@
+BasedOnStyle: LLVM
+ColumnLimit: 100
+AlignAfterOpenBracket: BlockIndent
+BinPackArguments: false
+BinPackParameters: OnePerLine
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortLambdasOnASingleLine: All
+BreakTemplateDeclarations: Yes
+PackConstructorInitializers: CurrentLine
+SeparateDefinitionBlocks: Always

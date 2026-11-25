@@ -11,8 +11,8 @@
 #include "game.h"
 #include "match_support.h"
 #include "nlohmann/json.hpp"
-#include "shared/constants.h"
-#include "shared/messages.h"
+#include "shared/sim/constants.h"
+#include "shared/sim/messages.h"
 #include "shared/wire.h"
 #include "test_harness.h"
 #include <cstddef>
@@ -27,46 +27,46 @@ namespace {
 
 using Result = Game::ClientMessageResult;
 
-std::string switchTeamFrame(shared::PlayerId player_id,
+std::string switchTeamFrame(shared::sim::PlayerId player_id,
                             long long target_team_id) {
   nlohmann::json envelope{};
-  envelope["type"] = shared::ClientMessageType::SWITCH_TEAM;
+  envelope["type"] = shared::sim::ClientMessageType::SWITCH_TEAM;
   envelope["payload"] = {{"player_id", player_id},
                          {"target_team_id", target_team_id}};
 
   return shared::encode(envelope, shared::WireFormat::JSON);
 }
 
-std::string readyFrame(shared::PlayerId player_id, bool is_ready) {
+std::string readyFrame(shared::sim::PlayerId player_id, bool is_ready) {
   nlohmann::json envelope{};
-  envelope["type"] = shared::ClientMessageType::READY;
+  envelope["type"] = shared::sim::ClientMessageType::READY;
   envelope["payload"] = {{"player_id", player_id}, {"is_ready", is_ready}};
 
   return shared::encode(envelope, shared::WireFormat::JSON);
 }
 
 /// Bind the result to a named local (see `coopLobbyFrame` in test_inbound.cpp).
-shared::PvPGameLobbyUpdate pvpLobbyFrame(const FakeConnection &connection) {
+shared::sim::PvPGameLobbyUpdate pvpLobbyFrame(const FakeConnection &connection) {
   return connection.lastEnvelope()
       .at("payload")
-      .get<shared::PvPGameLobbyUpdate>();
+      .get<shared::sim::PvPGameLobbyUpdate>();
 }
 
 /// The lobby as built right now, without sending anything.
-shared::PvPGameLobbyUpdate pvpLobbyOf(const Game &game) {
-  return std::get<shared::PvPGameLobbyUpdate>(game.buildLobbyUpdate());
+shared::sim::PvPGameLobbyUpdate pvpLobbyOf(const Game &game) {
+  return std::get<shared::sim::PvPGameLobbyUpdate>(game.buildLobbyUpdate());
 }
 
 /// The id of the team at lobby slot @p slot; fails the case if it's vacant.
-shared::TeamId teamIdAt(const shared::PvPGameLobbyUpdate &lobby,
+shared::sim::TeamId teamIdAt(const shared::sim::PvPGameLobbyUpdate &lobby,
                         std::size_t slot) {
   REQUIRE(lobby.teams[slot].has_value());
   return lobby.teams[slot]->id;
 }
 
 /// The id of the team listing player @p id, or nullopt.
-std::optional<shared::TeamId> teamOf(const shared::PvPGameLobbyUpdate &lobby,
-                                     shared::PlayerId id) {
+std::optional<shared::sim::TeamId> teamOf(const shared::sim::PvPGameLobbyUpdate &lobby,
+                                     shared::sim::PlayerId id) {
   for (const auto &team : lobby.teams) {
     if (!team)
       continue;
@@ -80,8 +80,8 @@ std::optional<shared::TeamId> teamOf(const shared::PvPGameLobbyUpdate &lobby,
   return std::nullopt;
 }
 
-std::optional<shared::PlayerInfo>
-lobbyPlayer(const shared::PvPGameLobbyUpdate &lobby, shared::PlayerId id) {
+std::optional<shared::sim::PlayerInfo>
+lobbyPlayer(const shared::sim::PvPGameLobbyUpdate &lobby, shared::sim::PlayerId id) {
   for (const auto &team : lobby.teams) {
     if (!team)
       continue;
@@ -95,8 +95,8 @@ lobbyPlayer(const shared::PvPGameLobbyUpdate &lobby, shared::PlayerId id) {
   return std::nullopt;
 }
 
-std::size_t seatsTaken(const shared::PvPGameLobbyUpdate &lobby,
-                       shared::TeamId id) {
+std::size_t seatsTaken(const shared::sim::PvPGameLobbyUpdate &lobby,
+                       shared::sim::TeamId id) {
   for (const auto &team : lobby.teams) {
     if (team && team->id == id)
       return shared::count_optional(team->players);
@@ -111,13 +111,13 @@ std::size_t seatsTaken(const shared::PvPGameLobbyUpdate &lobby,
 
 TEST(the_pvp_lobby_gives_every_team_a_distinct_id) {
   FakeConnection a;
-  PvPGame game{/*team_size=*/1, /*team_count=*/shared::MAX_TEAMS};
+  PvPGame game{/*team_size=*/1, /*team_count=*/shared::sim::MAX_TEAMS};
 
   REQUIRE(game.addPlayers(fakeConnection(a, {1})));
 
   const auto lobby = pvpLobbyOf(game);
-  for (std::size_t i = 0; i < shared::MAX_TEAMS; ++i) {
-    for (std::size_t j = i + 1; j < shared::MAX_TEAMS; ++j)
+  for (std::size_t i = 0; i < shared::sim::MAX_TEAMS; ++i) {
+    for (std::size_t j = i + 1; j < shared::sim::MAX_TEAMS; ++j)
       CHECK(teamIdAt(lobby, i) != teamIdAt(lobby, j));
   }
 }
@@ -150,7 +150,7 @@ TEST(a_players_lobby_team_id_is_its_team_id_in_the_match) {
   REQUIRE(team1 != nullptr);
   REQUIRE(team2 != nullptr);
 
-  auto lists = [](const shared::TeamState &team, shared::PlayerId id) {
+  auto lists = [](const shared::sim::TeamState &team, shared::sim::PlayerId id) {
     for (const auto &player : team.players)
       if (player && player->id == id)
         return true;
@@ -412,7 +412,7 @@ TEST(a_switch_frame_missing_a_field_is_reported_as_a_bad_envelope) {
   for (const auto &payload : {nlohmann::json{{"target_team_id", t1}},
                               nlohmann::json{{"player_id", 1}}}) {
     nlohmann::json envelope{};
-    envelope["type"] = shared::ClientMessageType::SWITCH_TEAM;
+    envelope["type"] = shared::sim::ClientMessageType::SWITCH_TEAM;
     envelope["payload"] = payload;
 
     const auto outcome = game.handleClientMessage(
@@ -484,7 +484,7 @@ TEST(a_switch_clears_ready_in_both_teams_it_touches) {
   REQUIRE(game.handleClientMessage(aData, switchTeamFrame(1, t1)));
 
   const auto lobby = pvpLobbyFrame(c);
-  for (const shared::PlayerId id : {1u, 2u, 3u}) {
+  for (const shared::sim::PlayerId id : {1u, 2u, 3u}) {
     const auto player = lobbyPlayer(lobby, id);
     REQUIRE(player.has_value());
     CHECK_EQ(player->is_ready, false);

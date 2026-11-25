@@ -8,8 +8,8 @@ const { default: createModule } = await import(
 );
 const Module = await createModule();
 
-const { ENEMIES_ENTRANCE } = Module.CoopGamePhase;
-const { BUTTON_SHOOT } = Module.Button;
+const { PLAYERS_ENTRANCE, ENEMIES_ENTRANCE } = Module.CoopGamePhase;
+const { SHOOT } = Module.Button;
 
 let failures = 0;
 function test(name, fn) {
@@ -36,47 +36,48 @@ function step(sim, inputs) {
 // envelope): the TS LocalSession tags it with the mode it started.
 test("coop: step returns a CoopGameState", () => {
   const sim = new Module.WebSim();
-  sim.startCoop(1);
+  sim.startCoop2D(1);
   const state = step(sim, NO_INPUT);
 
   assert.equal(state.type, undefined, "got an envelope");
-  assert.equal(state.phase, ENEMIES_ENTRANCE);
+  assert.equal(state.phase, PLAYERS_ENTRANCE);
   assert.equal(state.players.filter((p) => p !== null).length, 1);
   assert.ok(Array.isArray(state.enemies), "no enemies grid");
   sim.delete();
 });
 
-test("coop: the entrance ends within 60 s of ticks", () => {
+test("coop: the entrances end within 60 s of ticks", () => {
   const sim = new Module.WebSim();
-  sim.startCoop(2);
+  sim.startCoop2D(2);
   let state;
   for (let i = 0; i < 60 * 60; i++) {
     state = step(
       sim,
       padded([
-        { buttons: BUTTON_SHOOT, player_id: 1 },
+        { buttons: SHOOT, player_id: 1 },
         { buttons: 0, player_id: 2 },
       ]),
     );
-    if (state.phase !== ENEMIES_ENTRANCE) break;
+    if (state.phase !== PLAYERS_ENTRANCE && state.phase !== ENEMIES_ENTRANCE) break;
   }
+  assert.notEqual(state.phase, PLAYERS_ENTRANCE);
   assert.notEqual(state.phase, ENEMIES_ENTRANCE);
   sim.delete();
 });
 
 test("coop: getPlayerIds is the local players' ids, null-padded", () => {
   const sim = new Module.WebSim();
-  sim.startCoop(2);
+  sim.startCoop2D(2);
   assert.deepEqual(JSON.parse(sim.getPlayerIds()), padded([1, 2]));
   // Restarting (e.g. back to the menu) must not keep the old second id.
-  sim.startCoop(1);
+  sim.startCoop2D(1);
   assert.deepEqual(JSON.parse(sim.getPlayerIds()), padded([1]));
   sim.delete();
 });
 
 test("pvp: getPlayerIds gives one distinct id per local player", () => {
   const sim = new Module.WebSim();
-  sim.startPvP(2, 1);
+  sim.startPvP2D(2, 1);
   const ids = JSON.parse(sim.getPlayerIds());
   assert.equal(ids.length, SLOTS);
   const set = ids.filter((id) => id !== null);
@@ -90,13 +91,13 @@ test("pvp: getPlayerIds gives one distinct id per local player", () => {
 test("pvp: more players than this machine's seats throws", () => {
   const sim = new Module.WebSim();
   const teamSize = SLOTS; // two teams of SLOTS is always one team too many
-  assert.throws(() => sim.startPvP(2, teamSize));
+  assert.throws(() => sim.startPvP2D(2, teamSize));
   sim.delete();
 });
 
 test("pvp: 1v1 returns a PvPGameState with two teams", () => {
   const sim = new Module.WebSim();
-  sim.startPvP(2, 1);
+  sim.startPvP2D(2, 1);
   const state = step(sim, NO_INPUT);
 
   assert.equal(state.type, undefined, "got an envelope");

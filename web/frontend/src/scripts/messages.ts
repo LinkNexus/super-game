@@ -7,7 +7,7 @@
 // Enum numbers that Embind binds (web/wasm/src/web_sim.cpp) are taken from
 // the generated .d.mts, so they can't drift; the rest are mirrored by hand
 // below, each with its C++ source.
-import type { MainModule } from "@wasm/supergame-web-sim.mjs";
+import type { MainModule, Vec3 } from "@wasm/supergame-web-sim.mjs";
 
 type Bound = MainModule;
 
@@ -40,12 +40,6 @@ export type TeamOutcome = (typeof TeamOutcome)[keyof typeof TeamOutcome];
 export type PlayerId = number;
 /// PlayerIds<N>: N slots, null where no player.
 export type PlayerIds = (PlayerId | null)[];
-
-/// mathlib::Vec2f (vendor/mathlib, JSON from messages.h).
-export interface Vec2 {
-  x: number;
-  y: number;
-}
 
 // --- Client -> server --------------------------------------------------
 
@@ -99,7 +93,7 @@ export interface PvPGameLobbyUpdate {
 // --- Server -> client: game state --------------------------------------
 
 export interface PlayerState {
-  position: Vec2;
+  position: Vec3;
   lives: number;
   points: number;
   orientation: number;
@@ -108,14 +102,14 @@ export interface PlayerState {
 }
 
 export interface BulletState {
-  position: Vec2;
+  position: Vec3;
   type: BulletType;
   /// Whether this pool slot is in flight.
   active: boolean;
 }
 
 export interface BossState {
-  position: Vec2;
+  position: Vec3;
   active: boolean;
   health: number;
   max_health: number;
@@ -129,7 +123,7 @@ export interface CoopGameState {
   bullets: BulletState[];
   players: (PlayerState | null)[];
   enemies: EnemySlot[];
-  enemies_offset: Vec2;
+  enemies_offset: Vec3;
   boss: BossState;
 }
 

@@ -1,3 +1,4 @@
+import type { Vec3 } from "@wasm/supergame-web-sim.mjs";
 import { appModule, canvasCtx } from "./constants";
 import type { GameScreen } from "./types";
 
@@ -17,10 +18,10 @@ export function countOptional<T>(arr: (T | null)[]): number {
   return arr.reduce((acc, el) => acc + (el !== null ? 1 : 0), 0);
 }
 
-export function toScreen({ x, y }: { x: number; y: number }) {
+export function toScreen({ x, z }: Vec3) {
   return {
     x,
-    y: appModule.SCREEN_HEIGHT - y,
+    y: appModule.SCREEN_HEIGHT - z,
   };
 }
 

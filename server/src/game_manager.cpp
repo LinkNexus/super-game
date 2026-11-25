@@ -1,6 +1,8 @@
 #include "game_manager.h"
 #include "game.h"
 
+using namespace shared::sim;
+
 void GameManager::forEachGame(std::function<void(Game *)> fn) {
   for (const auto &game : games_by_id) {
     fn(game.second.get());
@@ -15,8 +17,7 @@ CoopGame *GameManager::createCoopGame() {
   return gamePtr;
 }
 
-CoopGame *
-GameManager::joinOrCreateCoopGame(const PerSocketPlayers &players_data) {
+CoopGame *GameManager::joinOrCreateCoopGame(const PerSocketPlayers &players_data) {
   for (auto game : open_coop_games_) {
     if (game->addPlayers(players_data)) {
       return game;
@@ -28,8 +29,7 @@ GameManager::joinOrCreateCoopGame(const PerSocketPlayers &players_data) {
   return new_game->addPlayers(players_data) ? new_game : nullptr;
 }
 
-PvPGame *GameManager::createPvPGame(shared::PlayerCount team_size,
-                                    shared::PlayerCount team_count) {
+PvPGame *GameManager::createPvPGame(PlayerCount team_size, PlayerCount team_count) {
   auto game = std::make_unique<PvPGame>(team_size, team_count);
   game->id = next_game_id++;
   auto gamePtr = game.get();
@@ -37,9 +37,9 @@ PvPGame *GameManager::createPvPGame(shared::PlayerCount team_size,
   return gamePtr;
 }
 
-PvPGame *GameManager::joinOrCreatePvPGame(const PerSocketPlayers &players_data,
-                                          shared::PlayerCount team_size,
-                                          shared::PlayerCount team_count) {
+PvPGame *GameManager::joinOrCreatePvPGame(
+    const PerSocketPlayers &players_data, PlayerCount team_size, PlayerCount team_count
+) {
   auto &openGames = open_pvp_games_[{team_count, team_size}];
 
   for (auto game : openGames) {
@@ -67,15 +67,14 @@ void GameManager::destroyGame(GameId gameId) {
     return;
 
   open_coop_games_.erase(
-      std::remove(open_coop_games_.begin(), open_coop_games_.end(), game),
-      open_coop_games_.end());
+      std::remove(open_coop_games_.begin(), open_coop_games_.end(), game), open_coop_games_.end()
+  );
 
   for (auto &kvp : open_pvp_games_) {
     auto it = std::find(kvp.second.begin(), kvp.second.end(), game);
 
     if (it != kvp.second.end()) {
-      kvp.second.erase(std::remove(kvp.second.begin(), kvp.second.end(), game),
-                       kvp.second.end());
+      kvp.second.erase(std::remove(kvp.second.begin(), kvp.second.end(), game), kvp.second.end());
       break;
     }
   }

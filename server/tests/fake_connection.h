@@ -12,7 +12,7 @@
 /// interface lands here rather than in every case.
 
 #include "nlohmann/json.hpp"
-#include "shared/messages.h"
+#include "shared/sim/messages.h"
 #include "shared/wire.h"
 #include "types.h"
 #include <cstddef>
@@ -30,8 +30,7 @@ namespace testing {
 struct FakeConnection final : WsConnection {
   std::vector<std::string> sent{};
 
-  explicit FakeConnection(shared::WireFormat format = shared::WireFormat::JSON)
-      : format_{format} {}
+  explicit FakeConnection(shared::WireFormat format = shared::WireFormat::JSON) : format_{format} {}
 
   shared::WireFormat format() const override { return format_; }
 
@@ -48,8 +47,8 @@ struct FakeConnection final : WsConnection {
     return shared::decode(sent.back(), format_);
   }
 
-  shared::ServerMessageType lastType() const {
-    return lastEnvelope().at("type").get<shared::ServerMessageType>();
+  shared::sim::ServerMessageType lastType() const {
+    return lastEnvelope().at("type").get<shared::sim::ServerMessageType>();
   }
 
 private:
@@ -63,8 +62,7 @@ private:
 /// namespaces were collapsed, the same number is what reaches the sim and
 /// the wire.
 inline PerSocketPlayers
-fakeConnection(FakeConnection &connection,
-               std::initializer_list<ServerPlayerId> ids) {
+fakeConnection(FakeConnection &connection, std::initializer_list<ServerPlayerId> ids) {
   PerSocketPlayers data{};
   data.ws = &connection;
 

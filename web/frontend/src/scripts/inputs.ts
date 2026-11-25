@@ -91,10 +91,7 @@ for (const el of document.querySelectorAll<HTMLElement>("[data-button]")) {
 }
 
 export function pollPlayerInputsInGame(playerIds: PlayerIds) {
-  if (
-    playerIds.length > appModule.MAX_PLAYERS_ON_THIS_MACHINE ||
-    playerIds.length > CONTROLS.length
-  )
+  if (playerIds.length > appModule.MAX_PLAYERS_ON_THIS_MACHINE)
     throw new Error(`Too many players on this machine: ${playerIds.length}`);
 
   const inputs: PlayerInputs = Array(
@@ -109,9 +106,9 @@ export function pollPlayerInputsInGame(playerIds: PlayerIds) {
       player_id: playerIds[i] as number,
     };
 
-    for (const [key, button] of Object.entries(CONTROLS[i]!)) {
-      if (keysDown.has(key)) {
-        input.buttons |= button;
+    for (const [button, keys] of Object.entries(CONTROLS)) {
+      if (i < keys.length && keysDown.has(keys[i]!)) {
+        input.buttons |= Number(button);
       }
     }
 

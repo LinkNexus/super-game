@@ -9,21 +9,25 @@
 
 #include "test_harness.h"
 
-#include "shared/constants.h"
 #include "shared/helpers.h"
-#include "shared/messages.h"
-#include "shared/sim/boss_sim.h"
-#include "shared/sim/enemy_sim.h"
-#include "shared/sim/game_sim.h"
-#include "shared/sim/player_sim.h"
+#include "shared/sim/constants.h"
+#include "shared/sim/entities/boss.h"
+#include "shared/sim/entities/enemies.h"
+#include "shared/sim/entities/player.h"
+#include "shared/sim/messages.h"
+#include "shared/sim/modes.h"
+#include "shared/sim/world.h"
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 
-using namespace shared;
+using namespace shared::sim;
+using shared::count_optional;
 
 namespace {
 
+using Sim = CoopGameSim<Flat>;
 using Phase = CoopGamePhase;
 using CoopInputs = PlayerInputs<MAX_PLAYERS_COOP>;
 
@@ -64,7 +68,7 @@ std::size_t aliveEnemies(const CoopGameState &state) {
 
 /// Steps until @p pred holds, or gives up after @p maxTicks.
 /// @return true if the predicate was satisfied.
-bool stepUntil(CoopGameSim &sim, CoopGameState &state, const CoopInputs &inputs,
+bool stepUntil(Sim &sim, CoopGameState &state, const CoopInputs &inputs,
                int maxTicks, bool (*pred)(const CoopGameState &)) {
   for (int tick = 0; tick < maxTicks; ++tick) {
     sim.step(state, inputs, FIXED_DT);
@@ -79,13 +83,13 @@ bool stepUntil(CoopGameSim &sim, CoopGameState &state, const CoopInputs &inputs,
 /// a compile error rather than a runtime one and cannot be tested here. The
 /// empty roster is the only reachable rejection.
 TEST(coop_start_rejects_an_empty_roster) {
-  CoopGameSim sim;
+  Sim sim;
 
   CHECK_THROWS(sim.start(PlayerIds<MAX_PLAYERS_COOP>{}));
 }
 
 TEST(coop_start_uses_the_ids_it_is_given) {
-  CoopGameSim sim;
+  Sim sim;
   sim.start(PlayerIds<3>{7u, 8u, 9u});
 
   CoopGameState state{};
@@ -99,7 +103,7 @@ TEST(coop_start_uses_the_ids_it_is_given) {
 }
 
 TEST(coop_state_mirrors_roster_after_first_step) {
-  CoopGameSim sim;
+  Sim sim;
   sim.start(PlayerIds<2>{1u, 2u});
 
   CoopGameState state{};
@@ -108,28 +112,35 @@ TEST(coop_state_mirrors_roster_after_first_step) {
 
   REQUIRE(livePlayers(state) == 2u);
 
+  // Starting lives are private to the sim; every player must start with the
+  // same, non-zero count.
+  const auto &first = *std::find_if(state.players.begin(), state.players.end(),
+                                    [](const auto &p) { return p.has_value(); });
+  CHECK(first->lives > 0);
+
   for (const auto &player : state.players) {
     if (player) {
-      CHECK_EQ(player->lives, PlayerSimState::INITIAL_LIVES);
+      CHECK_EQ(player->lives, first->lives);
       CHECK_EQ(player->points, 0u);
     }
   }
 }
 
 TEST(coop_entrance_phase_terminates_and_hands_over_to_fight) {
-  CoopGameSim sim;
+  Sim sim;
   sim.start(PlayerIds<MAX_PLAYERS_COOP>{1u, 2u, 3u, 4u});
 
   CoopGameState state{};
   const CoopInputs idle{};
 
-  // The grid starts off-screen; one tick must not be enough to finish.
+  // Players fly in first, then the grid; one tick must not be enough to
+  // finish either.
   sim.step(state, idle, FIXED_DT);
-  CHECK_EQ(phaseOf(state), Phase::ENEMIES_ENTRANCE);
+  CHECK_EQ(phaseOf(state), Phase::PLAYERS_ENTRANCE);
 
-  // A full-size grid descends ~500px at 70px/s, so ~430 ticks. The bound is
-  // deliberately generous - the assertion is "it terminates at all", which is
-  // the regression that matters.
+  // The players fly ~100 units at 50/s (~120 ticks), then a full grid ~500 at
+  // 70/s (~430 ticks). The bound is deliberately generous - the assertion is
+  // "it terminates at all", which is the regression that matters.
   const bool reachedFight =
       stepUntil(sim, state, idle, 3000, [](const CoopGameState &s) {
         return static_cast<Phase>(s.phase) == Phase::FIGHT_ENEMIES;
@@ -139,7 +150,7 @@ TEST(coop_entrance_phase_terminates_and_hands_over_to_fight) {
 }
 
 TEST(coop_entrance_leaves_enemies_alive_and_boss_inactive) {
-  CoopGameSim sim;
+  Sim sim;
   sim.start(PlayerIds<1>{1u});
 
   CoopGameState state{};
@@ -174,7 +185,7 @@ TEST(coop_entrance_leaves_enemies_alive_and_boss_inactive) {
 // gone from the wire and liveness is now the optional itself.
 
 TEST(coop_remove_player_leaves_no_duplicate_or_stale_entry) {
-  CoopGameSim sim;
+  Sim sim;
   sim.start(PlayerIds<3>{1u, 2u, 3u});
 
   CoopGameState state{};
@@ -196,7 +207,7 @@ TEST(coop_remove_player_leaves_no_duplicate_or_stale_entry) {
 /// Two removals in a row, from both ends, so the fix can't work for a single
 /// hole and break for two.
 TEST(coop_two_removals_leave_only_the_remaining_player) {
-  CoopGameSim sim;
+  Sim sim;
   sim.start(PlayerIds<3>{1u, 2u, 3u});
 
   CoopGameState state{};
@@ -215,7 +226,7 @@ TEST(coop_two_removals_leave_only_the_remaining_player) {
 }
 
 TEST(coop_losing_the_last_player_ends_the_match) {
-  CoopGameSim sim;
+  Sim sim;
   sim.start(PlayerIds<2>{1u, 2u});
 
   CoopGameState state{};
@@ -231,7 +242,7 @@ TEST(coop_losing_the_last_player_ends_the_match) {
 }
 
 TEST(coop_removing_an_unknown_id_is_a_no_op) {
-  CoopGameSim sim;
+  Sim sim;
   sim.start(PlayerIds<2>{1u, 2u});
 
   CoopGameState state{};
@@ -242,7 +253,7 @@ TEST(coop_removing_an_unknown_id_is_a_no_op) {
   sim.step(state, idle, FIXED_DT);
 
   CHECK_EQ(livePlayers(state), 2u);
-  CHECK_EQ(phaseOf(state), Phase::ENEMIES_ENTRANCE);
+  CHECK_EQ(phaseOf(state), Phase::PLAYERS_ENTRANCE);
 }
 
 // --- Difficulty is set at start, not by live occupancy ---------------------
@@ -255,13 +266,13 @@ TEST(coop_removing_an_unknown_id_is_a_no_op) {
 // BOSS_ENTRANCE transition.
 
 TEST(coop_enemy_grid_scales_with_the_starting_player_count) {
-  CoopGameSim solo;
+  Sim solo;
   solo.start(PlayerIds<1>{1u});
   CoopGameState soloState{};
   const CoopInputs idle{};
   solo.step(soloState, idle, FIXED_DT);
 
-  CoopGameSim full;
+  Sim full;
   full.start(PlayerIds<MAX_PLAYERS_COOP>{1u, 2u, 3u, 4u});
   CoopGameState fullState{};
   full.step(fullState, idle, FIXED_DT);
@@ -277,7 +288,7 @@ TEST(coop_enemy_grid_scales_with_the_starting_player_count) {
 /// rather than the stored match size, losing three of four players would
 /// shrink it mid-match.
 TEST(coop_enemy_grid_does_not_shrink_when_players_leave) {
-  CoopGameSim sim;
+  Sim sim;
   sim.start(PlayerIds<MAX_PLAYERS_COOP>{1u, 2u, 3u, 4u});
 
   CoopGameState state{};
@@ -307,8 +318,8 @@ TEST(coop_enemy_grid_does_not_shrink_when_players_leave) {
 TEST(boss_difficulty_scales_with_the_count_it_is_given) {
   BossSimState solo{};
   BossSimState full{};
-  solo.init(1);
-  full.init(MAX_PLAYERS_COOP);
+  solo.init(Flat::BOSS_ENTRANCE, 1);
+  full.init(Flat::BOSS_ENTRANCE, MAX_PLAYERS_COOP);
 
   CHECK_EQ(solo.max_health, BossSimState::INITIAL_LP);
   CHECK_EQ(full.max_health, BossSimState::INITIAL_LP * MAX_PLAYERS_COOP);

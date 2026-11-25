@@ -16,7 +16,7 @@
 #include "game.h"
 #include "match_support.h"
 #include "shared/helpers.h"
-#include "shared/messages.h"
+#include "shared/sim/messages.h"
 #include "test_harness.h"
 #include <variant>
 
@@ -29,13 +29,13 @@ namespace {
 /// The coop/PvP alternative of a freshly built lobby snapshot, or nullptr if
 /// the game produced the other one. Pointer rather than a reference so a
 /// mismatch fails a `REQUIRE` instead of throwing `std::bad_variant_access`.
-const shared::CoopGameLobbyUpdate *
-coopLobby(const shared::LobbyUpdate &update) {
-  return std::get_if<shared::CoopGameLobbyUpdate>(&update);
+const shared::sim::CoopGameLobbyUpdate *
+coopLobby(const shared::sim::LobbyUpdate &update) {
+  return std::get_if<shared::sim::CoopGameLobbyUpdate>(&update);
 }
 
-const shared::PvPGameLobbyUpdate *pvpLobby(const shared::LobbyUpdate &update) {
-  return std::get_if<shared::PvPGameLobbyUpdate>(&update);
+const shared::sim::PvPGameLobbyUpdate *pvpLobby(const shared::sim::LobbyUpdate &update) {
+  return std::get_if<shared::sim::PvPGameLobbyUpdate>(&update);
 }
 
 /// `buildLobbyUpdate()` returns by value, and these hand back a pointer *into*
@@ -43,8 +43,8 @@ const shared::PvPGameLobbyUpdate *pvpLobby(const shared::LobbyUpdate &update) {
 /// pointer the moment the full expression ends. Deleting the rvalue overload
 /// makes that a compile error rather than a use-after-scope that happens to
 /// read the right bytes under one compiler and not the other.
-const shared::CoopGameLobbyUpdate *coopLobby(shared::LobbyUpdate &&) = delete;
-const shared::PvPGameLobbyUpdate *pvpLobby(shared::LobbyUpdate &&) = delete;
+const shared::sim::CoopGameLobbyUpdate *coopLobby(shared::sim::LobbyUpdate &&) = delete;
+const shared::sim::PvPGameLobbyUpdate *pvpLobby(shared::sim::LobbyUpdate &&) = delete;
 
 } // namespace
 
@@ -291,7 +291,7 @@ TEST(coop_lobby_broadcast_reaches_every_connection_with_identical_bytes) {
 
   CHECK_EQ(a.sent.size(), 1u);
   CHECK_EQ(b.sent.size(), 1u);
-  CHECK_EQ(a.lastType(), shared::ServerMessageType::COOP_GAME_LOBBY_UPDATE);
+  CHECK_EQ(a.lastType(), shared::sim::ServerMessageType::COOP_GAME_LOBBY_UPDATE);
   // Identical bytes per recipient is what makes the single hoisted `dump()`
   // correct (L69) - the payload does not depend on who receives it.
   CHECK_EQ(a.sent.back(), b.sent.back());
@@ -306,7 +306,7 @@ TEST(pvp_lobby_broadcast_carries_the_pvp_discriminator) {
 
   game.broadcastLobbyUpdate();
 
-  CHECK_EQ(a.lastType(), shared::ServerMessageType::PVP_GAME_LOBBY_UPDATE);
+  CHECK_EQ(a.lastType(), shared::sim::ServerMessageType::PVP_GAME_LOBBY_UPDATE);
   CHECK_EQ(a.sent.back(), b.sent.back());
 }
 
@@ -325,7 +325,7 @@ TEST(coop_lobby_frame_decodes_back_into_the_snapshot_that_was_sent) {
   game.broadcastLobbyUpdate();
 
   const auto decoded =
-      a.lastEnvelope().at("payload").get<shared::CoopGameLobbyUpdate>();
+      a.lastEnvelope().at("payload").get<shared::sim::CoopGameLobbyUpdate>();
   const auto update = game.buildLobbyUpdate();
   const auto *built = coopLobby(update);
   REQUIRE(built != nullptr);

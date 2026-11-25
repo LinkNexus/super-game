@@ -4,86 +4,99 @@ Guidance for Claude Code when working in this repository.
 
 ## Project
 
-"Super Game" — a Space Invaders-style game in C++23 + raylib, originally built for a university
-course at HTW Berlin (module deadline August 12, met — graded, passed). Sole contributor: Levy,
-owning gameplay/simulation/networking as well as visuals/audio/UI polish (formerly split with a
-second contributor, Lynce, no longer on the project). See `ROADMAP.md` for the full task
-breakdown and phase status — keep it up to date as tasks complete.
+"Super Game" — a Space Invaders-style game in C++23, originally built for a university course at
+HTW Berlin (module deadline August 12, met — graded, passed) and continued past it as a learning
+project. Sole contributor: Levy, owning everything (formerly split with a second contributor,
+Lynce, no longer on the project). See `ROADMAP.md` for the task breakdown and phase status —
+keep it up to date as tasks complete; `ROADMAP-ARCHIVE.md` holds closed entries in full.
 
-The project is moving from a local single-machine game (Phase 1, done) to a networked
-client/server model (Phase 2, in progress): one authoritative simulation shared verbatim between
-a headless server and the client's own "local mode," with only trimmed state crossing the wire
-for online play.
+Where it stands: one authoritative simulation (`shared/`) runs verbatim in a headless server, in
+the native raylib client's local mode, and in the browser via WebAssembly. Coop (1-4 players)
+and PvP (1v1/2v2) work both locally and online, and the web client is deployed with mobile
+touch controls. **Next: Phase 6, the 3D migration** (an on-rails corridor shooter, with 2D
+kept as a selectable mode). The leaderboard (Phase 7) comes after it.
 
 ## Build & run
 
 ```bash
-cmake --preset debug
-cmake --build build/debug
-./build/debug/bin/supergame-client      # Linux
-build\debug\bin\supergame-client.exe    # Windows
+make                    # everything, Debug (make BUILD=release for Release)
+make client / server / tests
+make run-client         # against ws://localhost:9001
+make run-server
+make test               # shared/ + server/ suites via CTest
+make help               # all targets
 ```
 
-Release preset is `release` instead of `debug`. First-time setup (submodules) is documented in
+Every `make` target wraps a CMake preset of the same name (`cmake --list-presets`), each with its
+own `build/<preset>` tree. The web build needs the nix shell: `nix develop .#web`, then
+`make web-dev` (wasm + Vite on :5173), `make web-dist`, `make test-web`. Use `web-release` when
+measuring performance — the Debug wasm sim is ~8x slower. First-time setup (submodules) is in
 `README.md`.
 
 ## Architecture
 
-Three CMake targets, each its own subdirectory with `include/` + `src/`:
-
-- **`shared/`** — static library `supergame-shared`, linked into both `client` and `server`. No
-  raylib dependency — this is the headless, engine-agnostic core. Layout is the conventional
-  nested form: `shared/include/shared/*.h` + `shared/src/*.cpp`, included elsewhere as
-  `#include "shared/..."` (chosen deliberately over a flat `shared/*.h` layout for readability
-  as the project grows).
-  - `shared/include/shared/sim/` — the actual simulation: `GameSim` (headless authoritative game
-    loop, `step(inputs, dt)`) plus one `SimState` struct + update logic per entity
-    (`player_sim`, `enemy_sim`, `bullet_sim`, `boss_sim`). These structs hold full internal
-    bookkeeping (cooldowns, phase, pattern, velocity) and are never sent over the network.
-  - `shared/include/shared/messages.h` — the trimmed wire format (`PlayerInput`, `GameState`,
-    etc.). Only these cross the network in online mode; `SimState` stays server/local-process
-    only. `GameSim::step()` takes internal state in and writes a `GameState` out each tick.
-  - `shared/include/shared/constants.h` — dimensions/speeds shared between sim and render (e.g.
-    entity hitbox sizes needed for both collision and drawing).
-- **`client/`** — raylib binary `supergame-client`. Entities here (`Player`, `Boss`, `Enemy`) are
-  render-only: `Texture2D` + `draw(const shared::XState&)`, no simulation logic, no raylib input
-  calls outside `Game::getPlayerInputs()`/`Game::handleInput()`. `Game` owns a `shared::GameSim`
-  and runs it in-process for local play.
-- **`server/`** — headless binary `supergame-server`, no raylib. Will run `GameSim` authoritatively
-  over WebSockets (µWebSockets, vendored under `vendor/uWebSockets`).
+- **`shared/`** — static library `supergame-shared`, no raylib: the headless, engine-agnostic
+  core, linked into the client, server and wasm module. Included as `#include "shared/..."`.
+  `helpers.h`, `wire.h` and `rnd_generator.h` sit at the top level (namespace `shared`).
+  - `sim/` (namespace `shared::sim`) — `modes.h` holds `CoopGameSim<W>` and `PvPGameSim<W>`
+    (separate types, not a mode flag; `start<N>`/`step<N>` take the player count as a template
+    parameter) and `GameSim`, the variant of the concrete ones (`FlatCoop`, `FlatPvP`).
+    `world.h` holds the `World` concept and `Flat`, the 2D world: field bounds, entrances,
+    movement rules and the boss's fan. `entities/` has one `SimState` struct + update logic per
+    entity (`player`, `bullet`, `enemies`, `boss`); they take values from the world, never the
+    world itself, and never cross the wire.
+  - `sim/messages.h` — the trimmed wire structs (`PlayerInput`, game states, lobby updates,
+    `ServerMessageType`/`ClientMessageType`); not templated on the world. `wire.h` encodes/
+    decodes them as JSON or msgpack; the format is negotiated per connection by WebSocket
+    subprotocol.
+  - `sim/types.h` — phase enums and id/count aliases. Vectors and hitboxes are
+    `vendor/mathlib`'s (`Vec3f`, `Cuboidf`). `sim/constants.h` — counts and timings shared by
+    sim and render.
+  - `tests/` — sim and wire suites.
+- **`server/`** — headless `supergame-server` over µWebSockets, split into a library plus a thin
+  `main.cpp` so `server/tests/` can drive it with a fake connection. `GameManager` matches
+  connections into `CoopGame`/`PvPGame` (both derive from `Game`), each owning a sim.
+- **`client/`** — native raylib `supergame-client` (IXWebSocket for online play). Kept building
+  and ported through sim changes, though the web client is the main one. Render-only entities,
+  `GameScreen` enum in `client/include/types.h`, local or online `Session`.
+- **`web/`** — `web/wasm/` exposes the sim to JS through Embind (`WebSim`, JSON across the
+  boundary, plus world helpers like `FlatWorld.formationSlot` for the renderer);
+  `web/frontend/` is TypeScript + Vite (rendering, input incl. touch, audio, menus).
+  Deployed as Docker images behind Caddy by `.github/workflows/ci.yml`.
 
 ### Design conventions worth preserving
 
-- **State and logic migrate together, per entity.** Don't split moving an entity's data to
-  `shared/` from moving its update logic — that duplicates state and breaks single-source-of-truth.
-- **`draw()` is source-agnostic.** Client draw functions take the minimal wire-shaped state
-  (`shared::PlayerState`, not the internal `SimState`), so they render identically regardless of
-  whether the state came from local sim or a network snapshot.
-- **Session/screen state lives above the sim, not inside it.** `Screen` (`MENU`, `PLAYING`,
-  `PAUSED`, `GAME_OVER`, `WIN`) is a client-only enum in `client/include/game.h` — it governs
-  *whether* `Game` calls into the sim at all. `GameSim`'s own `GamePhase` (`ENEMIES_ENTRANCE`,
-  `FIGHT_ENEMIES`, `BOSS_ENTRANCE`, `FIGHT_BOSS`, `WON`, `GAME_OVER`) only tracks sim-relevant
-  progression and rides along in `GameState.phase` for the wire. Pause has no sim-side
-  representation at all — `Game::run()` simply skips calling `sim_.step()` while paused and keeps
-  drawing the last known state.
-- **Hitbox vs. texture size.** For entities with real sprites where visual size may differ from
-  collision size (e.g. `Boss`), the authoritative hitbox constant lives in `shared/`; any
-  client-only visual scale factor stays in `client/`.
+- **State and logic migrate together, per entity.** Don't move an entity's data without its
+  update logic — that duplicates state and breaks single-source-of-truth.
+- **`draw()` is source-agnostic.** Draw code takes the wire-shaped state, never `SimState`, so it
+  renders identically from the local sim or a network snapshot.
+- **Session/screen state lives above the sim, not inside it.** The client's `GameScreen`
+  (C++ enum or TS union) governs *whether* the sim is stepped; the sim's phase enums track only
+  game progression and ride along on the wire. Pause has no sim-side representation — the
+  client just stops stepping and keeps drawing the last state.
+- **Hitbox vs. texture size.** The authoritative hitbox constant lives in `shared/`; any visual
+  scale factor stays client-side.
+- **Entity sizes are full extents** (`Vec3f SIZE`, as mathlib's `fromCenterAndSize` expects).
+  Halves are derived (`HALF_SIZE = SIZE / 2`), never set by hand.
+- **Positive `orientation` is counter-clockwise as seen on the Flat screen** (x right, z up),
+  which is a rotation around **-y** (`rotatedAroundAxis(-unitY, θ)`), not +y.
+- **No mode checks inside update functions.** Rule differences (Coop/PvP now, Flat/Rail in
+  Phase 6) are separate types or composed parts, not `if (mode)` branches.
 
 ## Working agreement — IMPORTANT
 
-**Levy writes all gameplay/simulation/entity logic himself.** This is a learning exercise for a
-university course, not a delegated implementation task. When asked a design or "how would you do
-X" question about game/sim code:
+**Levy writes all gameplay/simulation/entity logic himself.** This is a learning exercise, not a
+delegated implementation task. When asked a design or "how would you do X" question:
 
 - Explain, point out gaps, and give illustrative snippets **in chat**.
-- **Do not** `Write`/`Edit` actual source files — headers, `.cpp`, `shared/` sim code,
-  `client/` entity or `game.cpp` files — unless explicitly asked to implement/apply a change.
+- **Do not** `Write`/`Edit` source files — C++ headers and `.cpp` in `shared/`, `server/`,
+  `client/`, `web/wasm/`, or the TypeScript logic in `web/frontend/src/` — unless explicitly
+  asked to implement/apply a change.
 - If it's ambiguous whether a request means "explain" or "implement," ask first.
 
 **Exceptions — fine to edit directly, no need to ask:**
-- `CMakeLists.txt`, `CMakePresets.json`, `vendor/*.cmake` — build wiring, not game logic.
-- `ROADMAP.md` and this `CLAUDE.md` — project documentation/tracking, not game logic.
+- `CMakeLists.txt`, `CMakePresets.json`, `vendor/*.cmake`, `cmake/*.cmake` — build wiring.
+- `ROADMAP.md`, `ROADMAP-ARCHIVE.md` and this `CLAUDE.md` — project documentation/tracking.
 
-Reading/building the code to diagnose bugs or verify claims is always fine — the restriction is
-specifically on writing to logic files, not on investigating them.
+Reading/building/running the code to diagnose bugs or verify claims is always fine — the
+restriction is on writing to logic files, not on investigating them.

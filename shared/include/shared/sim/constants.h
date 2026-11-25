@@ -1,12 +1,12 @@
 #pragma once
 
-#include "shared/types.h"
+#include "shared/sim/types.h"
 #include <algorithm>
 #include <cstdint>
 
 /// Engine-agnostic core shared verbatim between the client's local mode and
 /// the headless server's authoritative simulation.
-namespace shared {
+namespace shared::sim {
 /// Game world width in pixels, shared by simulation bounds and rendering.
 static constexpr uint16_t SCREEN_WIDTH = 1000;
 /// Game world height in pixels, shared by simulation bounds and rendering.
@@ -34,4 +34,4 @@ static constexpr auto MAX_PLAYERS_PER_GAME =
     std::max<PlayerCount>(MAX_PLAYERS_COOP, MAX_TEAMS *MAX_PLAYERS_PER_TEAM);
 
 constexpr std::size_t MAX_NAME_LENGTH = 9;
-} // namespace shared
+} // namespace shared::sim

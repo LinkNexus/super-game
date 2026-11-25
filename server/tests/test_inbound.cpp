@@ -20,8 +20,8 @@
 #include "fake_connection.h"
 #include "game.h"
 #include "nlohmann/json.hpp"
-#include "shared/constants.h"
-#include "shared/messages.h"
+#include "shared/sim/constants.h"
+#include "shared/sim/messages.h"
 #include "shared/wire.h"
 #include "test_harness.h"
 #include <cstddef>
@@ -39,23 +39,23 @@ using Result = Game::ClientMessageResult;
 /// envelope, encoded through the same `shared::encode` both ends share, so a
 /// case pinned to JSON (L82 made the format per connection). Ready is per
 /// player (L74), so the payload names the player it readies.
-std::string readyFrame(shared::PlayerId player_id, bool is_ready) {
+std::string readyFrame(shared::sim::PlayerId player_id, bool is_ready) {
   nlohmann::json envelope{};
-  envelope["type"] = shared::ClientMessageType::READY;
+  envelope["type"] = shared::sim::ClientMessageType::READY;
   envelope["payload"] = {{"player_id", player_id}, {"is_ready", is_ready}};
 
   return shared::encode(envelope, shared::WireFormat::JSON);
 }
 
-std::string inputFrame(std::initializer_list<shared::PlayerInput> inputs) {
-  shared::PlayerInputs<shared::MAX_PLAYERS_PER_CLIENT> payload{};
+std::string inputFrame(std::initializer_list<shared::sim::PlayerInput> inputs) {
+  shared::sim::PlayerInputs<shared::sim::MAX_PLAYERS_PER_CLIENT> payload{};
 
   std::size_t i = 0;
   for (const auto &input : inputs)
     payload[i++] = input;
 
   nlohmann::json envelope{};
-  envelope["type"] = shared::ClientMessageType::PLAYER_INPUT;
+  envelope["type"] = shared::sim::ClientMessageType::PLAYER_INPUT;
   envelope["payload"] = payload;
 
   return shared::encode(envelope, shared::WireFormat::JSON);
@@ -76,10 +76,10 @@ std::string inputFrame(std::initializer_list<shared::PlayerInput> inputs) {
 /// written, which is the same stack-use-after-scope L64 hit with
 /// `coopLobby(game.buildLobbyUpdate())` - the helper's shape differs, the trap
 /// does not.
-shared::CoopGameLobbyUpdate coopLobbyFrame(const FakeConnection &connection) {
+shared::sim::CoopGameLobbyUpdate coopLobbyFrame(const FakeConnection &connection) {
   return connection.lastEnvelope()
       .at("payload")
-      .get<shared::CoopGameLobbyUpdate>();
+      .get<shared::sim::CoopGameLobbyUpdate>();
 }
 
 /// Two coop players, one slot each, neither ready yet.
@@ -131,7 +131,7 @@ TEST(a_ready_frame_broadcasts_a_fresh_lobby_update_to_every_player) {
   REQUIRE(game.handleClientMessage(firstData, readyFrame(1, true)));
 
   CHECK(b.sent.size() > before);
-  CHECK_EQ(b.lastType(), shared::ServerMessageType::COOP_GAME_LOBBY_UPDATE);
+  CHECK_EQ(b.lastType(), shared::sim::ServerMessageType::COOP_GAME_LOBBY_UPDATE);
 
   const auto lobby = coopLobbyFrame(b);
   REQUIRE(lobby.players[0].has_value());
@@ -182,7 +182,7 @@ TEST(a_ready_frame_without_a_player_id_is_reported_as_a_bad_envelope) {
   REQUIRE(game.addPlayers(data));
 
   nlohmann::json envelope{};
-  envelope["type"] = shared::ClientMessageType::READY;
+  envelope["type"] = shared::sim::ClientMessageType::READY;
   envelope["payload"] = {{"is_ready", true}};
 
   const auto outcome = game.handleClientMessage(
@@ -266,15 +266,15 @@ TEST(an_input_frame_routes_to_the_slot_it_names) {
   REQUIRE(game.addPlayers(data));
 
   REQUIRE(game.handleClientMessage(
-      data, inputFrame({shared::PlayerInput{shared::BUTTON_LEFT, 2}})));
+      data, inputFrame({shared::sim::PlayerInput{shared::sim::Button::LEFT, 2}})));
 
   auto *first = game.findPlayerById(1);
   auto *second = game.findPlayerById(2);
   REQUIRE(first != nullptr);
   REQUIRE(second != nullptr);
 
-  CHECK_EQ(second->pending_movement, shared::BUTTON_LEFT);
-  CHECK_EQ(first->pending_movement, shared::BUTTON_NONE);
+  CHECK_EQ(second->pending_movement, shared::sim::Button::LEFT);
+  CHECK_EQ(first->pending_movement, shared::sim::Button::NONE);
 }
 
 /// Both slots of a same-keyboard duo move independently inside one frame -
@@ -287,11 +287,11 @@ TEST(one_frame_carries_both_slots_of_a_two_slot_connection) {
   REQUIRE(game.addPlayers(data));
 
   REQUIRE(game.handleClientMessage(
-      data, inputFrame({shared::PlayerInput{shared::BUTTON_LEFT, 1},
-                        shared::PlayerInput{shared::BUTTON_RIGHT, 2}})));
+      data, inputFrame({shared::sim::PlayerInput{shared::sim::Button::LEFT, 1},
+                        shared::sim::PlayerInput{shared::sim::Button::RIGHT, 2}})));
 
-  CHECK_EQ(game.findPlayerById(1)->pending_movement, shared::BUTTON_LEFT);
-  CHECK_EQ(game.findPlayerById(2)->pending_movement, shared::BUTTON_RIGHT);
+  CHECK_EQ(game.findPlayerById(1)->pending_movement, shared::sim::Button::LEFT);
+  CHECK_EQ(game.findPlayerById(2)->pending_movement, shared::sim::Button::RIGHT);
 }
 
 /// A connection may only move the players it owns. `player_id` arrives from
@@ -307,10 +307,10 @@ TEST(an_input_naming_a_player_the_sender_does_not_own_is_ignored) {
   joinCoopPair(game, firstData, secondData);
 
   REQUIRE(game.handleClientMessage(
-      firstData, inputFrame({shared::PlayerInput{shared::BUTTON_LEFT, 2}})));
+      firstData, inputFrame({shared::sim::PlayerInput{shared::sim::Button::LEFT, 2}})));
 
-  CHECK_EQ(game.findPlayerById(2)->pending_movement, shared::BUTTON_NONE);
-  CHECK_EQ(game.findPlayerById(1)->pending_movement, shared::BUTTON_NONE);
+  CHECK_EQ(game.findPlayerById(2)->pending_movement, shared::sim::Button::NONE);
+  CHECK_EQ(game.findPlayerById(1)->pending_movement, shared::sim::Button::NONE);
 }
 
 /// An id belonging to nobody is dropped per-input, not per-frame: the valid
@@ -324,10 +324,10 @@ TEST(an_unknown_player_id_does_not_discard_the_rest_of_the_frame) {
   REQUIRE(game.addPlayers(data));
 
   REQUIRE(game.handleClientMessage(
-      data, inputFrame({shared::PlayerInput{shared::BUTTON_LEFT, 99},
-                        shared::PlayerInput{shared::BUTTON_RIGHT, 2}})));
+      data, inputFrame({shared::sim::PlayerInput{shared::sim::Button::LEFT, 99},
+                        shared::sim::PlayerInput{shared::sim::Button::RIGHT, 2}})));
 
-  CHECK_EQ(game.findPlayerById(2)->pending_movement, shared::BUTTON_RIGHT);
+  CHECK_EQ(game.findPlayerById(2)->pending_movement, shared::sim::Button::RIGHT);
 }
 
 /// Held fire counts once per press, not once per frame. At 60 Hz the
@@ -340,7 +340,7 @@ TEST(a_held_shoot_button_counts_as_one_shot_across_frames) {
   auto data = fakeConnection(a, {1});
   REQUIRE(game.addPlayers(data));
 
-  const auto held = inputFrame({shared::PlayerInput{shared::BUTTON_SHOOT, 1}});
+  const auto held = inputFrame({shared::sim::PlayerInput{shared::sim::Button::SHOOT, 1}});
   REQUIRE(game.handleClientMessage(data, held));
   REQUIRE(game.handleClientMessage(data, held));
   REQUIRE(game.handleClientMessage(data, held));
@@ -358,11 +358,11 @@ TEST(releasing_and_pressing_shoot_again_counts_as_a_second_shot) {
   REQUIRE(game.addPlayers(data));
 
   REQUIRE(game.handleClientMessage(
-      data, inputFrame({shared::PlayerInput{shared::BUTTON_SHOOT, 1}})));
+      data, inputFrame({shared::sim::PlayerInput{shared::sim::Button::SHOOT, 1}})));
   REQUIRE(game.handleClientMessage(
-      data, inputFrame({shared::PlayerInput{shared::BUTTON_NONE, 1}})));
+      data, inputFrame({shared::sim::PlayerInput{shared::sim::Button::NONE, 1}})));
   REQUIRE(game.handleClientMessage(
-      data, inputFrame({shared::PlayerInput{shared::BUTTON_SHOOT, 1}})));
+      data, inputFrame({shared::sim::PlayerInput{shared::sim::Button::SHOOT, 1}})));
 
   CHECK_EQ(game.findPlayerById(1)->pending_shots, 2);
 }
@@ -465,7 +465,7 @@ TEST(a_payload_that_does_not_match_its_type_is_reported_as_a_bad_envelope) {
   REQUIRE(game.addPlayers(data));
 
   nlohmann::json envelope{};
-  envelope["type"] = shared::ClientMessageType::READY;
+  envelope["type"] = shared::sim::ClientMessageType::READY;
   envelope["payload"] = "not an object";
 
   const auto outcome = game.handleClientMessage(

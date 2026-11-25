@@ -10,7 +10,7 @@
 #include "game.h"
 #include "match_support.h"
 #include "nlohmann/json.hpp"
-#include "shared/messages.h"
+#include "shared/sim/messages.h"
 #include "shared/wire.h"
 #include "test_harness.h"
 #include <string>
@@ -23,20 +23,20 @@ using testing::stepUntil;
 
 namespace {
 
-std::string readyFrame(shared::PlayerId player_id, bool is_ready,
+std::string readyFrame(shared::sim::PlayerId player_id, bool is_ready,
                        WireFormat format) {
   nlohmann::json envelope{};
-  envelope["type"] = shared::ClientMessageType::READY;
+  envelope["type"] = shared::sim::ClientMessageType::READY;
   envelope["payload"] = {{"player_id", player_id}, {"is_ready", is_ready}};
 
   return shared::encode(envelope, format);
 }
 
 /// Player @p id's ready flag in @p connection's most recent lobby frame.
-bool isReadyInLastLobby(const FakeConnection &connection, shared::PlayerId id) {
+bool isReadyInLastLobby(const FakeConnection &connection, shared::sim::PlayerId id) {
   const auto lobby = connection.lastEnvelope()
                          .at("payload")
-                         .get<shared::CoopGameLobbyUpdate>();
+                         .get<shared::sim::CoopGameLobbyUpdate>();
 
   for (const auto &player : lobby.players) {
     if (player && player->id == id)
@@ -65,9 +65,9 @@ TEST(a_lobby_update_reaches_each_connection_in_its_own_format) {
   CHECK(nlohmann::json::accept(json.sent.back()));
   CHECK(!nlohmann::json::accept(msgpack.sent.back()));
 
-  CHECK_EQ(json.lastType(), shared::ServerMessageType::COOP_GAME_LOBBY_UPDATE);
+  CHECK_EQ(json.lastType(), shared::sim::ServerMessageType::COOP_GAME_LOBBY_UPDATE);
   CHECK_EQ(msgpack.lastType(),
-           shared::ServerMessageType::COOP_GAME_LOBBY_UPDATE);
+           shared::sim::ServerMessageType::COOP_GAME_LOBBY_UPDATE);
   CHECK(json.lastEnvelope() == msgpack.lastEnvelope());
 }
 
@@ -86,10 +86,10 @@ TEST(a_match_state_reaches_each_connection_in_its_own_format) {
 
   REQUIRE(stepUntil(game, [&] {
     return !msgpack.sent.empty() &&
-           msgpack.lastType() == shared::ServerMessageType::COOP_GAME_STATE;
+           msgpack.lastType() == shared::sim::ServerMessageType::COOP_GAME_STATE;
   }));
 
-  CHECK_EQ(json.lastType(), shared::ServerMessageType::COOP_GAME_STATE);
+  CHECK_EQ(json.lastType(), shared::sim::ServerMessageType::COOP_GAME_STATE);
   CHECK(!nlohmann::json::accept(msgpack.sent.back()));
   CHECK(msgpack.sent.back().size() < json.sent.back().size());
   CHECK(json.lastEnvelope() == msgpack.lastEnvelope());
