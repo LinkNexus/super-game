@@ -6,8 +6,8 @@
 #include "game_designer.h"
 #include "raylib.h"
 #include "session.h"
-#include "shared/constants.h"
-#include "shared/messages.h"
+#include "shared/sim/constants.h"
+#include "shared/sim/messages.h"
 #include "types.h"
 #include <array>
 #include <memory>
@@ -20,6 +20,8 @@
 class Game {
 public:
   explicit Game(std::string_view server_url = DEFAULT_SERVER_URL);
+
+  explicit Game(std::array<Star, STAR_COUNT> stars) : stars_(stars) {}
 
   /// Runs the full window/game loop until the window is closed: polls
   /// input, steps the active session at a fixed timestep, and renders.
@@ -47,13 +49,14 @@ private:
   /// for whichever local player(s) are active this tick.
   ThisMachinePlayerInputs pollPlayersInputs();
 
-  void spawnExplosion(const Vector2 &pos, shared::EnemyType type);
+  void spawnExplosion(const Vector2 &pos, shared::sim::EnemyType type);
 
   /// Diffs @p before and @p after to spawn explosion particles for enemies
   /// that died this tick, since the wire `GameState` doesn't carry death
   /// events itself.
-  void spawnEnemyExplosions(const shared::CoopGameState &before,
-                            const shared::CoopGameState &after);
+  void spawnEnemyExplosions(
+      const shared::sim::CoopGameState &before, const shared::sim::CoopGameState &after
+  );
 
   void handleEventsOnScreen();
 
@@ -68,19 +71,28 @@ private:
   GameDesigner game_designer_{};
   AudioManager audio_manager_{};
 
-  static constexpr std::array<
-      std::array<std::pair<KeyboardKey, shared::Button>, 3>,
-      MAX_PLAYERS_ON_THIS_MACHINE>
-      PLAYERS_CONTROLS{{{{
-                            {KEY_LEFT, shared::Button::BUTTON_LEFT},
-                            {KEY_RIGHT, shared::Button::BUTTON_RIGHT},
-                            {KEY_SPACE, shared::Button::BUTTON_SHOOT},
-                        }},
-                        {{
-                            {KEY_A, shared::Button::BUTTON_LEFT},
-                            {KEY_D, shared::Button::BUTTON_RIGHT},
-                            {KEY_W, shared::Button::BUTTON_SHOOT},
-                        }}}};
+  static constexpr std::
+      array<std::pair<shared::sim::Button, std::array<KeyboardKey, MAX_PLAYERS_ON_THIS_MACHINE>>, 3>
+          PLAYERS_CONTROLS = {
+              {{shared::sim::Button::LEFT, {KEY_LEFT, KEY_A}},
+               {shared::sim::Button::RIGHT, {KEY_RIGHT, KEY_D}},
+               {shared::sim::Button::SHOOT, {KEY_SPACE, KEY_W}}}
+  };
+
+  // static constexpr std::
+  //     array<std::array<std::pair<KeyboardKey, shared::Button>, 3>, MAX_PLAYERS_ON_THIS_MACHINE>
+  //         PLAYERS_CONTROLS{
+  //             {{{
+  //                  {KEY_LEFT, shared::sim::Button::LEFT},
+  //                  {KEY_RIGHT, shared::sim::Button::RIGHT},
+  //                  {KEY_SPACE, shared::sim::Button::SHOOT},
+  //              }},
+  //              {{
+  //                  {KEY_A, shared::sim::Button::LEFT},
+  //                  {KEY_D, shared::sim::Button::RIGHT},
+  //                  {KEY_W, shared::sim::Button::SHOOT},
+  //              }}}
+  //         };
 
   /// The lobby reuses each player's controls: shoot readies, left/right
   /// moves to the neighbouring team. Keep in sync with PLAYERS_CONTROLS.
@@ -100,7 +112,7 @@ private:
 
   std::string server_url_{};
 
-  std::array<TextInput, shared::MAX_PLAYERS_PER_CLIENT> name_text_boxes_{};
+  std::array<TextInput, shared::sim::MAX_PLAYERS_PER_CLIENT> name_text_boxes_{};
 
   float score_anim_time_{};
 };

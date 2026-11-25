@@ -2,11 +2,10 @@
 #include "constants.h"
 #include "raylib.h"
 #include "session.h"
-#include "shared/constants.h"
 #include "shared/helpers.h"
-#include "shared/messages.h"
-#include "shared/sim/enemy_sim.h"
-#include "shared/types.h"
+#include "shared/sim/constants.h"
+#include "shared/sim/messages.h"
+#include "shared/sim/types.h"
 #include "types.h"
 #include "utils.h"
 #include <algorithm>
@@ -51,15 +50,11 @@ ThisMachinePlayerInputs Game::pollPlayersInputs() {
       continue;
 
     auto &input = inputs[i].emplace();
-    input.buttons = shared::BUTTON_NONE;
-    const auto &controls = PLAYERS_CONTROLS[i];
+    input.buttons = shared::sim::Button::NONE;
 
-    for (auto control : controls) {
-      const auto &[key, button] = control;
-
-      if (IsKeyDown(key)) {
-        input.buttons = static_cast<shared::Button>(input.buttons | button);
-      }
+    for (const auto &control : PLAYERS_CONTROLS) {
+      if (IsKeyDown(control.second[i]))
+        input.buttons |= control.first;
     }
 
     input.player_id = *playerId;
@@ -73,25 +68,27 @@ void Game::checkAndPlaySoundsOnEvents() {
   if (audio_manager_.isAudioReady() && config_) {
     std::visit(
         shared::overloaded{
-            [&](shared::CoopGameState &s, shared::CoopGameState &prev_s) {
+            [&](shared::sim::CoopGameState &s, shared::sim::CoopGameState &prev_s) {
               for (std::size_t idx = 0; idx < s.enemies.size(); ++idx) {
                 if (prev_s.enemies[idx].first && !s.enemies[idx].first) {
                   audio_manager_.playExplosionSound();
                 }
               }
 
-              if (prev_s.boss.active && s.boss.active &&
-                  prev_s.boss.health > s.boss.health) {
+              if (prev_s.boss.active && s.boss.active && prev_s.boss.health > s.boss.health) {
                 audio_manager_.playBossHitSound();
               }
 
               spawnEnemyExplosions(prev_s, s);
             },
-            [](shared::PvPGameState &, shared::PvPGameState &) {
+            [](shared::sim::PvPGameState &, shared::sim::PvPGameState &) {
 
             },
-            [](auto &, auto &) {}},
-        config_->state, config_->prev_state);
+            [](auto &, auto &) {}
+        },
+        config_->state,
+        config_->prev_state
+    );
   }
 }
 
@@ -100,8 +97,9 @@ void Game::handleEventsOnScreen() {
     if (OnlineSession *s = dynamic_cast<OnlineSession *>(session_.get())) {
       auto playerIds = s->getPlayersIds();
 
-      if (std::any_of(playerIds.begin(), playerIds.end(),
-                      [](const auto &id) { return id && *id != 0; })) {
+      if (std::any_of(playerIds.begin(), playerIds.end(), [](const auto &id) {
+            return id && *id != 0;
+          })) {
         screen_ = GameScreen::LOBBY;
       }
     }
@@ -109,17 +107,19 @@ void Game::handleEventsOnScreen() {
 
   if (screen_ == GameScreen::LOBBY) {
     if (OnlineSession *s = dynamic_cast<OnlineSession *>(session_.get())) {
-      std::visit(shared::overloaded{[this](const auto &u) {
-                   if (u.game_started)
-                     screen_ = GameScreen::PLAYING;
-                 }},
-                 s->getLobbyUpdate());
+      std::visit(
+          shared::overloaded{[this](const auto &u) {
+            if (u.game_started)
+              screen_ = GameScreen::PLAYING;
+          }},
+          s->getLobbyUpdate()
+      );
     }
   }
 
   if (screen_ == GameScreen::PLAYING) {
     if (session_)
-      config_->state = session_->step(pollPlayersInputs(), shared::FIXED_DT);
+      config_->state = session_->step(pollPlayersInputs(), shared::sim::FIXED_DT);
 
     checkAndPlaySoundsOnEvents();
 
@@ -127,27 +127,30 @@ void Game::handleEventsOnScreen() {
   }
 
   if (screen_ != GameScreen::END && config_) {
-    std::visit(shared::overloaded{[&](shared::CoopGameState &s) {
-                                    if (s.phase ==
-                                            shared::CoopGamePhase::GAME_OVER ||
-                                        s.phase == shared::CoopGamePhase::WON) {
-                                      screen_ = GameScreen::END;
-                                    }
-                                  },
-                                  [&](shared::PvPGameState &s) {
-                                    if (s.phase == shared::PvPGamePhase::END) {
-                                      screen_ = GameScreen::END;
-                                    }
-                                  }},
-               config_->state);
+    std::visit(
+        shared::overloaded{
+            [&](shared::sim::CoopGameState &s) {
+              if (s.phase == shared::sim::CoopGamePhase::GAME_OVER ||
+                  s.phase == shared::sim::CoopGamePhase::WON) {
+                screen_ = GameScreen::END;
+              }
+            },
+            [&](shared::sim::PvPGameState &s) {
+              if (s.phase == shared::sim::PvPGamePhase::END) {
+                screen_ = GameScreen::END;
+              }
+            }
+        },
+        config_->state
+    );
   } else {
     // animate score screen border while showing final results
-    score_anim_time_ += shared::FIXED_DT;
+    score_anim_time_ += shared::sim::FIXED_DT;
   }
 }
 
 void Game::run() {
-  InitWindow(shared::SCREEN_WIDTH, shared::SCREEN_HEIGHT, "SUPER GAME");
+  InitWindow(shared::sim::SCREEN_WIDTH, shared::sim::SCREEN_HEIGHT, "SUPER GAME");
   ChangeDirectory(GetApplicationDirectory());
   SetExitKey(KEY_NULL);
   SetTargetFPS(TARGET_FPS);
@@ -167,15 +170,15 @@ void Game::run() {
       frame_time = 0.1f;
     accumulator += frame_time;
 
-    while (accumulator >= shared::FIXED_DT) {
+    while (accumulator >= shared::sim::FIXED_DT) {
       for (auto &s : stars_)
-        s.update(shared::FIXED_DT);
+        s.update(shared::sim::FIXED_DT);
 
       audio_manager_.updateMusicVolume(screen_ == GameScreen::PLAYING);
 
       handleEventsOnScreen();
 
-      accumulator -= shared::FIXED_DT;
+      accumulator -= shared::sim::FIXED_DT;
     }
 
     for (auto &p : particles_)
@@ -196,11 +199,12 @@ void Game::run() {
 }
 
 void Game::startLocalSession() {
-  session_ = std::make_unique<LocalSession>(&config_->modes[config_->mode_idx],
-                                            config_->player_count);
+  session_ = std::make_unique<LocalSession<shared::sim::Flat>>(
+      &config_->modes[config_->mode_idx], config_->player_count
+  );
   screen_ = GameScreen::PLAYING;
 
-  config_->state = shared::GameState();
+  config_->state = shared::sim::GameState();
   config_->prev_state = config_->state;
 }
 
@@ -212,27 +216,29 @@ void Game::startOnlineSession() {
   for (std::size_t i = 0; i < config->player_count; ++i) {
     auto &name = config->players_names[i];
 
-    url += std::string(i == 0 ? "?" : "&") + "name" + std::to_string(i + 1) +
-           "=" + name;
+    url += std::string(i == 0 ? "?" : "&") + "name" + std::to_string(i + 1) + "=" + name;
   }
 
   url += "&slots=" + std::to_string(config->player_count);
 
-  std::visit(shared::overloaded{
-                 [&url](PvPMode &m) {
-                   auto &matchUp = m.pvp_match_ups[m.selected_match_up_idx];
+  std::visit(
+      shared::overloaded{
+          [&url](PvPMode &m) {
+            auto &matchUp = m.pvp_match_ups[m.selected_match_up_idx];
 
-                   url += "&team_size=" + std::to_string(matchUp.second) +
-                          "&team_count=" + std::to_string(matchUp.first);
-                 },
-                 [](auto &) {
+            url += "&team_size=" + std::to_string(matchUp.second) +
+                   "&team_count=" + std::to_string(matchUp.first);
+          },
+          [](auto &) {
 
-                 }},
-             mode);
+          }
+      },
+      mode
+  );
 
   session_ = std::make_unique<OnlineSession>(url, config->player_count);
   screen_ = GameScreen::CONNECTING;
-  config->state = shared::GameState();
+  config->state = shared::sim::GameState();
   config->prev_state = config->state;
 }
 
@@ -241,7 +247,7 @@ void Game::initNameTextBoxes() {
 
   for (std::size_t i = 0; i < config->player_count; ++i) {
     auto &box = name_text_boxes_[i];
-    box.init(&config->players_names[i], shared::MAX_NAME_LENGTH);
+    box.init(&config->players_names[i], shared::sim::MAX_NAME_LENGTH);
   }
 }
 
@@ -291,22 +297,22 @@ void Game::handleInput() {
                               : GameScreen::SELECT_PLAYER_COUNT;
               },
               [this](PvPMode &m) {
-                for (shared::PlayerCount teamCount = 2;
-                     teamCount <= shared::MAX_TEAMS; ++teamCount) {
-                  shared::PlayerCount maxPlayersCount =
-                      type_ == GameType::ONLINE
-                          ? shared::MAX_PLAYERS_PER_TEAM
-                          : MAX_PLAYERS_ON_THIS_MACHINE / teamCount;
+                for (std::size_t teamCount = 2; teamCount <= shared::sim::MAX_TEAMS; ++teamCount) {
+                  shared::sim::PlayerCount maxPlayersCount =
+                      type_ == GameType::ONLINE ? shared::sim::MAX_PLAYERS_PER_TEAM
+                                                : MAX_PLAYERS_ON_THIS_MACHINE / teamCount;
 
-                  for (shared::PlayerCount playersCount = 1;
-                       playersCount <= maxPlayersCount; ++playersCount) {
+                  for (std::size_t playersCount = 1; playersCount <= maxPlayersCount;
+                       ++playersCount) {
                     m.pvp_match_ups.push_back({teamCount, playersCount});
                   }
                 }
 
                 screen_ = GameScreen::SELECT_PLAYER_COUNT;
-              }},
-          mode);
+              }
+          },
+          mode
+      );
     }
     break;
 
@@ -322,14 +328,12 @@ void Game::handleInput() {
         shared::overloaded{
             [this](CoopMode &) {
               if (IsKeyPressed(KEY_LEFT)) {
-                config_->player_count = (config_->player_count > 1)
-                                            ? config_->player_count - 1
-                                            : MAX_PLAYERS_ON_THIS_MACHINE;
+                config_->player_count = (config_->player_count > 1) ? config_->player_count - 1
+                                                                    : MAX_PLAYERS_ON_THIS_MACHINE;
               } else if (IsKeyPressed(KEY_RIGHT)) {
-                config_->player_count =
-                    (config_->player_count < MAX_PLAYERS_ON_THIS_MACHINE)
-                        ? config_->player_count + 1
-                        : 1;
+                config_->player_count = (config_->player_count < MAX_PLAYERS_ON_THIS_MACHINE)
+                                            ? config_->player_count + 1
+                                            : 1;
               }
             },
             [](PvPMode &m) {
@@ -338,24 +342,27 @@ void Game::handleInput() {
                                               ? m.selected_match_up_idx - 1
                                               : m.pvp_match_ups.size() - 1;
               } else if (IsKeyPressed(KEY_RIGHT)) {
-                m.selected_match_up_idx =
-                    (m.selected_match_up_idx < m.pvp_match_ups.size() - 1)
-                        ? m.selected_match_up_idx + 1
-                        : 0;
+                m.selected_match_up_idx = (m.selected_match_up_idx < m.pvp_match_ups.size() - 1)
+                                              ? m.selected_match_up_idx + 1
+                                              : 0;
               }
-            }},
-        mode);
+            }
+        },
+        mode
+    );
 
     if (IsKeyPressed(KEY_ENTER)) {
       if (type_ == GameType::LOCAL) {
-        std::visit(shared::overloaded{
-                       [](CoopMode &) {},
-                       [this](PvPMode &m) {
-                         auto &matchUp =
-                             m.pvp_match_ups[m.selected_match_up_idx];
-                         config_->player_count = matchUp.first * matchUp.second;
-                       }},
-                   mode);
+        std::visit(
+            shared::overloaded{
+                [](CoopMode &) {},
+                [this](PvPMode &m) {
+                  auto &matchUp = m.pvp_match_ups[m.selected_match_up_idx];
+                  config_->player_count = matchUp.first * matchUp.second;
+                }
+            },
+            mode
+        );
 
         startLocalSession();
       } else {
@@ -370,10 +377,10 @@ void Game::handleInput() {
                     screen_ = GameScreen::SELECT_PLAYERS_COUNT_ON_THIS_MACHINE;
                   }
                 },
-                [this](auto &) {
-                  screen_ = GameScreen::SELECT_PLAYERS_COUNT_ON_THIS_MACHINE;
-                }},
-            mode);
+                [this](auto &) { screen_ = GameScreen::SELECT_PLAYERS_COUNT_ON_THIS_MACHINE; }
+            },
+            mode
+        );
       }
     }
 
@@ -387,9 +394,9 @@ void Game::handleInput() {
       if (config_->player_count > 1)
         config_->player_count--;
       else
-        config_->player_count = shared::MAX_PLAYERS_PER_CLIENT;
+        config_->player_count = shared::sim::MAX_PLAYERS_PER_CLIENT;
     } else if (IsKeyPressed(KEY_RIGHT)) {
-      if (config_->player_count < shared::MAX_PLAYERS_PER_CLIENT)
+      if (config_->player_count < shared::sim::MAX_PLAYERS_PER_CLIENT)
         config_->player_count++;
       else
         config_->player_count = 1;
@@ -413,8 +420,7 @@ void Game::handleInput() {
     if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
       auto mousePos = GetMousePosition();
       for (std::size_t i = 0; i < config->player_count; ++i) {
-        name_text_boxes_[i].setFocus(
-            CheckCollisionPointRec(mousePos, name_text_boxes_[i].rect));
+        name_text_boxes_[i].setFocus(CheckCollisionPointRec(mousePos, name_text_boxes_[i].rect));
       }
     }
 
@@ -423,9 +429,11 @@ void Game::handleInput() {
     }
 
     if (IsKeyPressed(KEY_ENTER)) {
-      if (std::all_of(name_text_boxes_.begin(),
-                      name_text_boxes_.begin() + config->player_count,
-                      [](auto &t) { return t.getError().empty(); })) {
+      if (std::all_of(
+              name_text_boxes_.begin(),
+              name_text_boxes_.begin() + config->player_count,
+              [](auto &t) { return t.getError().empty(); }
+          )) {
         startOnlineSession();
       }
     }
@@ -489,11 +497,11 @@ namespace {
 
 /// The id of the nearest engaged team from @p teamIdx in direction @p step
 /// (-1 left, +1 right), or nullopt at the edge. No wrap-around.
-std::optional<shared::TeamId>
-neighbourTeam(const shared::PvPGameLobbyUpdate &u, std::size_t teamIdx,
-              int step) {
+std::optional<shared::sim::TeamId>
+neighbourTeam(const shared::sim::PvPGameLobbyUpdate &u, std::size_t teamIdx, int step) {
   for (auto t = static_cast<std::ptrdiff_t>(teamIdx) + step;
-       t >= 0 && std::cmp_less(t, u.teams.size()); t += step) {
+       t >= 0 && std::cmp_less(t, u.teams.size());
+       t += step) {
     if (u.teams[t])
       return u.teams[t]->id;
   }
@@ -505,17 +513,18 @@ neighbourTeam(const shared::PvPGameLobbyUpdate &u, std::size_t teamIdx,
 void Game::handleLobbyInput(OnlineSession &session) {
   const auto lobby = session.getLobbyUpdate();
   const auto ids = session.getPlayersIds();
-  const auto *pvp = std::get_if<shared::PvPGameLobbyUpdate>(&lobby);
+  const auto *pvp = std::get_if<shared::sim::PvPGameLobbyUpdate>(&lobby);
 
   for (std::size_t i = 0; i < ids.size(); ++i) {
     if (!ids[i])
       continue;
 
-    const auto keyFor = [&](shared::Button button) {
+    const auto keyFor = [&](shared::sim::Button button) {
       return std::find_if(
-                 PLAYERS_CONTROLS[i].begin(), PLAYERS_CONTROLS[i].end(),
-                 [button](const auto &c) { return c.second == button; })
-          ->first;
+                 PLAYERS_CONTROLS.begin(), PLAYERS_CONTROLS.end(), [button](const auto &c) {
+                   return c.first == button;
+                 }
+      )->second[i];
     };
 
     const auto found = findLobbyPlayer(lobby, *ids[i]);
@@ -523,15 +532,15 @@ void Game::handleLobbyInput(OnlineSession &session) {
       continue;
     const auto &[info, teamIdx] = *found;
 
-    if (IsKeyPressed(keyFor(shared::Button::BUTTON_SHOOT)))
+    if (IsKeyPressed(keyFor(shared::sim::Button::SHOOT)))
       session.sendReady(info.id, !info.is_ready);
 
     if (!pvp)
       continue;
 
-    const int step = IsKeyPressed(keyFor(shared::Button::BUTTON_LEFT))    ? -1
-                     : IsKeyPressed(keyFor(shared::Button::BUTTON_RIGHT)) ? 1
-                                                                          : 0;
+    const int step = IsKeyPressed(keyFor(shared::sim::Button::LEFT))    ? -1
+                     : IsKeyPressed(keyFor(shared::sim::Button::RIGHT)) ? 1
+                                                                        : 0;
     if (step == 0)
       continue;
 
@@ -555,18 +564,21 @@ void Game::draw() {
   case GameScreen::SELECT_PLAYER_COUNT: {
     auto &mode = config_->modes[config_->mode_idx];
 
-    std::visit(shared::overloaded{
-                   [this](CoopMode &) {
-                     game_designer_.drawPlayerCountSelectionCoop(
-                         config_->player_count);
-                   },
-                   [this](PvPMode &m) {
-                     game_designer_.drawPvPSchemaSelection(
-                         m.pvp_match_ups[m.selected_match_up_idx].first,
-                         m.pvp_match_ups[m.selected_match_up_idx].second,
-                         m.pvp_match_ups);
-                   }},
-               mode);
+    std::visit(
+        shared::overloaded{
+            [this](CoopMode &) {
+              game_designer_.drawPlayerCountSelectionCoop(config_->player_count);
+            },
+            [this](PvPMode &m) {
+              game_designer_.drawPvPSchemaSelection(
+                  m.pvp_match_ups[m.selected_match_up_idx].first,
+                  m.pvp_match_ups[m.selected_match_up_idx].second,
+                  m.pvp_match_ups
+              );
+            }
+        },
+        mode
+    );
 
     break;
   }
@@ -584,26 +596,25 @@ void Game::draw() {
     break;
 
   case GameScreen::LOBBY:
-    game_designer_.drawLobby(dynamic_cast<OnlineSession *>(session_.get()),
-                             PLAYERS_LOBBY_KEY_HINTS);
+    game_designer_.drawLobby(
+        dynamic_cast<OnlineSession *>(session_.get()), PLAYERS_LOBBY_KEY_HINTS
+    );
     break;
 
   case GameScreen::PLAYING:
   case GameScreen::PAUSED:
-    game_designer_.drawGame(config_->state, session_.get(), type_, screen_,
-                            particles_);
+    game_designer_.drawGame(config_->state, session_.get(), type_, screen_, particles_);
     break;
 
   case GameScreen::END:
-    game_designer_.drawEndScreen(config_->state, session_.get(), type_,
-                                 score_anim_time_);
+    game_designer_.drawEndScreen(config_->state, session_.get(), type_, score_anim_time_);
     break;
   }
 
   DrawFPS(10, 10);
 }
 
-void Game::spawnExplosion(const Vector2 &pos, shared::EnemyType type) {
+void Game::spawnExplosion(const Vector2 &pos, shared::sim::EnemyType type) {
   constexpr float kPI = 3.14159265358979323846f;
   int count = 8 + GetRandomValue(0, 4); // 8..12 particles
 
@@ -623,10 +634,10 @@ void Game::spawnExplosion(const Vector2 &pos, shared::EnemyType type) {
       p.size = static_cast<float>(GetRandomValue(2, 6));
 
       switch (type) {
-      case shared::EnemyType::TYPE_1:
+      case shared::sim::EnemyType::TYPE_1:
         p.color = ORANGE;
         break;
-      case shared::EnemyType::TYPE_2:
+      case shared::sim::EnemyType::TYPE_2:
         p.color = PURPLE;
         break;
       default:
@@ -639,23 +650,25 @@ void Game::spawnExplosion(const Vector2 &pos, shared::EnemyType type) {
   }
 }
 
-void Game::spawnEnemyExplosions(const shared::CoopGameState &before,
-                                const shared::CoopGameState &after) {
+void Game::spawnEnemyExplosions(
+    const shared::sim::CoopGameState &before, const shared::sim::CoopGameState &after
+) {
   for (std::size_t idx = 0; idx < after.enemies.size(); ++idx) {
     bool was_alive = before.enemies[idx].first;
     bool is_alive = after.enemies[idx].first;
 
     if (was_alive && !is_alive) {
-      float pos_x =
-          after.enemies_offset.x +
-          (idx % shared::ENEMY_COLS) * (shared::EnemySimState::WIDTH +
-                                        shared::EnemiesPoolSimState::SPACING_X);
-      float pos_y =
-          after.enemies_offset.y -
-          (idx / shared::ENEMY_COLS) * (shared::EnemySimState::HEIGHT +
-                                        shared::EnemiesPoolSimState::SPACING_Y);
+      const auto position =
+          after.enemies_offset +
+          mathlib::Vec3f{
+              (idx % shared::sim::ENEMY_COLS) * (shared::sim::EnemySimState::SIZE.x +
+                                                 shared::sim::EnemiesPoolSimState::SPACING_X),
+              0.0f,
+              -(int)(idx / shared::sim::ENEMY_COLS) *
+                  (shared::sim::EnemySimState::SIZE.z + shared::sim::EnemiesPoolSimState::SPACING_Z)
+          };
 
-      spawnExplosion(toRaylibVec({pos_x, pos_y}), after.enemies[idx].second);
+      spawnExplosion(toRaylibVec(position), after.enemies[idx].second);
     }
   }
 }

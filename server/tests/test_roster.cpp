@@ -5,7 +5,7 @@
 #include "match_support.h"
 #include "game_manager.h"
 #include "helpers.h"
-#include "shared/constants.h"
+#include "shared/sim/constants.h"
 #include "shared/helpers.h"
 #include "test_harness.h"
 
@@ -69,10 +69,10 @@ TEST(coop_rejects_a_connection_that_would_exceed_the_slot_cap) {
 
   REQUIRE(game.addPlayers(fakeConnection(a, {1, 2})));
   REQUIRE(game.addPlayers(fakeConnection(b, {3, 4})));
-  CHECK_EQ(shared::count_optional(game.getPlayers()), shared::MAX_PLAYERS_COOP);
+  CHECK_EQ(shared::count_optional(game.getPlayers()), shared::sim::MAX_PLAYERS_COOP);
 
   CHECK_EQ(game.addPlayers(fakeConnection(c, {5})), false);
-  CHECK_EQ(shared::count_optional(game.getPlayers()), shared::MAX_PLAYERS_COOP);
+  CHECK_EQ(shared::count_optional(game.getPlayers()), shared::sim::MAX_PLAYERS_COOP);
 }
 
 TEST(coop_empties_once_every_connection_leaves) {

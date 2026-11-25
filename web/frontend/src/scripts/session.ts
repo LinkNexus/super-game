@@ -1,4 +1,5 @@
 import { decode, encode } from "@msgpack/msgpack";
+import type { Vec3 } from "@wasm/supergame-web-sim.mjs";
 import { appModule, sim } from "./constants";
 import type {
   ClientMessage,
@@ -10,7 +11,6 @@ import type {
   PlayerInputs,
   PvPGameState,
   ServerMessage,
-  Vec2,
 } from "./messages";
 import type { Config } from "./types";
 
@@ -29,11 +29,11 @@ export class LocalSession extends GameSession {
 
     switch (config.kind) {
       case "coop":
-        sim.startCoop(config.playerCount);
+        sim.startCoop2D(config.playerCount);
         break;
 
       case "pvp": {
-        sim.startPvP(config.teamCount, config.teamSize);
+        sim.startPvP2D(config.teamCount, config.teamSize);
         break;
       }
     }
@@ -286,9 +286,10 @@ export class OnlineSession extends GameSession {
       1,
     );
 
-    const lerpVec2 = (prev: Vec2, target: Vec2): Vec2 => ({
+    const lerpVec = (prev: Vec3, target: Vec3): Vec3 => ({
       x: prev.x + (target.x - prev.x) * alpha,
       y: prev.y + (target.y - prev.y) * alpha,
+      z: prev.z + (target.z - prev.z) * alpha,
     });
 
     const lerpBullets = <S extends { bullets: GameState["state"]["bullets"] }>(
@@ -307,7 +308,7 @@ export class OnlineSession extends GameSession {
         if (i < prev.bullets.length) {
           const prevBullet = prev.bullets[i]!;
           if (prevBullet.active && targetB.active)
-            interB.position = lerpVec2(prevBullet.position, targetB.position);
+            interB.position = lerpVec(prevBullet.position, targetB.position);
         }
 
         interBullets.push(interB);
@@ -334,7 +335,7 @@ export class OnlineSession extends GameSession {
         };
         const prevP = findEntityById(prev.players, targetP.id);
 
-        if (prevP) interP.position = lerpVec2(prevP.position, targetP.position);
+        if (prevP) interP.position = lerpVec(prevP.position, targetP.position);
 
         return interP;
       });
@@ -350,10 +351,10 @@ export class OnlineSession extends GameSession {
         players: lerpPlayers(prev, target),
         boss: {
           ...target.boss,
-          position: lerpVec2(prev.boss.position, target.boss.position),
+          position: lerpVec(prev.boss.position, target.boss.position),
         },
         enemies: target.enemies.map((slot) => [...slot]),
-        enemies_offset: lerpVec2(prev.enemies_offset, target.enemies_offset),
+        enemies_offset: lerpVec(prev.enemies_offset, target.enemies_offset),
       };
     };
 

@@ -1,6 +1,5 @@
 #pragma once
 
-#include "shared/constants.h"
 #include <algorithm>
 #include <array>
 #include <charconv>
@@ -63,15 +62,6 @@ iterateOverOptionals(const std::array<std::optional<T>, N> &arr, Fn callback) {
       callback(arr[i].value(), i);
     }
   }
-}
-
-static inline auto isNameValid(const std::string_view name) {
-  for (const auto &c : name) {
-    if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_'))
-      return false;
-  }
-
-  return name.size() <= MAX_NAME_LENGTH;
 }
 
 } // namespace shared

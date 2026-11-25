@@ -12,22 +12,19 @@ entries appear here as one-line stubs so the numbering stays readable.
 
 ---
 
-## Where things stand — 2026-11-10 (run on branch `l83`)
+## Where things stand — 2026-11-26 (on `master`)
 
-**This run: L83 — mobile. Done; PR open.** Landscape layout with on-screen controls (movement
-left thumb, FIRE right thumb, pause top right), one player per phone, a "turn sideways" screen
-in portrait, full screen from the iOS home screen or on Android at match start. Tested on a
-real phone (Safari and Chrome) for speed, zoom, sound and size. Details in the
-[archive](ROADMAP-ARCHIVE.md#phase-5--web-client-wasm-no-deadline).
+**Last run: L43 — the sim in 3D, with `World` and `Flat`. Done, not yet committed.** All
+four suites pass (shared + server natively, shared + web binding under Emscripten). Two deliberate changes from "gameplay identical":
+a players' fly-in at match start, and a 36.8-wide player hitbox (was 18.4). Full record in
+the [archive](ROADMAP-ARCHIVE.md#phase-6--3d-migration-on-rails-corridor-shooter-no-deadline).
 
-**Check after merge:**
-- The PR's three `build-client-*` checks should show as **skipped** — the first real test of
-  #35's filter. If they ran, the filter list in `ci.yml` is wrong.
-- Android: does a match start enter full screen? (Untested — no Android device or emulator.)
+**Next run: L85** — move the origin to the centre of the field, and split the field (sim)
+from the screen (each client). Its own step, so an offset bug can't hide in L43's changes.
+L33's open question and L84 remain small decisions for any run.
 
-**Next run: PvP gameplay.** The cross-client 1v1 playtest showed it is too simple; nothing
-designed yet. Start with a design conversation, not code. L84 (a wider field) is worth
-deciding alongside it, since both change what a match looks like.
+**Decided (2026-11-10), still standing:** the game and its C++ come first, Phase 7 (the
+leaderboard) waits until after Phase 6, and `client/` stays and is ported through sim changes.
 
 **Local setup note:** the `.#web` nix shell isn't a GC root (direnv only pins the default
 shell), so `nix-collect-garbage` deletes emscripten. Pin it once with
@@ -40,7 +37,7 @@ the Release wasm (`--preset web-release -B build/web`): the Debug sim is ~8x slo
 - Play a local PvP game to its end screen and confirm "Team 1"/"Team 2" in their own colours
   (L68's (c) fix is compile-verified only — the client has no test suite).
 
-**Not blocking anything:** an assert for `PvPGame`'s `team_count ≤ MAX_TEAMS` (handshake-
+**Not blocking anything:** the boss's successive shots aim from `position` rather than the bullet's spawn point (`boss.cpp`, barely visible); an assert for `PvPGame`'s `team_count ≤ MAX_TEAMS` (handshake-
 validated today); L77; L70/L78 (native client internals — `client/` is retired at web parity).
 
 ---
@@ -105,10 +102,10 @@ All tasks below are Levy's — no gameplay/visual split anymore.
 | L28 | ✅ `GameSim` mode flag governing collision + win condition | [archive](ROADMAP-ARCHIVE.md#phase-4--game-modes-coop-1-4-players--pvp-1v1--2v2-no-deadline) |
 | L29 | ✅ Slot-claim handshake | [archive](ROADMAP-ARCHIVE.md#phase-4--game-modes-coop-1-4-players--pvp-1v1--2v2-no-deadline) |
 | L30 | ✅ Variable-count coop difficulty scaling (1-4) | [archive](ROADMAP-ARCHIVE.md#phase-4--game-modes-coop-1-4-players--pvp-1v1--2v2-no-deadline) |
-| L31 | **Team assignment for PvP 2v2** | How two duos/solos pair into Team A vs. Team B — a lobby-side "join team" pick, or auto-balance on connect (first arrival(s) to fill Team A, rest to Team B). *Partially landed with L28*: `PvPGame::addPlayer` auto-balances on connect, dropping each arrival into the first team with a free slot (so the auto-balance option is the one that shipped). Still missing: any way for a player to *choose* a team, which is what a duo joining as a pair actually needs. |
+| L31 | ✅ Team assignment for PvP 2v2 | [archive](ROADMAP-ARCHIVE.md#phase-4--game-modes-coop-1-4-players--pvp-1v1--2v2-no-deadline) |
 | L32 | ✅ Multi-slot `PlayerInput` per tick | [archive](ROADMAP-ARCHIVE.md#phase-4--game-modes-coop-1-4-players--pvp-1v1--2v2-no-deadline) |
-| L33 | **Lobby UX: mode/size-aware matchmaking + ready gating** | `Screen::LOBBY` (L26) currently assumes one undifferentiated 2-player queue. Needs separate pools per (mode, size) so a coop seeker never lands in a PvP lobby and vice versa, a team-select affordance for 2v2 (from L31), and per-connection ready toggling so a duo readies up once, not twice per slot. *Partially landed with L28*: `GameManager` now keeps a coop pool plus one open-game pool per PvP team size, so a 1v1 seeker can't land in a 2v2 game and a coop seeker never sees either; `Screen::LOBBY` renders coop and PvP lobby updates separately (PvP grouped by team). Still missing: the team-select affordance and per-connection (rather than per-slot) readying, both of which depend on L29/L31. **Open question surfaced by the L58/L59 branch — how does a 3rd or 4th coop player ever actually get in?** `tryStart()` fires from both `addPlayers` and `setPlayersReady`, and coop's gate is satisfied at two ready connections, so a 3- or 4-player game only forms if the extra machines happen to connect *before* the first two both ready up; afterwards `addPlayers`' `!is_running_` check routes the next arrival into a fresh game. "First two ready connections start the match" is a defensible rule, but it was inherited from the ready-gate's timing rather than chosen, and it leaves L30's 3- and 4-player difficulty tables essentially unreachable in normal play. Needs a deliberate decision: either an explicit desired-size the lobby waits for, or a host-starts-the-match affordance, or accept first-two-ready and note that the higher counts are opportunistic. |
-| L34 | **Mode-aware player visuals** *(was Ly15, Lynce's territory)* | Two visual schemes depending on mode: coop keeps/extends the existing per-player distinction (Ly7) up to 4 players; PvP needs team-colored ships instead (Team A one color family, Team B another, same-machine duo still distinguishable within their team's palette) plus a HUD that splits into two score/lives clusters in 2v2 rather than one shared readout. *Mostly landed with L28*, though via a **relational** scheme rather than team palettes: `Player::Type` (`MYSELF`/`PARTNER`/`ENEMY`) tints the shared ship texture WHITE/SKYBLUE/RED from the viewer's own perspective, and ships now rotate to `PlayerState.orientation` so a top-edge team visibly faces down. A second `Player::draw()` overload takes `std::array<TeamState, 2>` and renders the HUD grouped under "Team N" headers when `team_size > 1`. Still open: two players on the *same* team are both SKYBLUE and so indistinguishable from each other (the "duo distinguishable within their team's palette" part), and the same flattening hits coop once 3-4 players are in one game. |
+| L33 | **Lobby UX: how a 3rd/4th coop player gets in** | **Left: one decision.** Pools per mode/size landed with L28, team select and per-player ready with L74. Coop starts as soon as two connections are ready, so a 3rd or 4th player only gets in by connecting before that, and L30's 3- and 4-player tables are rarely reached. Options: the lobby waits for a chosen size, a host starts the match, or accept "first two ready" and call the higher counts opportunistic. <br><br>*Entry as it stood:* `Screen::LOBBY` (L26) currently assumes one undifferentiated 2-player queue. Needs separate pools per (mode, size) so a coop seeker never lands in a PvP lobby and vice versa, a team-select affordance for 2v2 (from L31), and per-connection ready toggling so a duo readies up once, not twice per slot. *Partially landed with L28*: `GameManager` now keeps a coop pool plus one open-game pool per PvP team size, so a 1v1 seeker can't land in a 2v2 game and a coop seeker never sees either; `Screen::LOBBY` renders coop and PvP lobby updates separately (PvP grouped by team). Still missing: the team-select affordance and per-connection (rather than per-slot) readying, both of which depend on L29/L31. **Open question surfaced by the L58/L59 branch — how does a 3rd or 4th coop player ever actually get in?** `tryStart()` fires from both `addPlayers` and `setPlayersReady`, and coop's gate is satisfied at two ready connections, so a 3- or 4-player game only forms if the extra machines happen to connect *before* the first two both ready up; afterwards `addPlayers`' `!is_running_` check routes the next arrival into a fresh game. "First two ready connections start the match" is a defensible rule, but it was inherited from the ready-gate's timing rather than chosen, and it leaves L30's 3- and 4-player difficulty tables essentially unreachable in normal play. Needs a deliberate decision: either an explicit desired-size the lobby waits for, or a host-starts-the-match affordance, or accept first-two-ready and note that the higher counts are opportunistic. |
+| L34 | ✅ Mode-aware player visuals | [archive](ROADMAP-ARCHIVE.md#phase-4--game-modes-coop-1-4-players--pvp-1v1--2v2-no-deadline) |
 | L56 | ✅ Sim coordinate system flipped to y-up | [archive](ROADMAP-ARCHIVE.md#phase-4--game-modes-coop-1-4-players--pvp-1v1--2v2-no-deadline) |
 | L57 | ✅ Wire the sims' `removePlayer()` into the server's disconnect path | [archive](ROADMAP-ARCHIVE.md#phase-4--game-modes-coop-1-4-players--pvp-1v1--2v2-no-deadline) |
 
@@ -195,7 +192,9 @@ client logic that isn't in `shared/` and so can't be reused as-is). This sideste
 native client's networking entirely — no `ixwebsocket`/Emscripten-socket porting pain, just a
 browser-native `WebSocket` speaking JSON `messages.h` already emits.
 
-**Decided: `client/` gets retired once `web/` reaches parity, not maintained alongside it
+**Reversed (2026-11-10): `client/` stays** after all (see the status section). It is kept
+building and gets ported through Phase 6's sim changes; the 3D renderer is still web-first.
+*Original decision:* **`client/` gets retired once `web/` reaches parity, not maintained alongside it
 indefinitely.** The native raylib binary stays authoritative while `web/` is being built;
 once the web frontend matches it for the existing 2D game (Coop/PvP, Phases 1-4), `client/`
 is dropped rather than kept in sync through Phase 6's 3D work. Reasoning: `web/wasm/` already
@@ -238,8 +237,8 @@ all need a 3D equivalent.
 generalizes it (L46) instead of preceding it. Phase 5's design is unaffected: the WASM shim
 and the binary wire format carry a third coordinate as one more field.
 
-**Platform note:** per Phase 5's decision, `client/` is expected to already be retired by the
-time this phase starts, so the 3D renderer (L48) targets the web frontend, not raylib's
+**Platform note:** `client/` stays (2026-11-10) and is ported through the sim changes, but the
+3D renderer (L48) targets the web frontend, not raylib's
 native 3D API — most likely via WebGPU, since raylib's Emscripten backend only reaches
 WebGL2 and isn't a route to it. That shifts L48's original raylib-`Camera3D`/mesh learning
 goal to whatever the web 3D stack ends up being — the API changes, the "gain real 3D
@@ -260,7 +259,95 @@ dimensionality axis next to Coop/PvP. 3D-specific features are still undesigned.
   features. **Compose, don't inherit:** Coop/PvP × Flat/Rail is four combinations, so the
   mode rules and the world rules should be independent parts (template parameters or strategy
   members), not four classes. No `if (is3D)` inside update functions (the L70 problem).
-- **Open:** which way do PvP teams face on a rail?
+- **Open:** which way do PvP teams face on a rail? (Doesn't block L43: it becomes a
+  `W::teamSpawn(team)` on the world.)
+
+**Decided (2026-11-10): the world is a template parameter, and entities never see it.**
+- `template <World W> class CoopGameSim` / `PvPGameSim`, with `World` a concept. `Flat` and
+  `Rail` are structs of static members. `GameSim` becomes a 4-way variant. Keep the sims' code in
+  `game_sim.cpp` through explicit instantiation (`template class CoopGameSim<Flat>;` etc.).
+  A runtime strategy was rejected: the world never changes mid-match, and the variant already
+  picks the type once.
+- **Entities take values, not the world.** E.g. `player.step(W::moveDirection(buttons),
+  W::PLAYER_BOUNDS, ...)`: move along a direction, then clamp to a box. Flat's
+  `PLAYER_BOUNDS` has zero height, which is the one place `y == 0` is enforced. The boss gets
+  its volley's directions from the world instead of computing angles.
+- **What the world supplies** (as refined 2026-11-18 to 11-22):
+  - `FIELD`, a `Cuboidf` for the whole playing volume (Flat: zero height; Rail: from just
+    behind the player to the spawn distance). `PLAYER_BOUNDS` (the field shrunk by the ship's
+    half-size, `z` collapsed to the player's depth) and `BULLET_BOUNDS` derive from it.
+    Other borders (the boss's sweep, the formation's walls) are derived from `FIELD` inside the
+    world's own functions and stay out of the concept.
+  - `moveDirection(buttons)`, built with a free `axis(buttons, negative, positive)` (-1/0/+1).
+    Rail must normalise diagonals, or they're √2 faster.
+  - `spreadDirections(from, std::span<Vec3f> out)`: fills a buffer the boss owns (a
+    `std::array` of `MAX_SPREAD_SHOT_BULLETS`, viewed with `.first(count)`) from the spawn
+    point at the boss's front. The boss then pairs each direction with the next free bullet.
+    Directions, not bullets, so the world does pure geometry.
+  - `moveFormation(motion, aliveExtents, dt) -> Vec3f`: returns a displacement, which the sim
+    adds to the pool's `offset`. Flat: today's sweep and step toward the player at a wall.
+    Rail: a continuous approach. `offset` (the far-left enemy's centre, the formation's anchor)
+    stays in the pool; `aliveExtents()` is computed per tick from alive hitboxes, never stored.
+    Keep today's order: extents from last tick's positions, then move, then reposition.
+  - `BossMotion` + `moveBoss(motion, position&, phase, dt)` (below).
+  - **Spawn and entrance positions as values:** `PLAYER_SPAWN`; an `Entrance {start, end,
+    speed}` for the boss and `formationEntrance(active count along z)` for the formation (start
+    bottom-anchored: `(count - 1) * pitch.z` behind). The entities' `stepEntrance(target,
+    speed, dt)` moves toward the target and snaps on arrival, so it doesn't care about the
+    axis. Curved entrances, if wanted later: a Bézier path with a duration instead of a speed.
+    Speeds unrelated to the world's distances (bullets, cooldowns, boss phases) stay on the
+    entities.
+  - `FORMATION`, the formation's shape (below).
+- **Already world-agnostic, given the fixed axes:** 3D box collision (all `y = 0` in Flat,
+  so the `y` overlap always holds), bullet movement, `reachedPlayer` (formation `z` ≤ player
+  `z`), the shot direction (`+z` turned by `orientation`).
+- **The world is a per-match choice, online too:** lobby pools keyed by (mode, world, size),
+  plus a handshake param.
+- **How entities get world behaviour (2026-11-18):** the sim computes values and passes them
+  (`moveDirection`, the bounds, formation slots precomputed once in `start()`). Behaviour the
+  entity triggers itself goes in as a plain function pointer (`&W::spreadDirection`), keeping
+  entities non-templates with their code in `.cpp`. A member template on the entity is the last
+  resort.
+- **Hitboxes become `mathlib::Cuboidf` (2026-11-18), bullets included.** They are the only
+  shape that keeps Flat identical to today, and give one box-vs-box test for everything. `y`
+  sizes only matter on Rail; bullets get a square cross-section (4 × 4 × 12). No tunnelling at
+  current speeds (≤ 15 units/tick vs. ≥ 30 units of overlap window). If Rail changes that,
+  switch bullets to a capsule swept from last tick's position.
+
+**Decided (2026-11-18): the Rail boss flies a figure-eight in the `x`–`y` plane** (a Lissajous
+curve: `x = A·sin(a·t)`, `y = B·sin(b·t + φ)`, `a:b = 1:2`), at a fixed `z`. It gets faster
+with each fight phase: an ellipse in phase 1, then a figure-eight, faster in phase 3.
+- **Constraint:** player shots fly straight along `+z`, so the path must stay within the
+  player's steerable `x`/`y` area (minus the boss's hitbox margin), or the boss is unhittable.
+- **The movement state belongs to the world, not to the boss.** Flat needs a sweep direction,
+  Rail an elapsed time. Each world defines a `BossMotion` struct and a
+  `moveBoss(motion, position, phase, dt)`; the sim holds a `typename W::BossMotion` next to
+  `boss_` and moves the boss itself, before `boss_.step()` fires. `BossSimState` loses
+  `direction` and keeps health, phase and patterns. Flat's `moveBoss` is today's sweep, moved
+  out unchanged. The enemy formation's `offset`/`direction` can follow the same pattern
+  (`advanceFormation`); its wall bounce then needs the pool to expose its alive extents.
+- **Rail's boss entrance** arrives from far `z` instead of descending in `y`: just a different
+  `Entrance` value.
+- **Later ideas, not planned:** a telegraphed charge toward the player in phase 3; drifting
+  toward the player as a short phase.
+
+**Decided (2026-11-22): each world defines its formation's shape, counted per world axis.**
+- `FormationShape { count, pitch }`: enemies along `x`, `y`, `z`, plus centre-to-centre
+  spacing per axis. Flat: `{10, 1, 8}` (today's 8 rows are its `z` count). Rail: e.g.
+  `{10, 4, 2}`, a wall of 4 rows in height, 2 layers deep. Both total 80.
+- **The slot formula is the same in both worlds** and lives on the shape:
+  `{ix * pitch.x, -iy * pitch.y, -iz * pitch.z}` (later slices go down and toward the player).
+  So `formationSlot` is no longer a world function, and "nobody ahead of me" (today's
+  `idx + ENEMY_COLS` shooting rule) is always the next index along `z`: the next row in Flat,
+  the next layer in Rail. The pool stays a non-template: it gets the shape as a value in
+  `init`.
+- **Capacity:** one `MAX_ENEMIES = 80` replaces `MAX_ENEMY_ROWS * ENEMY_COLS` for the pool and
+  the wire's enemy array, with `static_assert(W::FORMATION.size() <= MAX_ENEMIES)` per world.
+  Raise it deliberately if a world needs more.
+- **Open (decide at L45): difficulty per world.** `ROWS_PER_PLAYERS_COUNT` trims Flat's `z`
+  slices; on Rail, 2 layers is too coarse, so it would trim `y` rows instead. Either a table plus
+  the axis it trims, or `W::activeEnemies(playerCount, ix, iy, iz) -> bool`. For L43, move
+  today's table into `Flat` unchanged.
 
 **Idea (2026-10-25), not yet a task: player counts from formulas, not tables.** Today the caps
 are fixed (`MAX_PLAYERS_COOP`, `MAX_TEAMS × MAX_PLAYERS_PER_TEAM`) and enemy count/difficulty
@@ -279,17 +366,20 @@ All tasks below are Levy's.
 
 | # | Task | Notes |
 |---|------|-------|
-| L42 | **`Vec3D` primitives in `shared/`** | **Mostly done by the `vendor/mathlib` switch:** `mathlib::Vec3f` exists (incl. `rotatedAroundAxis`), and the sim's vector type is the one alias `shared::SimVec` (`types.h`). What's left is a cone-spread helper, if mathlib doesn't cover it. *Original entry:* Add a 3D vector type alongside the existing `Vec2D` (`math_utils.h`), generalizing the angle/rotation math already built for the boss's spread-shot fan (`Vec2D::rotated`, `angle_between`, `dot_product` — L21) to 3D (e.g. spreading a bullet volley across a cone instead of a 2D arc). |
-| L43 | **Migrate sim positions `Vec2D` → `Vec3D`** | `PlayerSimState`, `BulletSimState`, `EnemySimState`, `BossSimState` (and their wire counterparts in `messages.h`) move to 3D positions, one entity at a time — same "state and logic migrate together" principle already established for the client/server split (see [CLAUDE.md](CLAUDE.md)), applied to a dimensionality change instead. **Includes the axis rename** (today's sim `y` → `z`, see the decision above), and with it the 2D renderers' swap to drawing `(x, z)`. |
+| L42 | **`Vec3D` primitives in `shared/`** | **Mostly done by the `vendor/mathlib` switch:** `mathlib::Vec3f` exists (incl. `rotatedAroundAxis`). **Left:** only a cone-spread helper for L47, if mathlib doesn't cover it. The 3D box landed (`Cuboidf`/`OrientedCuboidf` with `intersects`, used by L43). *Original entry:* Add a 3D vector type alongside the existing `Vec2D` (`math_utils.h`), generalizing the angle/rotation math already built for the boss's spread-shot fan (`Vec2D::rotated`, `angle_between`, `dot_product` — L21) to 3D (e.g. spreading a bullet volley across a cone instead of a 2D arc). |
+| L43 | ✅ Migrate sim positions `Vec2D` → `Vec3D` (with `World`/`Flat`) | [archive](ROADMAP-ARCHIVE.md#phase-6--3d-migration-on-rails-corridor-shooter-no-deadline) |
+| L85 | **Move the sim's origin to the centre of the field** | **Decided (2026-11-18); do it right after L43, as its own step.** Today the origin is a corner: `Flat::FIELD` goes from `{0, 0, 0}` to `{FIELD_WIDTH, 0, FIELD_DEPTH}`. Move it to `{-FIELD_WIDTH/2, 0, -FIELD_DEPTH/2}`–`{FIELD_WIDTH/2, 0, FIELD_DEPTH/2}`. **Why:** PvP teams become exact mirror images (team B's spawn is team A's rotated 180° around `y`, the rotation their ships already use); Rail's figure-eight and camera centre on 0; "the middle" stops needing `/ 2` (`INITIAL_POSITION_X`, the formation's centring). **What changes:** every absolute position constant (player spawn, the formation's `MIN_INITIAL_OFFSET_Y`/`FINAL_OFFSET_Y`, the boss's start/end, the spread fan's corner points), most of them already gathered in `Flat` by L43; each renderer's one conversion function (`toScreen` in `web/frontend/src/scripts/helpers.ts`, `toScreen`/`toRaylibVec` in `client/include/utils.h`) gains the half-field offset next to its existing flip. **Also split field from screen (decided 2026-11-24):** the field is the sim's (`Flat::FIELD_BOUNDS`), the screen is each client's. `SCREEN_WIDTH`/`SCREEN_HEIGHT` leave `shared/` (native client: its own constant in `client/`; web: its TS constants). The native client reads `Flat::FIELD_BOUNDS` directly; wasm exports it (replacing the `SCREEN_*` constants in `web_sim.cpp`). `toScreen` then maps field → screen with a scale (`screen / field`), not just a flip, so the canvas resolution can change without touching gameplay. Rail needs no such mapping (the 3D camera projects); it reads `FIELD` only to place the camera and corridor. **Tests:** only `test_pvp_sim.cpp`'s spawn-position checks use absolute values; the rest compare positions to each other. **Why separate from L43:** L43 relies on "tests pass, gameplay identical". Moving the origin in the same step would make an offset bug impossible to pin on the rename, the `Flat` extraction or the new origin. Verify by playing a match in both clients. |
 | L44 | **Player steering: 2-DOF movement plane** | Today `PlayerSimState::POSITION_Y` is fixed — the player only ever moves in X. On-rails 3D needs real X/Y steering within a bounded plane a fixed distance in front of the camera (Z stays constant for the player; only the *world* advances in Z). Needs a new `UP`/`DOWN` bit on `PlayerInput.buttons` alongside the existing left/right/fire bits. |
-| L45 | **World/enemy Z-advance ("the rail")** | Reinterpret the existing enemy row/column formation (`enemy_sim.h`) as an (X,Y) formation plane spawned at a far Z that shrinks toward the player over time, replacing the current "step down the 2D grid" logic — keeps the existing grid/wave structure, just adds depth instead of a full rewrite. |
-| L46 | **3D collision (AABB → 3D bounding box)** | Generalize the hitbox constants (currently a single `SIZE` per entity, e.g. `PlayerSimState::SIZE`) to width/height/depth, and extend the AABB collision check used throughout `GameSim` to 3 axes. |
+| L45 | **World/enemy Z-advance ("the rail")** | **Shape decided (2026-11-22, Phase 6 above):** a wall facing the player (columns along `x`, rows along `y`), in **layers along `z`**, e.g. 10 × 4 × 2. **Left from L43:** the 2026-11-22 `FormationShape`/`MAX_ENEMIES` change (today `formationSlot` is a `Flat` function and the pool is `ENEMY_COLS * MAX_ENEMY_ROWS`). **Left to design:** Rail's difficulty table; stagger the back layers by half a column/row so they show through the gaps; rows of the back layers start shooting once the one ahead dies (falls out of the shared `z` rule); `reachedPlayer` uses the nearest alive layer (`aliveExtents().min.z`). *Original entry:* Reinterpret the existing enemy row/column formation (`enemy_sim.h`) as an (X,Y) formation plane spawned at a far Z that shrinks toward the player over time, replacing the current "step down the 2D grid" logic — keeps the existing grid/wave structure, just adds depth instead of a full rewrite. |
+| L46 | **3D collision (AABB → 3D bounding box)** | **Mostly done by L43:** every hitbox is a `mathlib::Cuboidf` and the sim's one test is `mathlib::intersects`. **Hitbox size decided (2026-11-26):** the player keeps `HITBOX_SCALE = 0.92` on the full 40 (36.8 wide), up from the old 18.4 (Levy). **Left:** check the `y` extents once Rail gives entities height (bullets 4 × 4 × 12), and the capsule fallback if Rail speeds ever tunnel. *Original entry:* Generalize the hitbox constants (currently a single `SIZE` per entity, e.g. `PlayerSimState::SIZE`) to width/height/depth, and extend the AABB collision check used throughout `GameSim` to 3 axes. |
 | L47 | **Boss spread-shot fan in 3D** | The existing angle-fan bullet pattern (L21) generalizes from a 2D arc to a 3D cone using the new `Vec3D` rotation math from L42. |
 | L48 | **Third-person 3D camera + rendering (web)** | Web-side, not `client/` (see the Platform note above): a trailing third-person camera and billboards/simple 3D models rendered via the web frontend's 3D stack — most likely WebGPU. Biggest learning curve of this phase either way; the specific API changed (was raylib's `Camera3D`/mesh/lighting surface) but the goal of gaining real 3D rendering experience didn't. |
 
 ---
 
 ## Phase 7 — Online Leaderboard with Accounts (no deadline)
+
+**Deferred (2026-11-10): after Phase 6.** A nice-to-have; the game itself comes first.
 
 **Goal:** Persistent accounts and a real leaderboard across matches. No longer a stretch idea
 now that there's no deadline pressure — a genuine phase.

@@ -1,6 +1,6 @@
 #include "audio_manager.h"
 #include "raylib.h"
-#include "shared/constants.h"
+#include "shared/sim/constants.h"
 #include <algorithm>
 
 void AudioManager::initAudio() {
@@ -29,12 +29,10 @@ void AudioManager::updateMusicVolume(bool isPlaying) {
 
     if (music_volume_ < target_music_volume_) {
       music_volume_ =
-          std::min(music_volume_ + MUSIC_FADE_SPEED * shared::FIXED_DT,
-                   target_music_volume_);
+          std::min(music_volume_ + MUSIC_FADE_SPEED * shared::sim::FIXED_DT, target_music_volume_);
     } else if (music_volume_ > target_music_volume_) {
       music_volume_ =
-          std::max(music_volume_ - MUSIC_FADE_SPEED * shared::FIXED_DT,
-                   target_music_volume_);
+          std::max(music_volume_ - MUSIC_FADE_SPEED * shared::sim::FIXED_DT, target_music_volume_);
     }
     SetMusicVolume(background_music_, music_volume_);
   }
@@ -72,4 +70,6 @@ void AudioManager::updateBackgroundMusic() {
   }
 }
 
-bool AudioManager::isAudioReady() { return audio_ready_; }
+bool AudioManager::isAudioReady() {
+  return audio_ready_;
+}

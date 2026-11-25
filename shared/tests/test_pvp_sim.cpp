@@ -4,20 +4,23 @@
 
 #include "test_harness.h"
 
-#include "shared/constants.h"
 #include "shared/helpers.h"
-#include "shared/messages.h"
-#include "shared/sim/game_sim.h"
-#include "shared/sim/player_sim.h"
+#include "shared/sim/constants.h"
+#include "shared/sim/entities/player.h"
+#include "shared/sim/messages.h"
+#include "shared/sim/modes.h"
+#include "shared/sim/world.h"
 
 #include <array>
 #include <cstddef>
 #include <utility>
 
-using namespace shared;
+using namespace shared::sim;
+using shared::count_optional;
 
 namespace {
 
+using Sim = PvPGameSim<Flat>;
 using Phase = PvPGamePhase;
 using PvPInputs = PlayerInputs<MAX_TEAMS * MAX_PLAYERS_PER_TEAM>;
 using TeamRoster = std::pair<TeamId, PlayerIds<MAX_PLAYERS_PER_TEAM>>;
@@ -28,9 +31,10 @@ Phase phaseOf(const PvPGameState &state) {
 
 /// Two teams, each roster given as the ids on that team. Team ids are 1-based
 /// because the sim indexes an internal status array by `id - 1`.
-PvPGameSim::TeamRosters rosters(const PlayerIds<MAX_PLAYERS_PER_TEAM> &first,
-                                const PlayerIds<MAX_PLAYERS_PER_TEAM> &second) {
-  PvPGameSim::TeamRosters ids{};
+PvPGameTeamRosters rosters(
+    const PlayerIds<MAX_PLAYERS_PER_TEAM> &first, const PlayerIds<MAX_PLAYERS_PER_TEAM> &second
+) {
+  PvPGameTeamRosters ids{};
   ids[0] = TeamRoster{1, first};
   ids[1] = TeamRoster{2, second};
 
@@ -80,8 +84,22 @@ const PlayerState *findPlayer(const PvPGameState &state, PlayerId id) {
   return nullptr;
 }
 
+/// Steps idle until the players have flown in and the fight has started.
+/// @return true if it started within a generous bound.
+bool stepThroughEntrance(Sim &sim, PvPGameState &state) {
+  const PvPInputs idle{};
+
+  for (int tick = 0; tick < 1000; ++tick) {
+    sim.step(state, idle, FIXED_DT);
+    if (phaseOf(state) == Phase::PLAYERS_FIGHT)
+      return true;
+  }
+
+  return false;
+}
+
 TEST(pvp_start_rejects_a_team_with_no_players) {
-  PvPGameSim sim;
+  Sim sim;
 
   CHECK_THROWS(sim.start(rosters({5u, 6u}, {})));
 }
@@ -90,7 +108,7 @@ TEST(pvp_start_rejects_a_team_with_no_players) {
 /// Both halves matter: a team whose two players share an id is one ship the
 /// sim can never address separately, and input routing is by id.
 TEST(pvp_start_assigns_each_given_id_to_its_team) {
-  PvPGameSim sim;
+  Sim sim;
   sim.start(rosters({5u, 6u}, {7u, 8u}));
 
   PvPGameState state{};
@@ -111,20 +129,24 @@ TEST(pvp_start_assigns_each_given_id_to_its_team) {
 }
 
 TEST(pvp_teams_start_at_opposite_ends_facing_each_other) {
-  PvPGameSim sim;
+  Sim sim;
   sim.start(rosters({1u, std::nullopt}, {2u, std::nullopt}));
 
   PvPGameState state{};
-  const PvPInputs idle{};
-  sim.step(state, idle, FIXED_DT);
+  REQUIRE(stepThroughEntrance(sim, state));
 
-  const auto *top = findPlayer(state, 1);
-  const auto *bottom = findPlayer(state, 2);
+  // The first team gets orientation 0, the bottom end.
+  const auto *bottom = findPlayer(state, 1);
+  const auto *top = findPlayer(state, 2);
   REQUIRE(top != nullptr);
   REQUIRE(bottom != nullptr);
 
-  CHECK_NEAR(top->position.y, SCREEN_HEIGHT - PlayerSimState::POSITION_Y, 0.5);
-  CHECK_NEAR(bottom->position.y, PlayerSimState::POSITION_Y, 0.5);
+  // Opposite ends of the field's depth, each inside it.
+  const auto field = Flat::FIELD_BOUNDS;
+  CHECK(bottom->position.z > field.min.z);
+  CHECK(bottom->position.z < field.center().z);
+  CHECK(top->position.z > field.center().z);
+  CHECK(top->position.z < field.max.z);
 
   // Facing each other: the two orientations must differ, or the top team's
   // bullets would travel away from their opponents.
@@ -146,12 +168,11 @@ TEST(pvp_teams_start_at_opposite_ends_facing_each_other) {
 /// A team's side of the field is the team's property, not the player's: both
 /// of a team's players belong on that team's end, facing the opponents.
 TEST(pvp_2v2_puts_each_whole_team_on_its_own_end) {
-  PvPGameSim sim;
+  Sim sim;
   sim.start(rosters({1u, 2u}, {3u, 4u}));
 
   PvPGameState state{};
-  const PvPInputs idle{};
-  sim.step(state, idle, FIXED_DT);
+  REQUIRE(stepThroughEntrance(sim, state));
 
   const auto *first = findPlayer(state, 1);
   const auto *second = findPlayer(state, 2);
@@ -163,8 +184,8 @@ TEST(pvp_2v2_puts_each_whole_team_on_its_own_end) {
   REQUIRE(fourth != nullptr);
 
   // Teammates share an end and an orientation.
-  CHECK_NEAR(first->position.y, second->position.y, 0.001);
-  CHECK_NEAR(third->position.y, fourth->position.y, 0.001);
+  CHECK_NEAR(first->position.z, second->position.z, 0.001);
+  CHECK_NEAR(third->position.z, fourth->position.z, 0.001);
   CHECK_NEAR(first->orientation, second->orientation, 0.001);
   CHECK_NEAR(third->orientation, fourth->orientation, 0.001);
 
@@ -172,12 +193,12 @@ TEST(pvp_2v2_puts_each_whole_team_on_its_own_end) {
   // same claim the 1v1 case makes, which is orientation-dependent: bullet
   // velocity is rotated by the shooter's orientation, so two teams sharing an
   // orientation can never fire at one another.
-  CHECK(first->position.y != third->position.y);
+  CHECK(first->position.z != third->position.z);
   CHECK(first->orientation != third->orientation);
 
   // No two players may occupy the same point. Opponents are deliberately
   // aligned on x (that is what makes the combat case below deterministic), so
-  // this is a claim about y for cross-team pairs and about x for teammates.
+  // this is a claim about z for cross-team pairs and about x for teammates.
   CHECK(first->position.x != second->position.x);
   CHECK(third->position.x != fourth->position.x);
 }
@@ -191,12 +212,11 @@ TEST(pvp_2v2_puts_each_whole_team_on_its_own_end) {
 /// a weaker claim than "the match can be played to a result", and a 2v2 that
 /// cannot take a life can only ever end by disconnect.
 TEST(pvp_2v2_opposing_fire_costs_lives_on_both_teams) {
-  PvPGameSim sim;
+  Sim sim;
   sim.start(rosters({1u, 2u}, {3u, 4u}));
 
   PvPGameState state{};
-  const PvPInputs idle{};
-  sim.step(state, idle, FIXED_DT);
+  REQUIRE(stepThroughEntrance(sim, state));
 
   const auto *before = findPlayer(state, 1);
   REQUIRE(before != nullptr);
@@ -204,10 +224,10 @@ TEST(pvp_2v2_opposing_fire_costs_lives_on_both_teams) {
   REQUIRE(initialLives > 1);
 
   PvPInputs firing{};
-  firing[0] = PlayerInput{.buttons = BUTTON_SHOOT, .player_id = 1};
-  firing[1] = PlayerInput{.buttons = BUTTON_SHOOT, .player_id = 2};
-  firing[2] = PlayerInput{.buttons = BUTTON_SHOOT, .player_id = 3};
-  firing[3] = PlayerInput{.buttons = BUTTON_SHOOT, .player_id = 4};
+  firing[0] = PlayerInput{.buttons = Button::SHOOT, .player_id = 1};
+  firing[1] = PlayerInput{.buttons = Button::SHOOT, .player_id = 2};
+  firing[2] = PlayerInput{.buttons = Button::SHOOT, .player_id = 3};
+  firing[3] = PlayerInput{.buttons = Button::SHOOT, .player_id = 4};
 
   // Same budget as the duel case, for the same reasons: ~66 ticks of travel
   // and a 9-tick cooldown, so 100 ticks lands hits without emptying anyone.
@@ -230,19 +250,18 @@ TEST(pvp_2v2_opposing_fire_costs_lives_on_both_teams) {
 /// never by slot, so an input addressed to one player must leave every other
 /// player untouched.
 TEST(pvp_movement_input_is_routed_by_player_id) {
-  PvPGameSim sim;
+  Sim sim;
   sim.start(rosters({1u, std::nullopt}, {2u, std::nullopt}));
 
   PvPGameState state{};
-  const PvPInputs idle{};
-  sim.step(state, idle, FIXED_DT);
+  REQUIRE(stepThroughEntrance(sim, state));
 
   const auto *before = findPlayer(state, 2);
   REQUIRE(before != nullptr);
   const float startX = before->position.x;
 
   PvPInputs inputs{};
-  inputs[0] = PlayerInput{.buttons = BUTTON_RIGHT, .player_id = 2};
+  inputs[0] = PlayerInput{.buttons = Button::RIGHT, .player_id = 2};
 
   for (int tick = 0; tick < 30; ++tick)
     sim.step(state, inputs, FIXED_DT);
@@ -262,12 +281,11 @@ TEST(pvp_movement_input_is_routed_by_player_id) {
 /// be credited points. Initial lives are read off the first broadcast rather
 /// than from a constant - `PvPGameSim::INITIAL_LIVES` is private.
 TEST(pvp_opposing_fire_costs_lives_and_awards_points) {
-  PvPGameSim sim;
+  Sim sim;
   sim.start(rosters({1u, std::nullopt}, {2u, std::nullopt}));
 
   PvPGameState state{};
-  const PvPInputs idle{};
-  sim.step(state, idle, FIXED_DT);
+  REQUIRE(stepThroughEntrance(sim, state));
 
   const auto *topBefore = findPlayer(state, 1);
   REQUIRE(topBefore != nullptr);
@@ -275,8 +293,8 @@ TEST(pvp_opposing_fire_costs_lives_and_awards_points) {
   REQUIRE(initialLives > 1);
 
   PvPInputs firing{};
-  firing[0] = PlayerInput{.buttons = BUTTON_SHOOT, .player_id = 1};
-  firing[1] = PlayerInput{.buttons = BUTTON_SHOOT, .player_id = 2};
+  firing[0] = PlayerInput{.buttons = Button::SHOOT, .player_id = 1};
+  firing[1] = PlayerInput{.buttons = Button::SHOOT, .player_id = 2};
 
   // 660px of travel at 600px/s is ~66 ticks, and the fire cooldown is 9
   // ticks, so 100 ticks lands a handful of hits on each side without either
@@ -301,15 +319,14 @@ TEST(pvp_opposing_fire_costs_lives_and_awards_points) {
 }
 
 TEST(pvp_firing_puts_bullets_on_the_wire) {
-  PvPGameSim sim;
+  Sim sim;
   sim.start(rosters({1u, std::nullopt}, {2u, std::nullopt}));
 
   PvPGameState state{};
-  const PvPInputs idle{};
-  sim.step(state, idle, FIXED_DT);
+  REQUIRE(stepThroughEntrance(sim, state));
 
   PvPInputs firing{};
-  firing[0] = PlayerInput{.buttons = BUTTON_SHOOT, .player_id = 2};
+  firing[0] = PlayerInput{.buttons = Button::SHOOT, .player_id = 2};
 
   for (int tick = 0; tick < 20; ++tick)
     sim.step(state, firing, FIXED_DT);
@@ -329,7 +346,7 @@ TEST(pvp_firing_puts_bullets_on_the_wire) {
 // leave no stale or duplicated entry on the wire.
 
 TEST(pvp_remove_player_leaves_no_duplicate_or_stale_entry) {
-  PvPGameSim sim;
+  Sim sim;
   sim.start(rosters({5u, 6u}, {7u, 8u}));
 
   PvPGameState state{};
@@ -352,13 +369,12 @@ TEST(pvp_remove_player_leaves_no_duplicate_or_stale_entry) {
 /// reach a terminal phase with the survivors credited the win, rather than
 /// sitting in PLAYERS_FIGHT forever with no winner possible.
 TEST(pvp_last_team_standing_wins_once_the_other_empties) {
-  PvPGameSim sim;
+  Sim sim;
   sim.start(rosters({1u, std::nullopt}, {2u, std::nullopt}));
 
   PvPGameState state{};
   const PvPInputs idle{};
-  sim.step(state, idle, FIXED_DT);
-  REQUIRE(phaseOf(state) == Phase::PLAYERS_FIGHT);
+  REQUIRE(stepThroughEntrance(sim, state));
 
   sim.removePlayer(1);
   sim.step(state, idle, FIXED_DT);
@@ -369,8 +385,8 @@ TEST(pvp_last_team_standing_wins_once_the_other_empties) {
   const auto *winner = teamById(state, 2);
   REQUIRE(loser != nullptr);
   REQUIRE(winner != nullptr);
-  CHECK_EQ(winner->outcome, TeamOutcome::WON);
-  CHECK_EQ(loser->outcome, TeamOutcome::LOST);
+  CHECK_EQ(winner->outcome, PvPGameTeamOutcome::WON);
+  CHECK_EQ(loser->outcome, PvPGameTeamOutcome::LOST);
 }
 
 } // namespace

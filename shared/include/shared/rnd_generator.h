@@ -7,19 +7,22 @@ namespace shared {
 /// timing, etc.). A single shared Mersenne Twister rather than per-caller
 /// engines, seeded once via seed().
 class RndGenerator {
-  static std::mt19937 RNG_;
+  inline static std::mt19937 RNG_{};
 
 public:
   /// Seeds the shared engine from a non-deterministic source. Called once
   /// per GameSim::start(), so each match gets its own random sequence.
-  static void seed();
+  static void seed() {
+    std::random_device rd;
+    RNG_.seed(rd());
+  }
 
-  /// @return A uniformly distributed integer in the inclusive range
-  /// [min, max].
-  static int getRandomInt(int min, int max);
-
-  /// @return A uniformly distributed float in the inclusive range
-  /// [min, max].
-  static float getRandomFloat(float min, float max);
+  template <typename T>
+  static T getRandom(T min, T max) {
+    if constexpr (std::floating_point<T>)
+      return std::uniform_real_distribution<T>(min, max)(RNG_);
+    else
+      return std::uniform_int_distribution<T>(min, max)(RNG_);
+  }
 };
 } // namespace shared

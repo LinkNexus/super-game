@@ -534,18 +534,19 @@ function spawnEnemiesExplosions(before: CoopGameState, after: CoopGameState) {
     const isAlive = after.enemies[i]?.[0];
 
     if (wasAlive && !isAlive) {
-      const x =
-        after.enemies_offset.x +
-        (i % appModule.SIM_ENEMY_COLS) *
-          (appModule.SIM_ENEMY_WIDTH + appModule.SIM_ENEMIES_POOL_SPACING_X);
+      const slot = appModule.FlatWorld.formationSlot(
+        Math.floor(i / appModule.SIM_ENEMY_COLS),
+        i % appModule.SIM_ENEMY_COLS,
+      );
 
-      const y =
-        after.enemies_offset.y -
-        Math.floor(i / appModule.SIM_ENEMY_COLS) *
-          (appModule.SIM_ENEMY_HEIGHT + appModule.SIM_ENEMIES_POOL_SPACING_Y);
+      const pos = {
+        x: after.enemies_offset.x + slot.x,
+        y: after.enemies_offset.y + slot.y,
+        z: after.enemies_offset.z + slot.z,
+      };
 
       playSfx("explosion");
-      spawnEnemyExplosion(toScreen({ x, y }), after.enemies[i]![1]);
+      spawnEnemyExplosion(toScreen(pos), after.enemies[i]![1]);
     }
   }
 }

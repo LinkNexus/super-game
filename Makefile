@@ -89,7 +89,7 @@ web-dev: web web/frontend/node_modules
 
 # Type-check + production bundle into web/frontend/dist (what L41 deploys).
 web-dist: web web/frontend/node_modules
-	cd web/frontend && npm run build
+	web/frontend/node_modules/.bin/tsc -p web/frontend --noEmit --pretty false && web/frontend/node_modules/.bin/vite build web/frontend
 
 # shared/ suite and the WebSim binding test, under node. CI's test-web job.
 test-web: web

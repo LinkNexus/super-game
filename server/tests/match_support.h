@@ -11,9 +11,9 @@
 #include "fake_connection.h"
 #include "game.h"
 #include "nlohmann/json.hpp"
-#include "shared/constants.h"
 #include "shared/helpers.h"
-#include "shared/messages.h"
+#include "shared/sim/constants.h"
+#include "shared/sim/messages.h"
 #include <cstddef>
 #include <optional>
 #include <string_view>
@@ -31,7 +31,7 @@ namespace testing {
 template <typename Predicate>
 bool stepUntil(Game &game, Predicate predicate, int maxTicks = 1200) {
   for (int tick = 0; tick < maxTicks; ++tick) {
-    game.update(shared::FIXED_DT);
+    game.update(FIXED_DT);
 
     if (predicate())
       return true;
@@ -51,20 +51,33 @@ inline void readyConnection(Game &game, WsConnection *ws, bool ready) {
 }
 
 /// The coop state carried by @p connection's most recent frame.
-inline shared::CoopGameState coopState(const FakeConnection &connection) {
-  return connection.lastEnvelope().at("payload").get<shared::CoopGameState>();
+inline CoopGameState coopState(const FakeConnection &connection) {
+  return connection.lastEnvelope().at("payload").get<CoopGameState>();
 }
 
-inline shared::PvPGameState pvpState(const FakeConnection &connection) {
-  return connection.lastEnvelope().at("payload").get<shared::PvPGameState>();
+inline shared::sim::PvPGameState pvpState(const FakeConnection &connection) {
+  return connection.lastEnvelope().at("payload").get<PvPGameState>();
+}
+
+/// Steps @p game past the players' fly-in, after which they accept movement.
+inline bool stepPastCoopEntrance(Game &game, const FakeConnection &connection) {
+  return stepUntil(game, [&] {
+    return coopState(connection).phase != shared::sim::CoopGamePhase::PLAYERS_ENTRANCE;
+  });
+}
+
+inline bool stepToPvPFight(Game &game, const FakeConnection &connection) {
+  return stepUntil(game, [&] {
+    return pvpState(connection).phase == shared::sim::PvPGamePhase::PLAYERS_FIGHT;
+  });
 }
 
 /// One player from a broadcast coop state, looked up by id.
 ///
 /// Vacancy is the `std::optional` itself now - there is no count field on the
 /// wire to bound a scan by, and no implicit id-0 sentinel to skip.
-inline std::optional<shared::PlayerState>
-findPlayer(const shared::CoopGameState &state, shared::PlayerId id) {
+inline std::optional<shared::sim::PlayerState>
+findPlayer(const shared::sim::CoopGameState &state, shared::sim::PlayerId id) {
   for (const auto &player : state.players) {
     if (player && player->id == id)
       return player;
@@ -74,8 +87,8 @@ findPlayer(const shared::CoopGameState &state, shared::PlayerId id) {
 }
 
 /// Same for PvP, searching every engaged team slot.
-inline std::optional<shared::PlayerState>
-findPlayer(const shared::PvPGameState &state, shared::PlayerId id) {
+inline std::optional<shared::sim::PlayerState>
+findPlayer(const shared::sim::PvPGameState &state, shared::sim::PlayerId id) {
   for (const auto &team : state.teams) {
     if (!team)
       continue;
@@ -90,11 +103,11 @@ findPlayer(const shared::PvPGameState &state, shared::PlayerId id) {
 }
 
 /// How many player slots the broadcast actually carries.
-inline std::size_t livePlayers(const shared::CoopGameState &state) {
+inline std::size_t livePlayers(const shared::sim::CoopGameState &state) {
   return shared::count_optional(state.players);
 }
 
-inline std::size_t livePlayers(const shared::PvPGameState &state) {
+inline std::size_t livePlayers(const shared::sim::PvPGameState &state) {
   std::size_t found = 0;
 
   for (const auto &team : state.teams) {
@@ -107,8 +120,7 @@ inline std::size_t livePlayers(const shared::PvPGameState &state) {
 
 /// The team carrying @p id, or nullptr. Teams are looked up by id rather than
 /// by slot for the same reason players are.
-inline const shared::TeamState *teamById(const shared::PvPGameState &state,
-                                         shared::TeamId id) {
+inline const shared::sim::TeamState *teamById(const shared::sim::PvPGameState &state, shared::sim::TeamId id) {
   for (const auto &team : state.teams) {
     if (team && team->id == id)
       return &team.value();
@@ -123,8 +135,7 @@ inline const shared::TeamState *teamById(const shared::PvPGameState &state,
 /// keep holding across the id-namespace collapse, which changed *which* ids
 /// show up here. A missing patch still leaves the name empty, so this keeps
 /// the assertion's teeth either way.
-inline bool hasPlayerNamed(const shared::CoopGameState &state,
-                           std::string_view name) {
+inline bool hasPlayerNamed(const shared::sim::CoopGameState &state, std::string_view name) {
   for (const auto &player : state.players) {
     if (player && player->name == name)
       return true;
@@ -133,8 +144,7 @@ inline bool hasPlayerNamed(const shared::CoopGameState &state,
   return false;
 }
 
-inline bool hasPlayerNamed(const shared::PvPGameState &state,
-                           std::string_view name) {
+inline bool hasPlayerNamed(const shared::sim::PvPGameState &state, std::string_view name) {
   for (const auto &team : state.teams) {
     if (!team)
       continue;

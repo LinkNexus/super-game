@@ -1,6 +1,6 @@
 #pragma once
 
-#include "shared/constants.h"
+#include "shared/sim/constants.h"
 #include "shared/wire.h"
 #include <array>
 #include <cstdint>
@@ -19,7 +19,7 @@ struct WsConnection {
 
 struct PerSocketPlayers {
   std::array<std::optional<std::pair<ServerPlayerId, std::string>>,
-             shared::MAX_PLAYERS_PER_CLIENT>
+             shared::sim::MAX_PLAYERS_PER_CLIENT>
       players{};
   WsConnection *ws{};
 };

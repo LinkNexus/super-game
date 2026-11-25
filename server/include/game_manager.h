@@ -5,7 +5,6 @@
 #include "types.h"
 #include <functional>
 #include <memory>
-#include <optional>
 #include <unordered_map>
 #include <vector>
 
@@ -21,12 +20,11 @@ public:
 
   CoopGame *createCoopGame();
 
-  PvPGame *joinOrCreatePvPGame(const PerSocketPlayers &players_data,
-                               shared::PlayerCount team_size,
-                               shared::PlayerCount team_count);
+  PvPGame *joinOrCreatePvPGame(
+      const PerSocketPlayers &players_data, PlayerCount team_size, PlayerCount team_count
+  );
 
-  PvPGame *createPvPGame(shared::PlayerCount team_size,
-                         shared::PlayerCount team_count);
+  PvPGame *createPvPGame(PlayerCount team_size, PlayerCount team_count);
 
   Game *findGameById(GameId id) const;
   void destroyGame(GameId id);
@@ -35,7 +33,6 @@ public:
 private:
   std::unordered_map<GameId, std::unique_ptr<Game>> games_by_id{};
   std::vector<CoopGame *> open_coop_games_{};
-  std::unordered_map<std::pair<shared::PlayerCount, shared::PlayerCount>,
-                     std::vector<PvPGame *>, shared::PairHash>
+  std::unordered_map<std::pair<PlayerCount, PlayerCount>, std::vector<PvPGame *>, shared::PairHash>
       open_pvp_games_{};
 };

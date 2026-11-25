@@ -1,9 +1,9 @@
 #include "game_designer.h"
 #include "constants.h"
 #include "session.h"
-#include "shared/constants.h"
 #include "shared/helpers.h"
-#include "shared/messages.h"
+#include "shared/sim/constants.h"
+#include "shared/sim/messages.h"
 #include "types.h"
 #include <algorithm>
 #include <array>
@@ -13,44 +13,53 @@
 #include <string>
 #include <variant>
 
-float GameDesigner::drawCentered(const char *text, float y, int fontSize,
-                                 Color color) {
-  DrawText(text, (shared::SCREEN_WIDTH - MeasureText(text, fontSize)) / 2,
-           static_cast<int>(y), fontSize, color);
+float GameDesigner::drawCentered(const char *text, float y, int fontSize, Color color) {
+  DrawText(
+      text,
+      (shared::sim::SCREEN_WIDTH - MeasureText(text, fontSize)) / 2,
+      static_cast<int>(y),
+      fontSize,
+      color
+  );
   return y + fontSize;
 }
 
 float GameDesigner::drawSelectionHeader(const char *instructions, float y) {
   y = drawCentered(instructions, y, HEADING_FONT_SIZE, WHITE) + LINE_GAP;
-  y = drawCentered("Use LEFT / RIGHT to choose, ENTER to confirm", y,
-                   HINT_FONT_SIZE, LIGHTGRAY);
+  y = drawCentered("Use LEFT / RIGHT to choose, ENTER to confirm", y, HINT_FONT_SIZE, LIGHTGRAY);
   return y + SECTION_GAP;
 }
 
-float GameDesigner::drawOptionRow(const std::vector<std::string> &options,
-                                  std::size_t selectedIdx, float y) {
+float GameDesigner::drawOptionRow(
+    const std::vector<std::string> &options, std::size_t selectedIdx, float y
+) {
   auto totalWidth{0.0f};
   for (const auto &option : options)
     totalWidth += MeasureText(option.c_str(), OPTION_FONT_SIZE);
   if (!options.empty())
     totalWidth += OPTION_SPACING * (options.size() - 1);
 
-  auto x{(shared::SCREEN_WIDTH - totalWidth) / 2.0f};
+  auto x{(shared::sim::SCREEN_WIDTH - totalWidth) / 2.0f};
 
   for (std::size_t i = 0; i < options.size(); ++i) {
     const auto &option = options[i];
     const auto selected = i == selectedIdx;
 
-    DrawText(option.c_str(), static_cast<int>(x), static_cast<int>(y),
-             OPTION_FONT_SIZE, selected ? YELLOW : WHITE);
+    DrawText(
+        option.c_str(),
+        static_cast<int>(x),
+        static_cast<int>(y),
+        OPTION_FONT_SIZE,
+        selected ? YELLOW : WHITE
+    );
 
     const auto width = MeasureText(option.c_str(), OPTION_FONT_SIZE);
     if (selected) {
       // Underline the selection, so it reads as chosen even where the
       // yellow-vs-white contrast is subtle.
-      DrawRectangle(static_cast<int>(x),
-                    static_cast<int>(y) + OPTION_FONT_SIZE + 6, width, 2,
-                    YELLOW);
+      DrawRectangle(
+          static_cast<int>(x), static_cast<int>(y) + OPTION_FONT_SIZE + 6, width, 2, YELLOW
+      );
     }
 
     x += width + OPTION_SPACING;
@@ -59,47 +68,48 @@ float GameDesigner::drawOptionRow(const std::vector<std::string> &options,
   return y + OPTION_FONT_SIZE;
 }
 
-float GameDesigner::drawRosterRow(const std::string &label,
-                                  const std::string &status, Color statusColor,
-                                  float y) {
+float GameDesigner::drawRosterRow(
+    const std::string &label, const std::string &status, Color statusColor, float y
+) {
   const auto labelWidth{MeasureText(label.c_str(), BODY_FONT_SIZE)};
   const auto statusWidth{MeasureText(status.c_str(), BODY_FONT_SIZE)};
   const auto left{
-      (shared::SCREEN_WIDTH - labelWidth - statusWidth - ROSTER_COLUMN_GAP) /
-      2.0f};
+      (shared::sim::SCREEN_WIDTH - labelWidth - statusWidth - ROSTER_COLUMN_GAP) / 2.0f
+  };
 
-  DrawText(label.c_str(), static_cast<int>(left), static_cast<int>(y),
-           BODY_FONT_SIZE, WHITE);
-  DrawText(status.c_str(),
-           static_cast<int>(left + labelWidth + ROSTER_COLUMN_GAP),
-           static_cast<int>(y), BODY_FONT_SIZE, statusColor);
+  DrawText(label.c_str(), static_cast<int>(left), static_cast<int>(y), BODY_FONT_SIZE, WHITE);
+  DrawText(
+      status.c_str(),
+      static_cast<int>(left + labelWidth + ROSTER_COLUMN_GAP),
+      static_cast<int>(y),
+      BODY_FONT_SIZE,
+      statusColor
+  );
 
   return y + BODY_FONT_SIZE + ROW_GAP;
 }
 
-std::string GameDesigner::playerLabel(const shared::PlayerState &state,
-                                      bool markAsYours) {
-  auto label{state.name.empty() ? "Player " + std::to_string(state.id)
-                                : state.name};
+std::string GameDesigner::playerLabel(const shared::sim::PlayerState &state, bool markAsYours) {
+  auto label{state.name.empty() ? "Player " + std::to_string(state.id) : state.name};
   if (markAsYours)
     label += " (You)";
   return label;
 }
 
 void GameDesigner::drawMainMenu(GameType gameType) const {
-  auto y{drawCentered("THE SUPER GAME", 120, TITLE_FONT_SIZE, YELLOW) +
-         LINE_GAP};
-  y = drawCentered("Press ENTER to play", y, OPTION_FONT_SIZE, WHITE) +
-      SECTION_GAP;
+  auto y{drawCentered("THE SUPER GAME", 120, TITLE_FONT_SIZE, YELLOW) + LINE_GAP};
+  y = drawCentered("Press ENTER to play", y, OPTION_FONT_SIZE, WHITE) + SECTION_GAP;
 
   y = drawCentered("Mode selection:", y, BODY_FONT_SIZE, LIGHTGRAY) + LINE_GAP;
-  y = drawOptionRow({"Local", "Online"}, gameType == GameType::LOCAL ? 0 : 1,
-                    y) +
-      SECTION_GAP + LINE_GAP;
+  y = drawOptionRow({"Local", "Online"}, gameType == GameType::LOCAL ? 0 : 1, y) + SECTION_GAP +
+      LINE_GAP;
 
   static constexpr std::array<const char *, 4> CONTROLS{
-      "LEFT / RIGHT : move", "SPACE : shoot",
-      "A / D / W : second player (dual)", "ESC : cancel / pause"};
+      "LEFT / RIGHT : move",
+      "SPACE : shoot",
+      "A / D / W : second player (dual)",
+      "ESC : cancel / pause"
+  };
 
   y = drawCentered("Controls:", y, BODY_FONT_SIZE, LIGHTGRAY) + LINE_GAP;
 
@@ -109,7 +119,7 @@ void GameDesigner::drawMainMenu(GameType gameType) const {
   for (const auto *line : CONTROLS)
     widest = std::max(widest, MeasureText(line, BODY_FONT_SIZE));
 
-  const auto left{(shared::SCREEN_WIDTH - widest) / 2};
+  const auto left{(shared::sim::SCREEN_WIDTH - widest) / 2};
   for (const auto *line : CONTROLS) {
     DrawText(line, left, static_cast<int>(y), BODY_FONT_SIZE, WHITE);
     y += BODY_FONT_SIZE + ROW_GAP;
@@ -117,30 +127,26 @@ void GameDesigner::drawMainMenu(GameType gameType) const {
 }
 
 void GameDesigner::drawModeSelection(const Config *config) const {
-  auto y{
-      drawSelectionHeader("Do you want to play CooP or PvP?", SELECTION_TOP_Y)};
+  auto y{drawSelectionHeader("Do you want to play CooP or PvP?", SELECTION_TOP_Y)};
   drawOptionRow({"CooP", "PvP"}, config->mode_idx, y);
 }
 
-void GameDesigner::drawPlayerCountSelectionCoop(
-    shared::PlayerCount currentPlayerCount) const {
-  auto y{drawSelectionHeader("Choose the number of players for CooP",
-                             SELECTION_TOP_Y)};
+void GameDesigner::drawPlayerCountSelectionCoop(shared::sim::PlayerCount currentPlayerCount) const {
+  auto y{drawSelectionHeader("Choose the number of players for CooP", SELECTION_TOP_Y)};
 
   std::vector<std::string> options;
-  for (std::size_t playerCount = 1; playerCount <= MAX_PLAYERS_ON_THIS_MACHINE;
-       ++playerCount)
+  for (std::size_t playerCount = 1; playerCount <= MAX_PLAYERS_ON_THIS_MACHINE; ++playerCount)
     options.push_back(std::to_string(playerCount));
 
   drawOptionRow(options, currentPlayerCount - 1, y);
 }
 
 void GameDesigner::drawPvPSchemaSelection(
-    uint8_t currentTeamCount, shared::PlayerCount currentTeamSize,
-    const std::vector<std::pair<shared::PlayerCount, shared::PlayerCount>>
-        &matchUps) const {
-  auto y{drawSelectionHeader("Choose the number of players per team for PvP",
-                             SELECTION_TOP_Y)};
+    uint8_t currentTeamCount,
+    shared::sim::PlayerCount currentTeamSize,
+    const std::vector<std::pair<shared::sim::PlayerCount, shared::sim::PlayerCount>> &matchUps
+) const {
+  auto y{drawSelectionHeader("Choose the number of players per team for PvP", SELECTION_TOP_Y)};
 
   std::vector<std::string> options;
   // Out of range until a match-up matches, so nothing is highlighted rather
@@ -164,66 +170,83 @@ void GameDesigner::drawPvPSchemaSelection(
 }
 
 void GameDesigner::drawTextInputs(
-    std::array<TextInput, shared::MAX_PLAYERS_PER_CLIENT> &inputs,
-    shared::PlayerCount playersCount) const {
+    std::array<TextInput, shared::sim::MAX_PLAYERS_PER_CLIENT> &inputs,
+    shared::sim::PlayerCount playersCount
+) const {
   auto offsetY{0.0f};
 
   for (std::size_t i = 0; i < playersCount; ++i) {
     auto &box = inputs[i];
-    box.rect = {(shared::SCREEN_WIDTH - TextInput::WIDTH) / 2.0f,
-                200.0f + offsetY, TextInput::WIDTH, TextInput::HEIGHT};
+    box.rect = {
+        (shared::sim::SCREEN_WIDTH - TextInput::WIDTH) / 2.0f,
+        200.0f + offsetY,
+        TextInput::WIDTH,
+        TextInput::HEIGHT
+    };
     offsetY += box.draw() + 20.0f;
   }
 
   const auto text{"Choose a name for the online game. Press Enter to continue"};
-  DrawText(text, (shared::SCREEN_WIDTH - MeasureText(text, 20)) / 2,
-           inputs[0].rect.y + offsetY, 20, WHITE);
+  DrawText(
+      text,
+      (shared::sim::SCREEN_WIDTH - MeasureText(text, 20)) / 2,
+      inputs[0].rect.y + offsetY,
+      20,
+      WHITE
+  );
 }
 
 void GameDesigner::drawConnectingScreen() const {
-  DrawText("Connecting to server...", shared::SCREEN_WIDTH / 2 - 170,
-           shared::SCREEN_HEIGHT / 2, 24, LIGHTGRAY);
-  DrawText("Press ESC to cancel", shared::SCREEN_WIDTH / 2 - 140,
-           shared::SCREEN_HEIGHT / 2 + 40, 20, WHITE);
+  DrawText(
+      "Connecting to server...",
+      shared::sim::SCREEN_WIDTH / 2 - 170,
+      shared::sim::SCREEN_HEIGHT / 2,
+      24,
+      LIGHTGRAY
+  );
+  DrawText(
+      "Press ESC to cancel",
+      shared::sim::SCREEN_WIDTH / 2 - 140,
+      shared::sim::SCREEN_HEIGHT / 2 + 40,
+      20,
+      WHITE
+  );
 }
 
-void GameDesigner::drawLobby(OnlineSession *session,
-                             const LobbyKeyHints &keyHints) const {
+void GameDesigner::drawLobby(OnlineSession *session, const LobbyKeyHints &keyHints) const {
   const auto &lobbyUpdate{session->getLobbyUpdate()};
   const auto playerIds{session->getPlayersIds()};
 
   // The lobby identifies players by *connection* id on both sides, so
   // matching these against `PlayerInfo::id` is correct here - unlike the
   // in-game rosters, which carry the sim's own ids.
-  const auto isOnThisMachine = [&playerIds](shared::PlayerId id) {
-    return id != 0 &&
-           std::find(playerIds.begin(), playerIds.end(), id) != playerIds.end();
+  const auto isOnThisMachine = [&playerIds](shared::sim::PlayerId id) {
+    return id != 0 && std::find(playerIds.begin(), playerIds.end(), id) != playerIds.end();
   };
 
-  const auto drawSlot = [&isOnThisMachine](const shared::PlayerInfo &p,
-                                           std::size_t slotNumber, float y) {
-    auto label{p.name.empty() ? "Player " + std::to_string(slotNumber)
-                              : p.name};
-    if (isOnThisMachine(p.id))
-      label += " (You)";
+  const auto drawSlot =
+      [&isOnThisMachine](const shared::sim::PlayerInfo &p, std::size_t slotNumber, float y) {
+        auto label{p.name.empty() ? "Player " + std::to_string(slotNumber) : p.name};
+        if (isOnThisMachine(p.id))
+          label += " (You)";
 
-    return drawRosterRow(label, p.is_ready ? "READY" : "Waiting...",
-                         p.is_ready ? GREEN : LIGHTGRAY, y);
-  };
+        return drawRosterRow(
+            label, p.is_ready ? "READY" : "Waiting...", p.is_ready ? GREEN : LIGHTGRAY, y
+        );
+      };
 
   const auto drawEmptySlot = [](float y) {
-    return drawCentered("Waiting for a player...", y, BODY_FONT_SIZE,
-                        DARKGRAY) +
-           ROW_GAP;
+    return drawCentered("Waiting for a player...", y, BODY_FONT_SIZE, DARKGRAY) + ROW_GAP;
   };
 
-  auto y{drawCentered("Lobby", shared::SCREEN_HEIGHT / 2.0f - 180,
-                      HEADING_FONT_SIZE, WHITE) +
-         SECTION_GAP};
+  auto y{
+      drawCentered("Lobby", shared::sim::SCREEN_HEIGHT / 2.0f - 180, HEADING_FONT_SIZE, WHITE) +
+      SECTION_GAP
+  };
 
   std::visit(
       shared::overloaded{
-          [&](const shared::CoopGameLobbyUpdate &u) {
+          [&](const shared::sim::CoopGameLobbyUpdate &u) {
             auto readyCount{0};
 
             for (std::size_t i{0}; i < u.players.size(); ++i) {
@@ -241,21 +264,26 @@ void GameDesigner::drawLobby(OnlineSession *session,
             }
 
             y += LINE_GAP;
-            y = drawCentered(TextFormat("Players ready: %d/%d", readyCount,
-                                        static_cast<int>(
-                                            shared::count_optional(u.players))),
-                             y, HINT_FONT_SIZE, LIGHTGRAY) +
+            y = drawCentered(
+                    TextFormat(
+                        "Players ready: %d/%d",
+                        readyCount,
+                        static_cast<int>(shared::count_optional(u.players))
+                    ),
+                    y,
+                    HINT_FONT_SIZE,
+                    LIGHTGRAY
+                ) +
                 SECTION_GAP;
           },
-          [&](const shared::PvPGameLobbyUpdate &u) {
+          [&](const shared::sim::PvPGameLobbyUpdate &u) {
             std::string subtitle{std::to_string(u.team_size)};
             auto teamCount = shared::count_optional(u.teams);
 
             for (std::size_t i = 1; i < teamCount; ++i)
               subtitle += " Vs " + std::to_string(u.team_size);
 
-            y = drawCentered(subtitle.c_str(), y, HINT_FONT_SIZE, DARKGRAY) +
-                SECTION_GAP;
+            y = drawCentered(subtitle.c_str(), y, HINT_FONT_SIZE, DARKGRAY) + SECTION_GAP;
 
             auto readyCount{0};
 
@@ -265,16 +293,15 @@ void GameDesigner::drawLobby(OnlineSession *session,
               if (!team)
                 continue;
 
-              auto teamLabel{std::string("Team ") +
-                             std::to_string(team->id)};
-              if (std::any_of(team->players.begin(), team->players.end(),
-                              [&isOnThisMachine](const auto &p) {
-                                return p && isOnThisMachine(p->id);
-                              }))
+              auto teamLabel{std::string("Team ") + std::to_string(team->id)};
+              if (std::any_of(
+                      team->players.begin(),
+                      team->players.end(),
+                      [&isOnThisMachine](const auto &p) { return p && isOnThisMachine(p->id); }
+                  ))
                 teamLabel += " (Yours)";
 
-              y = drawCentered(teamLabel.c_str(), y, BODY_FONT_SIZE,
-                               TEAMS_COLORS[teamIdx]) +
+              y = drawCentered(teamLabel.c_str(), y, BODY_FONT_SIZE, TEAMS_COLORS[teamIdx]) +
                   LINE_GAP;
 
               for (std::size_t slot = 0; slot < u.team_size; ++slot) {
@@ -294,16 +321,20 @@ void GameDesigner::drawLobby(OnlineSession *session,
               y += ROW_GAP;
             }
 
-            y = drawCentered(TextFormat("Players ready: %d/%d", readyCount,
-                                        teamCount * u.team_size),
-                             y, HINT_FONT_SIZE, LIGHTGRAY) +
+            y = drawCentered(
+                    TextFormat("Players ready: %d/%d", readyCount, teamCount * u.team_size),
+                    y,
+                    HINT_FONT_SIZE,
+                    LIGHTGRAY
+                ) +
                 SECTION_GAP;
-          }},
-      lobbyUpdate);
+          }
+      },
+      lobbyUpdate
+  );
 
   // One line per player on this machine: each readies with their own keys.
-  const bool isPvP{
-      std::holds_alternative<shared::PvPGameLobbyUpdate>(lobbyUpdate)};
+  const bool isPvP{std::holds_alternative<shared::sim::PvPGameLobbyUpdate>(lobbyUpdate)};
 
   for (std::size_t i{0}; i < playerIds.size() && i < keyHints.size(); ++i) {
     if (!playerIds[i])
@@ -314,10 +345,10 @@ void GameDesigner::drawLobby(OnlineSession *session,
       continue;
 
     const auto &info{found->first};
-    const auto name{info.name.empty() ? "Player " + std::to_string(i + 1)
-                                      : info.name};
-    auto hint{name + ": " + keyHints[i].ready +
-              (info.is_ready ? " to cancel ready" : " to ready up")};
+    const auto name{info.name.empty() ? "Player " + std::to_string(i + 1) : info.name};
+    auto hint{
+        name + ": " + keyHints[i].ready + (info.is_ready ? " to cancel ready" : " to ready up")
+    };
     if (isPvP)
       hint += std::string(", ") + keyHints[i].switchTeam + " to switch team";
 
@@ -328,98 +359,115 @@ void GameDesigner::drawLobby(OnlineSession *session,
 }
 
 void GameDesigner::drawGame(
-    const shared::GameState &state, Session *session, GameType gameType,
-    GameScreen screen, const std::array<Particle, MAX_PARTICLES> &particles) {
-  std::visit(shared::overloaded{
-                 [&](const shared::CoopGameState &s) {
-                   entity_designer_.drawPlayersForCoopGame(s, session,
-                                                           gameType);
+    const shared::sim::GameState &state,
+    Session *session,
+    GameType gameType,
+    GameScreen screen,
+    const std::array<Particle, MAX_PARTICLES> &particles
+) {
+  std::visit(
+      shared::overloaded{
+          [&](const shared::sim::CoopGameState &s) {
+            entity_designer_.drawPlayersForCoopGame(s, session, gameType);
 
-                   for (const auto &b : s.bullets)
-                     entity_designer_.drawBullet(b);
+            for (const auto &b : s.bullets)
+              entity_designer_.drawBullet(b);
 
-                   entity_designer_.drawParticles(particles);
+            entity_designer_.drawParticles(particles);
 
-                   entity_designer_.drawEnemies(s.enemies, s.enemies_offset);
+            entity_designer_.drawEnemies(s.enemies, s.enemies_offset);
 
-                   {
-                     using GamePhase = shared::CoopGamePhase;
-                     entity_designer_.drawBoss(
-                         s.boss, static_cast<GamePhase>(s.phase) ==
-                                     GamePhase::FIGHT_BOSS);
-                   }
-                 },
-                 [&](const shared::PvPGameState &s) {
-                   entity_designer_.drawPlayersForPvPGame(session, s, gameType);
+            {
+              using GamePhase = shared::sim::CoopGamePhase;
+              entity_designer_.drawBoss(
+                  s.boss, static_cast<GamePhase>(s.phase) == GamePhase::FIGHT_BOSS
+              );
+            }
+          },
+          [&](const shared::sim::PvPGameState &s) {
+            entity_designer_.drawPlayersForPvPGame(session, s, gameType);
 
-                   for (const auto &b : s.bullets)
-                     entity_designer_.drawBullet(b);
+            for (const auto &b : s.bullets)
+              entity_designer_.drawBullet(b);
 
-                   entity_designer_.drawParticles(particles);
-                 }},
-             state);
+            entity_designer_.drawParticles(particles);
+          }
+      },
+      state
+  );
 
   if (screen == GameScreen::PAUSED) {
-    DrawRectangle(0, 0, shared::SCREEN_WIDTH, shared::SCREEN_HEIGHT,
-                  Fade(BLACK, 0.6f));
+    DrawRectangle(0, 0, shared::sim::SCREEN_WIDTH, shared::sim::SCREEN_HEIGHT, Fade(BLACK, 0.6f));
 
-    DrawText("Game Paused", shared::SCREEN_WIDTH / 2 - 100,
-             shared::SCREEN_HEIGHT / 2 - 20, 32, WHITE);
+    DrawText(
+        "Game Paused",
+        shared::sim::SCREEN_WIDTH / 2 - 100,
+        shared::sim::SCREEN_HEIGHT / 2 - 20,
+        32,
+        WHITE
+    );
 
-    DrawText("Press ESC to resume", shared::SCREEN_WIDTH / 2 - 100,
-             shared::SCREEN_HEIGHT / 2 + 30, 20, WHITE);
+    DrawText(
+        "Press ESC to resume",
+        shared::sim::SCREEN_WIDTH / 2 - 100,
+        shared::sim::SCREEN_HEIGHT / 2 + 30,
+        20,
+        WHITE
+    );
   }
 }
 
 void GameDesigner::drawEndScreenBackdrop(float animTime) {
-  DrawRectangle(0, 0, shared::SCREEN_WIDTH, shared::SCREEN_HEIGHT,
-                Fade(BLACK, 0.6f));
+  DrawRectangle(0, 0, shared::sim::SCREEN_WIDTH, shared::sim::SCREEN_HEIGHT, Fade(BLACK, 0.6f));
 
   const auto pulse{(std::sin(animTime * 3.0f) + 1.0f) * 0.5f};
-  const auto thickness{BORDER_MIN_THICKNESS +
-                       pulse * (BORDER_MAX_THICKNESS - BORDER_MIN_THICKNESS)};
+  const auto thickness{
+      BORDER_MIN_THICKNESS + pulse * (BORDER_MAX_THICKNESS - BORDER_MIN_THICKNESS)
+  };
 
-  DrawRectangleLinesEx({0, 0, shared::SCREEN_WIDTH, shared::SCREEN_HEIGHT},
-                       thickness, Fade(GOLD, 0.3f + pulse * 0.5f));
+  DrawRectangleLinesEx(
+      {0, 0, shared::sim::SCREEN_WIDTH, shared::sim::SCREEN_HEIGHT},
+      thickness,
+      Fade(GOLD, 0.3f + pulse * 0.5f)
+  );
 }
 
-void GameDesigner::drawEndScreen(const shared::GameState &state,
-                                 Session *session, GameType gameType,
-                                 float animTime) const {
+void GameDesigner::drawEndScreen(
+    const shared::sim::GameState &state, Session *session, GameType gameType, float animTime
+) const {
   drawEndScreenBackdrop(animTime);
 
   ThisMachinePlayerIds playerIds{};
   if (session)
     playerIds = session->getPlayersIds();
 
-  const auto isOnThisMachine = [&playerIds](shared::PlayerId id) {
-    return id != 0 &&
-           std::find(playerIds.begin(), playerIds.end(), id) != playerIds.end();
+  const auto isOnThisMachine = [&playerIds](shared::sim::PlayerId id) {
+    return id != 0 && std::find(playerIds.begin(), playerIds.end(), id) != playerIds.end();
   };
 
   // " (You)" only distinguishes anything online - in local play every
   // player on screen is on this machine.
   const auto marksYours = gameType == GameType::ONLINE;
 
-  const auto scoreLine = [](const shared::PlayerState &p) {
+  const auto scoreLine = [](const shared::sim::PlayerState &p) {
     return std::to_string(p.points) + " pts" +
-           (p.lives > 0 ? "  -  " + std::to_string(p.lives) +
-                              (p.lives > 1 ? " lives left" : " life left")
-                        : "  -  dead");
+           (p.lives > 0
+                ? "  -  " + std::to_string(p.lives) + (p.lives > 1 ? " lives left" : " life left")
+                : "  -  dead");
   };
 
-  auto y{shared::SCREEN_HEIGHT / 2.0f - 220};
+  auto y{shared::sim::SCREEN_HEIGHT / 2.0f - 220};
 
   std::visit(
       shared::overloaded{
-          [&](const shared::CoopGameState &s) {
-            const auto won{s.phase == shared::CoopGamePhase::WON};
+          [&](const shared::sim::CoopGameState &s) {
+            const auto won{s.phase == shared::sim::CoopGamePhase::WON};
 
-            y = drawCentered(won ? "VICTORY" : "GAME OVER", y, TITLE_FONT_SIZE,
-                             won ? GOLD : RED) +
+            y = drawCentered(won ? "VICTORY" : "GAME OVER", y, TITLE_FONT_SIZE, won ? GOLD : RED) +
                 LINE_GAP;
-            y = drawCentered(won ? "The boss is down." : "The invasion won.", y,
-                             HINT_FONT_SIZE, LIGHTGRAY) +
+            y = drawCentered(
+                    won ? "The boss is down." : "The invasion won.", y, HINT_FONT_SIZE, LIGHTGRAY
+                ) +
                 SECTION_GAP;
 
             uint32_t total{};
@@ -428,45 +476,47 @@ void GameDesigner::drawEndScreen(const shared::GameState &state,
                 total += player->points;
             }
 
-            y = drawCentered(("Team score: " + std::to_string(total)).c_str(),
-                             y, HEADING_FONT_SIZE, WHITE) +
+            y = drawCentered(
+                    ("Team score: " + std::to_string(total)).c_str(), y, HEADING_FONT_SIZE, WHITE
+                ) +
                 SECTION_GAP;
 
             for (const auto &player : s.players) {
               if (player)
                 y = drawRosterRow(
-                    playerLabel(*player,
-                                marksYours && isOnThisMachine(player->id)),
-                    scoreLine(*player), player->lives > 0 ? LIGHTGRAY : RED, y);
+                    playerLabel(*player, marksYours && isOnThisMachine(player->id)),
+                    scoreLine(*player),
+                    player->lives > 0 ? LIGHTGRAY : RED,
+                    y
+                );
             }
 
             y += LINE_GAP;
           },
-          [&](const shared::PvPGameState &s) {
+          [&](const shared::sim::PvPGameState &s) {
             const auto ownsTeam =
-                [&isOnThisMachine](
-                    const std::optional<shared::TeamState> &team) {
-                  return team &&
-                         std::any_of(team->players.begin(), team->players.end(),
+                [&isOnThisMachine](const std::optional<shared::sim::TeamState> &team) {
+                  return team && std::any_of(
+                                     team->players.begin(),
+                                     team->players.end(),
                                      [&isOnThisMachine](const auto &p) {
                                        return p && isOnThisMachine(p->id);
-                                     });
+                                     }
+                                 );
                 };
 
-            const auto myTeam{
-                std::find_if(s.teams.begin(), s.teams.end(), ownsTeam)};
-            const auto myTeamsCount{
-                std::count_if(s.teams.begin(), s.teams.end(), ownsTeam)};
+            const auto myTeam{std::find_if(s.teams.begin(), s.teams.end(), ownsTeam)};
+            const auto myTeamsCount{std::count_if(s.teams.begin(), s.teams.end(), ownsTeam)};
 
             // With both teams on this machine (local PvP) a "you won"
             // headline would be meaningless, so only personalise it when
             // exactly one team is ours.
             if (myTeamsCount == 1) {
               switch ((*myTeam)->outcome) {
-              case shared::TeamOutcome::WON:
+              case shared::sim::PvPGameTeamOutcome::WON:
                 y = drawCentered("YOU WIN", y, TITLE_FONT_SIZE, GOLD);
                 break;
-              case shared::TeamOutcome::LOST:
+              case shared::sim::PvPGameTeamOutcome::LOST:
                 y = drawCentered("YOU LOSE", y, TITLE_FONT_SIZE, RED);
                 break;
               default:
@@ -474,10 +524,9 @@ void GameDesigner::drawEndScreen(const shared::GameState &state,
                 break;
               }
             } else {
-              const auto winner{std::find_if(
-                  s.teams.begin(), s.teams.end(), [](const auto &team) {
-                    return team && team->outcome == shared::TeamOutcome::WON;
-                  })};
+              const auto winner{std::find_if(s.teams.begin(), s.teams.end(), [](const auto &team) {
+                return team && team->outcome == shared::sim::PvPGameTeamOutcome::WON;
+              })};
 
               if (winner == s.teams.end()) {
                 y = drawCentered("DRAW", y, TITLE_FONT_SIZE, LIGHTGRAY);
@@ -485,7 +534,10 @@ void GameDesigner::drawEndScreen(const shared::GameState &state,
                 const auto winnerIdx{std::distance(s.teams.begin(), winner)};
                 y = drawCentered(
                     ("TEAM " + std::to_string(winnerIdx + 1) + " WINS").c_str(),
-                    y, TITLE_FONT_SIZE, TEAMS_COLORS[winnerIdx]);
+                    y,
+                    TITLE_FONT_SIZE,
+                    TEAMS_COLORS[winnerIdx]
+                );
               }
             }
 
@@ -507,13 +559,13 @@ void GameDesigner::drawEndScreen(const shared::GameState &state,
                   teamLabel += " (Yours)";
 
                 switch (team->outcome) {
-                case shared::TeamOutcome::WON:
+                case shared::sim::PvPGameTeamOutcome::WON:
                   teamLabel += " - WON";
                   break;
-                case shared::TeamOutcome::LOST:
+                case shared::sim::PvPGameTeamOutcome::LOST:
                   teamLabel += " - LOST";
                   break;
-                case shared::TeamOutcome::DREW:
+                case shared::sim::PvPGameTeamOutcome::DREW:
                   teamLabel += " - DREW";
                   break;
                 default:
@@ -522,58 +574,75 @@ void GameDesigner::drawEndScreen(const shared::GameState &state,
 
                 teamLabel += "  (" + std::to_string(total) + " pts)";
 
-                y = drawCentered(teamLabel.c_str(), y, BODY_FONT_SIZE,
-                                 TEAMS_COLORS[teamIdx]) +
+                y = drawCentered(teamLabel.c_str(), y, BODY_FONT_SIZE, TEAMS_COLORS[teamIdx]) +
                     LINE_GAP;
 
                 for (const auto &p : team->players) {
                   if (p)
                     y = drawRosterRow(
                         playerLabel(*p, marksYours && isOnThisMachine(p->id)),
-                        scoreLine(*p), p->lives > 0 ? LIGHTGRAY : RED, y);
+                        scoreLine(*p),
+                        p->lives > 0 ? LIGHTGRAY : RED,
+                        y
+                    );
                 }
 
                 y += ROW_GAP;
               }
             }
-          }},
-      state);
+          }
+      },
+      state
+  );
 
   y += LINE_GAP;
-  y = drawCentered("Press R to play again", y, HINT_FONT_SIZE, LIGHTGRAY) +
-      LINE_GAP;
-  drawCentered("Press ENTER to return to the menu", y, HINT_FONT_SIZE,
-               LIGHTGRAY);
+  y = drawCentered("Press R to play again", y, HINT_FONT_SIZE, LIGHTGRAY) + LINE_GAP;
+  drawCentered("Press ENTER to return to the menu", y, HINT_FONT_SIZE, LIGHTGRAY);
 }
 
-void GameDesigner::init() { entity_designer_.loadTextures(); }
+void GameDesigner::init() {
+  entity_designer_.loadTextures();
+}
 
-void GameDesigner::unload() { entity_designer_.unloadTextures(); }
+void GameDesigner::unload() {
+  entity_designer_.unloadTextures();
+}
 
 void GameDesigner::drawOnlinePlayerCountSelection(
-    shared::PlayerCount currentPlayerCount) const {
-  const auto instructions =
-      "Choose the number of players that will play on this machine";
+    shared::sim::PlayerCount currentPlayerCount
+) const {
+  const auto instructions = "Choose the number of players that will play on this machine";
   DrawText(
       instructions,
-      (shared::SCREEN_WIDTH - MeasureText(instructions, STATUS_FONT_SIZE)) / 2,
-      shared::SCREEN_HEIGHT / 2 - 40, 20, WHITE);
+      (shared::sim::SCREEN_WIDTH - MeasureText(instructions, STATUS_FONT_SIZE)) / 2,
+      shared::sim::SCREEN_HEIGHT / 2 - 40,
+      20,
+      WHITE
+  );
 
   const auto confirmText = "Use LEFT/RIGHT to choose and ENTER to confirm";
   const auto confirmTextWidth = MeasureText(confirmText, STATUS_FONT_SIZE);
-  DrawText(confirmText, (shared::SCREEN_WIDTH - confirmTextWidth) / 2,
-           shared::SCREEN_HEIGHT / 2 - 10, 20, WHITE);
+  DrawText(
+      confirmText,
+      (shared::sim::SCREEN_WIDTH - confirmTextWidth) / 2,
+      shared::sim::SCREEN_HEIGHT / 2 - 10,
+      20,
+      WHITE
+  );
 
   auto offsetX = 0.0f;
 
-  for (std::size_t playerCount = 1;
-       playerCount <= shared::MAX_PLAYERS_PER_CLIENT; ++playerCount) {
+  for (std::size_t playerCount = 1; playerCount <= shared::sim::MAX_PLAYERS_PER_CLIENT;
+       ++playerCount) {
     std::string playerCountText{std::to_string(playerCount)};
 
-    DrawText(playerCountText.c_str(),
-             (shared::SCREEN_WIDTH - confirmTextWidth) / 2 + offsetX,
-             shared::SCREEN_HEIGHT / 2 + 40, 24,
-             playerCount == currentPlayerCount ? YELLOW : WHITE);
+    DrawText(
+        playerCountText.c_str(),
+        (shared::sim::SCREEN_WIDTH - confirmTextWidth) / 2.0f + offsetX,
+        shared::sim::SCREEN_HEIGHT / 2 + 40,
+        24,
+        playerCount == currentPlayerCount ? YELLOW : WHITE
+    );
 
     offsetX += MeasureText(playerCountText.c_str(), 24) + 20.0f;
   }
