@@ -1,14 +1,16 @@
 import createModule from "@wasm/supergame-web-sim.mjs";
 
 export const appModule = await createModule();
-
 export const sim = new appModule.WebSim();
+
+export const SCREEN_WIDTH = 1000;
+export const SCREEN_HEIGHT = 800;
 
 export const canvas = document.getElementById("game") as HTMLCanvasElement;
 const dpr = window.devicePixelRatio || 1;
 
-canvas.width = appModule.SCREEN_WIDTH * dpr;
-canvas.height = appModule.SCREEN_HEIGHT * dpr;
+canvas.width = SCREEN_WIDTH * dpr;
+canvas.height = SCREEN_HEIGHT * dpr;
 
 export const canvasCtx = canvas.getContext("2d") as CanvasRenderingContext2D;
 canvasCtx.scale(dpr, dpr);

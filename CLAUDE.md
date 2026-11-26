@@ -41,8 +41,8 @@ measuring performance — the Debug wasm sim is ~8x slower. First-time setup (su
   - `sim/` (namespace `shared::sim`) — `modes.h` holds `CoopGameSim<W>` and `PvPGameSim<W>`
     (separate types, not a mode flag; `start<N>`/`step<N>` take the player count as a template
     parameter) and `GameSim`, the variant of the concrete ones (`FlatCoop`, `FlatPvP`).
-    `world.h` holds the `World` concept and `Flat`, the 2D world: field bounds, entrances,
-    movement rules and the boss's fan. `entities/` has one `SimState` struct + update logic per
+    `world.h` holds the `World` concept and `FlatWorld`, the 2D world: field bounds (centred
+    on the origin), entrances, movement rules and the boss's fan. `entities/` has one `SimState` struct + update logic per
     entity (`player`, `bullet`, `enemies`, `boss`); they take values from the world, never the
     world itself, and never cross the wire.
   - `sim/messages.h` — the trimmed wire structs (`PlayerInput`, game states, lobby updates,
@@ -74,6 +74,9 @@ measuring performance — the Debug wasm sim is ~8x slower. First-time setup (su
   (C++ enum or TS union) governs *whether* the sim is stepped; the sim's phase enums track only
   game progression and ride along on the wire. Pause has no sim-side representation — the
   client just stops stepping and keeps drawing the last state.
+- **Field vs. screen.** The field (`FlatWorld::FIELD_BOUNDS`) is the sim's; the screen size
+  is each client's own constant. Renderers map field → screen in one `toScreen` (measured
+  from the field's `min.x`/`max.z`, times a scale) and scale sizes the same way.
 - **Hitbox vs. texture size.** The authoritative hitbox constant lives in `shared/`; any visual
   scale factor stays client-side.
 - **Entity sizes are full extents** (`Vec3f SIZE`, as mathlib's `fromCenterAndSize` expects).

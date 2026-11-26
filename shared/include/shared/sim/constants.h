@@ -2,15 +2,10 @@
 
 #include "shared/sim/types.h"
 #include <algorithm>
-#include <cstdint>
 
 /// Engine-agnostic core shared verbatim between the client's local mode and
 /// the headless server's authoritative simulation.
 namespace shared::sim {
-/// Game world width in pixels, shared by simulation bounds and rendering.
-static constexpr uint16_t SCREEN_WIDTH = 1000;
-/// Game world height in pixels, shared by simulation bounds and rendering.
-static constexpr uint16_t SCREEN_HEIGHT = 800;
 /// Fixed simulation timestep (seconds) driving GameSim::step() at 60 Hz.
 static constexpr float FIXED_DT = 1.0f / 60.0f;
 /// Capacity of the fixed-size bullet pool shared by player/enemy/boss shots.

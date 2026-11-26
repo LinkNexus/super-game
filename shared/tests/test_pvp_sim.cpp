@@ -6,13 +6,14 @@
 
 #include "shared/helpers.h"
 #include "shared/sim/constants.h"
-#include "shared/sim/entities/player.h"
 #include "shared/sim/messages.h"
 #include "shared/sim/modes.h"
 #include "shared/sim/world.h"
 
 #include <array>
+#include <cmath>
 #include <cstddef>
+#include <numbers>
 #include <utility>
 
 using namespace shared::sim;
@@ -20,7 +21,7 @@ using shared::count_optional;
 
 namespace {
 
-using Sim = PvPGameSim<Flat>;
+using Sim = PvPGameSim<FlatWorld>;
 using Phase = PvPGamePhase;
 using PvPInputs = PlayerInputs<MAX_TEAMS * MAX_PLAYERS_PER_TEAM>;
 using TeamRoster = std::pair<TeamId, PlayerIds<MAX_PLAYERS_PER_TEAM>>;
@@ -142,7 +143,7 @@ TEST(pvp_teams_start_at_opposite_ends_facing_each_other) {
   REQUIRE(bottom != nullptr);
 
   // Opposite ends of the field's depth, each inside it.
-  const auto field = Flat::FIELD_BOUNDS;
+  const auto field = FlatWorld::FIELD_BOUNDS;
   CHECK(bottom->position.z > field.min.z);
   CHECK(bottom->position.z < field.center().z);
   CHECK(top->position.z > field.center().z);
@@ -201,6 +202,54 @@ TEST(pvp_2v2_puts_each_whole_team_on_its_own_end) {
   // this is a claim about z for cross-team pairs and about x for teammates.
   CHECK(first->position.x != second->position.x);
   CHECK(third->position.x != fourth->position.x);
+}
+
+// --- Mirror symmetry (L85) -------------------------------------------------
+// With the origin at the field's centre, team 2's spawn is team 1's turned
+// 180° around y, so each position is the negation of an opponent's.
+
+bool mirrors(const PlayerState &a, const PlayerState &b) {
+  constexpr float tolerance = 0.01f;
+  return std::abs(a.position.x + b.position.x) < tolerance &&
+         std::abs(a.position.y + b.position.y) < tolerance &&
+         std::abs(a.position.z + b.position.z) < tolerance;
+}
+
+TEST(pvp_1v1_spawns_mirror_through_the_origin) {
+  Sim sim;
+  sim.start(rosters({1u, std::nullopt}, {2u, std::nullopt}));
+
+  PvPGameState state{};
+  REQUIRE(stepThroughEntrance(sim, state));
+
+  const auto *bottom = findPlayer(state, 1);
+  const auto *top = findPlayer(state, 2);
+  REQUIRE(bottom != nullptr);
+  REQUIRE(top != nullptr);
+
+  CHECK(mirrors(*bottom, *top));
+  CHECK_NEAR(top->orientation - bottom->orientation, std::numbers::pi_v<float>, 0.001);
+}
+
+/// Every player on team 1 has an opponent at its mirror point; which one is
+/// left open, since that depends on how spacing is applied per team.
+TEST(pvp_2v2_spawns_mirror_through_the_origin) {
+  Sim sim;
+  sim.start(rosters({1u, 2u}, {3u, 4u}));
+
+  PvPGameState state{};
+  REQUIRE(stepThroughEntrance(sim, state));
+
+  const auto *third = findPlayer(state, 3);
+  const auto *fourth = findPlayer(state, 4);
+  REQUIRE(third != nullptr);
+  REQUIRE(fourth != nullptr);
+
+  for (PlayerId id : {1u, 2u}) {
+    const auto *player = findPlayer(state, id);
+    REQUIRE(player != nullptr);
+    CHECK(mirrors(*player, *third) || mirrors(*player, *fourth));
+  }
 }
 
 /// The 2v2 reading of the duel's combat case: a 2v2 must be *contestable*.

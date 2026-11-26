@@ -1,5 +1,5 @@
 import type { Vec3 } from "@wasm/supergame-web-sim.mjs";
-import { appModule, canvasCtx } from "./constants";
+import { appModule, canvasCtx, SCREEN_WIDTH } from "./constants";
 import type { GameScreen } from "./types";
 
 export function assertNeverForScreen(screen: GameScreen) {
@@ -18,10 +18,23 @@ export function countOptional<T>(arr: (T | null)[]): number {
   return arr.reduce((acc, el) => acc + (el !== null ? 1 : 0), 0);
 }
 
+const { FLAT_WORLD_FIELD_BOUNDS_MIN: min, FLAT_WORLD_FIELD_BOUNDS_MAX: max } =
+  appModule;
+const scale = SCREEN_WIDTH / (max.x - min.x);
 export function toScreen({ x, z }: Vec3) {
   return {
-    x,
-    y: appModule.SCREEN_HEIGHT - z,
+    x: (x - min.x) * scale,
+    y: (max.z - z) * scale,
+  };
+}
+export function toScreenSize(size: number) {
+  return size * scale;
+}
+export function toScreenSizeVec({ x, y, z }: Vec3) {
+  return {
+    x: x * scale,
+    y: y * scale,
+    z: z * scale,
   };
 }
 

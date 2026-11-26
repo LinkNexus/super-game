@@ -1,5 +1,6 @@
 add_executable(supergame-shared-tests
     test_coop_sim.cpp
+    test_flat_world.cpp
     test_pvp_sim.cpp
     test_wire.cpp
 )

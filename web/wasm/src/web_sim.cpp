@@ -5,6 +5,7 @@
 #include "shared/sim/messages.h"
 #include "shared/sim/modes.h"
 #include "shared/sim/types.h"
+#include "shared/sim/world.h"
 #include "shared/wire.h"
 #include <emscripten/bind.h>
 #include <mathlib.hpp>
@@ -44,7 +45,7 @@ public:
     state_ = CoopGameState();
   }
 
-  void startCoop2D(PlayerCount playerCount) { startCoop<Flat>(playerCount); }
+  void startCoop2D(PlayerCount playerCount) { startCoop<FlatWorld>(playerCount); }
 
   template <World W>
   void startPvP(PlayerCount teamCount, PlayerCount teamSize) {
@@ -84,7 +85,7 @@ public:
   }
 
   void startPvP2D(PlayerCount teamCount, PlayerCount teamSize) {
-    startPvP<Flat>(teamCount, teamSize);
+    startPvP<FlatWorld>(teamCount, teamSize);
   }
 
   std::string step(std::string inputPayload) {
@@ -123,13 +124,13 @@ EMSCRIPTEN_BINDINGS(supergame) {
   emscripten::constant("MAX_TEAMS", MAX_TEAMS);
   emscripten::constant("MAX_PLAYERS_PER_TEAM", MAX_PLAYERS_PER_TEAM);
 
-  emscripten::constant("SCREEN_WIDTH", SCREEN_WIDTH);
-  emscripten::constant("SCREEN_HEIGHT", SCREEN_HEIGHT);
-
   emscripten::value_object<mathlib::Vec3f>("Vec3")
       .field("x", &mathlib::Vec3f::x)
       .field("y", &mathlib::Vec3f::y)
       .field("z", &mathlib::Vec3f::z);
+
+  emscripten::constant("FLAT_WORLD_FIELD_BOUNDS_MIN", FlatWorld::FIELD_BOUNDS.min);
+  emscripten::constant("FLAT_WORLD_FIELD_BOUNDS_MAX", FlatWorld::FIELD_BOUNDS.max);
 
   emscripten::constant("SIM_PLAYER_SIZE", PlayerSimState::SIZE);
 
@@ -180,7 +181,8 @@ EMSCRIPTEN_BINDINGS(supergame) {
       .value("DOWN", Button::DOWN)
       .value("SHOOT", Button::SHOOT);
 
-  emscripten::class_<Flat>("FlatWorld").class_function("formationSlot", &Flat::formationSlot);
+  emscripten::class_<FlatWorld>("FlatWorld")
+      .class_function("formationSlot", &FlatWorld::formationSlot);
 
   emscripten::class_<WebSim>("WebSim")
       .constructor<>()

@@ -33,7 +33,7 @@ void EntityDesigner::unloadTextures() {
 }
 
 void EntityDesigner::drawBossHealthBar(const BossState &state) const {
-  float bar_x = (shared::sim::SCREEN_WIDTH - BOSS_HEALTH_BAR_WIDTH) / 2.0f;
+  float bar_x = (SCREEN_WIDTH - BOSS_HEALTH_BAR_WIDTH) / 2.0f;
   float health_ratio =
       state.max_health > 0 ? std::clamp((float)state.health / state.max_health, 0.0f, 1.0f) : 0.0f;
 
@@ -87,7 +87,7 @@ void EntityDesigner::drawEnemies(
   for (std::size_t idx = 0; idx < enemies.size(); ++idx) {
     if (enemies[idx].first) {
       const auto position =
-          offset + shared::sim::Flat::formationSlot(
+          offset + shared::sim::FlatWorld::formationSlot(
                        idx / shared::sim::ENEMY_COLS, idx % shared::sim::ENEMY_COLS
                    );
 
@@ -100,8 +100,10 @@ void EntityDesigner::drawEnemy(Vector2 pos, shared::sim::EnemyType type) const {
   auto textureIdx = (type == shared::sim::EnemyType::TYPE_1) ? 0 : 1;
   const auto &texture = enemies_textures_[textureIdx];
 
+  constexpr auto enemySize = toScreenSize(shared::sim::EnemySimState::SIZE);
+
   if (texture.id != 0) {
-    float scale = shared::sim::EnemySimState::SIZE.x / texture.width;
+    float scale = enemySize.x / texture.width;
     Vector2 draw_pos = {
         pos.x - (texture.width * scale) / 2.0f, pos.y - (texture.height * scale) / 2.0f
     };
@@ -109,11 +111,7 @@ void EntityDesigner::drawEnemy(Vector2 pos, shared::sim::EnemyType type) const {
   } else {
     Color c = (type == shared::sim::EnemyType::TYPE_1) ? GREEN : ORANGE;
     DrawRectangle(
-        (int)pos.x - shared::sim::EnemySimState::SIZE.x / 2,
-        (int)pos.y - shared::sim::EnemySimState::SIZE.z / 2,
-        shared::sim::EnemySimState::SIZE.x,
-        shared::sim::EnemySimState::SIZE.y,
-        c
+        (int)pos.x - enemySize.x / 2, (int)pos.y - enemySize.z / 2, enemySize.x, enemySize.z, c
     );
   }
 }
@@ -135,7 +133,7 @@ void EntityDesigner::drawPlayerStats(
 
   DrawText(
       playerLabel.c_str(),
-      shared::sim::SCREEN_WIDTH - 10 - MeasureText(playerLabel.c_str(), STATUS_FONT_SIZE),
+      SCREEN_WIDTH - 10 - MeasureText(playerLabel.c_str(), STATUS_FONT_SIZE),
       yOffset,
       STATUS_FONT_SIZE,
       WHITE
@@ -148,7 +146,7 @@ void EntityDesigner::drawPlayerStats(
   const auto pointsText = TextFormat("Points: %d", state.points);
   DrawText(
       pointsText,
-      shared::sim::SCREEN_WIDTH - 10 - MeasureText(pointsText, STATUS_FONT_SIZE),
+      SCREEN_WIDTH - 10 - MeasureText(pointsText, STATUS_FONT_SIZE),
       yOffset,
       STATUS_FONT_SIZE,
       WHITE
@@ -156,9 +154,9 @@ void EntityDesigner::drawPlayerStats(
   yOffset += STATUS_FONT_SIZE + 5;
 
   DrawLine(
-      shared::sim::SCREEN_WIDTH - 10 - MeasureText(pointsText, STATUS_FONT_SIZE),
+      SCREEN_WIDTH - 10 - MeasureText(pointsText, STATUS_FONT_SIZE),
       yOffset,
-      shared::sim::SCREEN_WIDTH - 10,
+      SCREEN_WIDTH - 10,
       yOffset,
       WHITE
   );
@@ -170,7 +168,7 @@ void EntityDesigner::drawLives(const shared::sim::PlayerState &state, float &yOf
     auto text = "Dead";
     DrawText(
         text,
-        shared::sim::SCREEN_WIDTH - 5 - MeasureText(text, STATUS_FONT_SIZE) - HEART_SIZE,
+        SCREEN_WIDTH - 5 - MeasureText(text, STATUS_FONT_SIZE) - HEART_SIZE,
         yOffset + (HEART_SIZE - STATUS_FONT_SIZE) / 2,
         STATUS_FONT_SIZE,
         WHITE
@@ -181,7 +179,7 @@ void EntityDesigner::drawLives(const shared::sim::PlayerState &state, float &yOf
   auto livexText = std::to_string(state.lives);
   auto textWidth = MeasureText(livexText.c_str(), STATUS_FONT_SIZE);
   auto heartScale = HEART_SIZE / static_cast<float>(player_live_texture_.width);
-  float heartX = shared::sim::SCREEN_WIDTH - 10 - HEART_SIZE;
+  float heartX = SCREEN_WIDTH - 10 - HEART_SIZE;
   float textX = heartX - 5 - textWidth;
 
   DrawText(
@@ -198,7 +196,7 @@ void EntityDesigner::drawLives(const shared::sim::PlayerState &state, float &yOf
     livexText = livexText + (state.lives > 1 ? " lives" : " life");
     DrawText(
         livexText.c_str(),
-        shared::sim::SCREEN_WIDTH - 10 - MeasureText(livexText.c_str(), STATUS_FONT_SIZE),
+        SCREEN_WIDTH - 10 - MeasureText(livexText.c_str(), STATUS_FONT_SIZE),
         yOffset,
         STATUS_FONT_SIZE,
         WHITE
@@ -210,7 +208,7 @@ void EntityDesigner::drawPlayer(
     const shared::sim::PlayerState &state, Color color, int64_t playerIdx
 ) const {
   auto positionOnScreen = toScreen(state.position);
-  const auto size = shared::sim::PlayerSimState::SIZE / 2;
+  constexpr auto size = toScreenSize(shared::sim::PlayerSimState::SIZE) / 2;
 
   if (player_ship_texture_.id != 0) {
     float scale = (size.x * 2) / player_ship_texture_.width;
@@ -314,7 +312,7 @@ void EntityDesigner::drawPlayersForPvPGame(
       const auto teamLabel = std::string("Team ") + std::to_string(teamIdx + 1);
       DrawText(
           teamLabel.c_str(),
-          shared::sim::SCREEN_WIDTH - 10 - MeasureText(teamLabel.c_str(), STATUS_FONT_SIZE),
+          SCREEN_WIDTH - 10 - MeasureText(teamLabel.c_str(), STATUS_FONT_SIZE),
           yOffset,
           STATUS_FONT_SIZE,
           teamIdx == 0 ? SKYBLUE : PINK
@@ -382,12 +380,13 @@ void EntityDesigner::drawBullet(const shared::sim::BulletState &state) const {
     return;
 
   auto screenPosition = toScreen(state.position);
+  constexpr auto bulletSize = toScreenSize(shared::sim::BulletSimState::SIZE);
 
   DrawRectangle(
-      (int)screenPosition.x - shared::sim::BulletSimState::SIZE.x / 2,
-      (int)screenPosition.z - shared::sim::BulletSimState::SIZE.z / 2,
-      shared::sim::BulletSimState::SIZE.x,
-      shared::sim::BulletSimState::SIZE.y,
+      (int)screenPosition.x - bulletSize.x / 2,
+      (int)screenPosition.z - bulletSize.z / 2,
+      bulletSize.x,
+      bulletSize.z,
       YELLOW
   );
 }

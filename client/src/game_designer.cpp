@@ -15,11 +15,7 @@
 
 float GameDesigner::drawCentered(const char *text, float y, int fontSize, Color color) {
   DrawText(
-      text,
-      (shared::sim::SCREEN_WIDTH - MeasureText(text, fontSize)) / 2,
-      static_cast<int>(y),
-      fontSize,
-      color
+      text, (SCREEN_WIDTH - MeasureText(text, fontSize)) / 2, static_cast<int>(y), fontSize, color
   );
   return y + fontSize;
 }
@@ -39,7 +35,7 @@ float GameDesigner::drawOptionRow(
   if (!options.empty())
     totalWidth += OPTION_SPACING * (options.size() - 1);
 
-  auto x{(shared::sim::SCREEN_WIDTH - totalWidth) / 2.0f};
+  auto x{(SCREEN_WIDTH - totalWidth) / 2.0f};
 
   for (std::size_t i = 0; i < options.size(); ++i) {
     const auto &option = options[i];
@@ -73,9 +69,7 @@ float GameDesigner::drawRosterRow(
 ) {
   const auto labelWidth{MeasureText(label.c_str(), BODY_FONT_SIZE)};
   const auto statusWidth{MeasureText(status.c_str(), BODY_FONT_SIZE)};
-  const auto left{
-      (shared::sim::SCREEN_WIDTH - labelWidth - statusWidth - ROSTER_COLUMN_GAP) / 2.0f
-  };
+  const auto left{(SCREEN_WIDTH - labelWidth - statusWidth - ROSTER_COLUMN_GAP) / 2.0f};
 
   DrawText(label.c_str(), static_cast<int>(left), static_cast<int>(y), BODY_FONT_SIZE, WHITE);
   DrawText(
@@ -119,7 +113,7 @@ void GameDesigner::drawMainMenu(GameType gameType) const {
   for (const auto *line : CONTROLS)
     widest = std::max(widest, MeasureText(line, BODY_FONT_SIZE));
 
-  const auto left{(shared::sim::SCREEN_WIDTH - widest) / 2};
+  const auto left{(SCREEN_WIDTH - widest) / 2};
   for (const auto *line : CONTROLS) {
     DrawText(line, left, static_cast<int>(y), BODY_FONT_SIZE, WHITE);
     y += BODY_FONT_SIZE + ROW_GAP;
@@ -178,7 +172,7 @@ void GameDesigner::drawTextInputs(
   for (std::size_t i = 0; i < playersCount; ++i) {
     auto &box = inputs[i];
     box.rect = {
-        (shared::sim::SCREEN_WIDTH - TextInput::WIDTH) / 2.0f,
+        (SCREEN_WIDTH - TextInput::WIDTH) / 2.0f,
         200.0f + offsetY,
         TextInput::WIDTH,
         TextInput::HEIGHT
@@ -187,30 +181,12 @@ void GameDesigner::drawTextInputs(
   }
 
   const auto text{"Choose a name for the online game. Press Enter to continue"};
-  DrawText(
-      text,
-      (shared::sim::SCREEN_WIDTH - MeasureText(text, 20)) / 2,
-      inputs[0].rect.y + offsetY,
-      20,
-      WHITE
-  );
+  DrawText(text, (SCREEN_WIDTH - MeasureText(text, 20)) / 2, inputs[0].rect.y + offsetY, 20, WHITE);
 }
 
 void GameDesigner::drawConnectingScreen() const {
-  DrawText(
-      "Connecting to server...",
-      shared::sim::SCREEN_WIDTH / 2 - 170,
-      shared::sim::SCREEN_HEIGHT / 2,
-      24,
-      LIGHTGRAY
-  );
-  DrawText(
-      "Press ESC to cancel",
-      shared::sim::SCREEN_WIDTH / 2 - 140,
-      shared::sim::SCREEN_HEIGHT / 2 + 40,
-      20,
-      WHITE
-  );
+  DrawText("Connecting to server...", SCREEN_WIDTH / 2 - 170, SCREEN_HEIGHT / 2, 24, LIGHTGRAY);
+  DrawText("Press ESC to cancel", SCREEN_WIDTH / 2 - 140, SCREEN_HEIGHT / 2 + 40, 20, WHITE);
 }
 
 void GameDesigner::drawLobby(OnlineSession *session, const LobbyKeyHints &keyHints) const {
@@ -239,10 +215,7 @@ void GameDesigner::drawLobby(OnlineSession *session, const LobbyKeyHints &keyHin
     return drawCentered("Waiting for a player...", y, BODY_FONT_SIZE, DARKGRAY) + ROW_GAP;
   };
 
-  auto y{
-      drawCentered("Lobby", shared::sim::SCREEN_HEIGHT / 2.0f - 180, HEADING_FONT_SIZE, WHITE) +
-      SECTION_GAP
-  };
+  auto y{drawCentered("Lobby", SCREEN_HEIGHT / 2.0f - 180, HEADING_FONT_SIZE, WHITE) + SECTION_GAP};
 
   std::visit(
       shared::overloaded{
@@ -397,28 +370,16 @@ void GameDesigner::drawGame(
   );
 
   if (screen == GameScreen::PAUSED) {
-    DrawRectangle(0, 0, shared::sim::SCREEN_WIDTH, shared::sim::SCREEN_HEIGHT, Fade(BLACK, 0.6f));
+    DrawRectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, Fade(BLACK, 0.6f));
 
-    DrawText(
-        "Game Paused",
-        shared::sim::SCREEN_WIDTH / 2 - 100,
-        shared::sim::SCREEN_HEIGHT / 2 - 20,
-        32,
-        WHITE
-    );
+    DrawText("Game Paused", SCREEN_WIDTH / 2 - 100, SCREEN_HEIGHT / 2 - 20, 32, WHITE);
 
-    DrawText(
-        "Press ESC to resume",
-        shared::sim::SCREEN_WIDTH / 2 - 100,
-        shared::sim::SCREEN_HEIGHT / 2 + 30,
-        20,
-        WHITE
-    );
+    DrawText("Press ESC to resume", SCREEN_WIDTH / 2 - 100, SCREEN_HEIGHT / 2 + 30, 20, WHITE);
   }
 }
 
 void GameDesigner::drawEndScreenBackdrop(float animTime) {
-  DrawRectangle(0, 0, shared::sim::SCREEN_WIDTH, shared::sim::SCREEN_HEIGHT, Fade(BLACK, 0.6f));
+  DrawRectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, Fade(BLACK, 0.6f));
 
   const auto pulse{(std::sin(animTime * 3.0f) + 1.0f) * 0.5f};
   const auto thickness{
@@ -426,9 +387,7 @@ void GameDesigner::drawEndScreenBackdrop(float animTime) {
   };
 
   DrawRectangleLinesEx(
-      {0, 0, shared::sim::SCREEN_WIDTH, shared::sim::SCREEN_HEIGHT},
-      thickness,
-      Fade(GOLD, 0.3f + pulse * 0.5f)
+      {0, 0, SCREEN_WIDTH, SCREEN_HEIGHT}, thickness, Fade(GOLD, 0.3f + pulse * 0.5f)
   );
 }
 
@@ -456,7 +415,7 @@ void GameDesigner::drawEndScreen(
                 : "  -  dead");
   };
 
-  auto y{shared::sim::SCREEN_HEIGHT / 2.0f - 220};
+  auto y{SCREEN_HEIGHT / 2.0f - 220};
 
   std::visit(
       shared::overloaded{
@@ -614,21 +573,15 @@ void GameDesigner::drawOnlinePlayerCountSelection(
   const auto instructions = "Choose the number of players that will play on this machine";
   DrawText(
       instructions,
-      (shared::sim::SCREEN_WIDTH - MeasureText(instructions, STATUS_FONT_SIZE)) / 2,
-      shared::sim::SCREEN_HEIGHT / 2 - 40,
+      (SCREEN_WIDTH - MeasureText(instructions, STATUS_FONT_SIZE)) / 2,
+      SCREEN_HEIGHT / 2 - 40,
       20,
       WHITE
   );
 
   const auto confirmText = "Use LEFT/RIGHT to choose and ENTER to confirm";
   const auto confirmTextWidth = MeasureText(confirmText, STATUS_FONT_SIZE);
-  DrawText(
-      confirmText,
-      (shared::sim::SCREEN_WIDTH - confirmTextWidth) / 2,
-      shared::sim::SCREEN_HEIGHT / 2 - 10,
-      20,
-      WHITE
-  );
+  DrawText(confirmText, (SCREEN_WIDTH - confirmTextWidth) / 2, SCREEN_HEIGHT / 2 - 10, 20, WHITE);
 
   auto offsetX = 0.0f;
 
@@ -638,8 +591,8 @@ void GameDesigner::drawOnlinePlayerCountSelection(
 
     DrawText(
         playerCountText.c_str(),
-        (shared::sim::SCREEN_WIDTH - confirmTextWidth) / 2.0f + offsetX,
-        shared::sim::SCREEN_HEIGHT / 2 + 40,
+        (SCREEN_WIDTH - confirmTextWidth) / 2.0f + offsetX,
+        SCREEN_HEIGHT / 2 + 40,
         24,
         playerCount == currentPlayerCount ? YELLOW : WHITE
     );

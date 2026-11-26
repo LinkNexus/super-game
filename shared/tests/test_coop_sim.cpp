@@ -12,8 +12,6 @@
 #include "shared/helpers.h"
 #include "shared/sim/constants.h"
 #include "shared/sim/entities/boss.h"
-#include "shared/sim/entities/enemies.h"
-#include "shared/sim/entities/player.h"
 #include "shared/sim/messages.h"
 #include "shared/sim/modes.h"
 #include "shared/sim/world.h"
@@ -27,7 +25,7 @@ using shared::count_optional;
 
 namespace {
 
-using Sim = CoopGameSim<Flat>;
+using Sim = CoopGameSim<FlatWorld>;
 using Phase = CoopGamePhase;
 using CoopInputs = PlayerInputs<MAX_PLAYERS_COOP>;
 
@@ -68,8 +66,13 @@ std::size_t aliveEnemies(const CoopGameState &state) {
 
 /// Steps until @p pred holds, or gives up after @p maxTicks.
 /// @return true if the predicate was satisfied.
-bool stepUntil(Sim &sim, CoopGameState &state, const CoopInputs &inputs,
-               int maxTicks, bool (*pred)(const CoopGameState &)) {
+bool stepUntil(
+    Sim &sim,
+    CoopGameState &state,
+    const CoopInputs &inputs,
+    int maxTicks,
+    bool (*pred)(const CoopGameState &)
+) {
   for (int tick = 0; tick < maxTicks; ++tick) {
     sim.step(state, inputs, FIXED_DT);
     if (pred(state))
@@ -114,8 +117,9 @@ TEST(coop_state_mirrors_roster_after_first_step) {
 
   // Starting lives are private to the sim; every player must start with the
   // same, non-zero count.
-  const auto &first = *std::find_if(state.players.begin(), state.players.end(),
-                                    [](const auto &p) { return p.has_value(); });
+  const auto &first = *std::find_if(state.players.begin(), state.players.end(), [](const auto &p) {
+    return p.has_value();
+  });
   CHECK(first->lives > 0);
 
   for (const auto &player : state.players) {
@@ -141,10 +145,9 @@ TEST(coop_entrance_phase_terminates_and_hands_over_to_fight) {
   // The players fly ~100 units at 50/s (~120 ticks), then a full grid ~500 at
   // 70/s (~430 ticks). The bound is deliberately generous - the assertion is
   // "it terminates at all", which is the regression that matters.
-  const bool reachedFight =
-      stepUntil(sim, state, idle, 3000, [](const CoopGameState &s) {
-        return static_cast<Phase>(s.phase) == Phase::FIGHT_ENEMIES;
-      });
+  const bool reachedFight = stepUntil(sim, state, idle, 3000, [](const CoopGameState &s) {
+    return static_cast<Phase>(s.phase) == Phase::FIGHT_ENEMIES;
+  });
 
   CHECK(reachedFight);
 }
@@ -280,8 +283,7 @@ TEST(coop_enemy_grid_scales_with_the_starting_player_count) {
   CHECK(aliveEnemies(soloState) > 0u);
   CHECK(aliveEnemies(fullState) > aliveEnemies(soloState));
   // A full roster gets the whole grid - the top row of ROWS_PER_PLAYERS_COUNT.
-  CHECK_EQ(aliveEnemies(fullState),
-           static_cast<std::size_t>(MAX_ENEMY_ROWS * ENEMY_COLS));
+  CHECK_EQ(aliveEnemies(fullState), static_cast<std::size_t>(MAX_ENEMY_ROWS * ENEMY_COLS));
 }
 
 /// The regression this pins: if the grid were sized from live occupancy
@@ -318,22 +320,19 @@ TEST(coop_enemy_grid_does_not_shrink_when_players_leave) {
 TEST(boss_difficulty_scales_with_the_count_it_is_given) {
   BossSimState solo{};
   BossSimState full{};
-  solo.init(Flat::BOSS_ENTRANCE, 1);
-  full.init(Flat::BOSS_ENTRANCE, MAX_PLAYERS_COOP);
+  solo.init(FlatWorld::BOSS_ENTRANCE, 1);
+  full.init(FlatWorld::BOSS_ENTRANCE, MAX_PLAYERS_COOP);
 
   CHECK_EQ(solo.max_health, BossSimState::INITIAL_LP);
   CHECK_EQ(full.max_health, BossSimState::INITIAL_LP * MAX_PLAYERS_COOP);
   CHECK_EQ(full.health, full.max_health);
 
   CHECK(full.spread_shot_bullets_count > solo.spread_shot_bullets_count);
-  CHECK(full.successive_shots_bullets_count >
-        solo.successive_shots_bullets_count);
+  CHECK(full.successive_shots_bullets_count > solo.successive_shots_bullets_count);
 
   // A full roster gets the top of both tables.
-  CHECK_EQ(full.spread_shot_bullets_count,
-           BossSimState::MAX_SPREAD_SHOT_BULLETS);
-  CHECK_EQ(full.successive_shots_bullets_count,
-           BossSimState::MAX_SUCCESSIVE_SHOTS_BULLETS);
+  CHECK_EQ(full.spread_shot_bullets_count, BossSimState::MAX_SPREAD_SHOT_BULLETS);
+  CHECK_EQ(full.successive_shots_bullets_count, BossSimState::MAX_SUCCESSIVE_SHOTS_BULLETS);
 }
 
 } // namespace

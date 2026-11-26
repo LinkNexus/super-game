@@ -12,16 +12,16 @@ entries appear here as one-line stubs so the numbering stays readable.
 
 ---
 
-## Where things stand — 2026-11-26 (on `master`)
+## Where things stand — 2026-11-26 (run on branch `l85`)
 
-**Last run: L43 — the sim in 3D, with `World` and `Flat`. Done, not yet committed.** All
-four suites pass (shared + server natively, shared + web binding under Emscripten). Two deliberate changes from "gameplay identical":
-a players' fly-in at match start, and a 36.8-wide player hitbox (was 18.4). Full record in
+**Last run: L85 — origin at the field's centre, field split from screen. Done; PR open.**
+All four suites pass, and matches were played on both clients. One gameplay change: the
+formation now starts centred, 32 units right of before. Full record in
 the [archive](ROADMAP-ARCHIVE.md#phase-6--3d-migration-on-rails-corridor-shooter-no-deadline).
 
-**Next run: L85** — move the origin to the centre of the field, and split the field (sim)
-from the screen (each client). Its own step, so an offset bug can't hide in L43's changes.
-L33's open question and L84 remain small decisions for any run.
+**Next run: not chosen.** Candidates: L44 (Rail steering, the next Phase 6 step), or the PvP
+gameplay design together with L84 (a wider field — now just a `FIELD_BOUNDS` and screen-size
+change). L33's open question remains a small decision for any run.
 
 **Decided (2026-11-10), still standing:** the game and its C++ come first, Phase 7 (the
 leaderboard) waits until after Phase 6, and `client/` stays and is ported through sim changes.
@@ -263,9 +263,9 @@ dimensionality axis next to Coop/PvP. 3D-specific features are still undesigned.
   `W::teamSpawn(team)` on the world.)
 
 **Decided (2026-11-10): the world is a template parameter, and entities never see it.**
-- `template <World W> class CoopGameSim` / `PvPGameSim`, with `World` a concept. `Flat` and
+- `template <World W> class CoopGameSim` / `PvPGameSim`, with `World` a concept. `FlatWorld` and
   `Rail` are structs of static members. `GameSim` becomes a 4-way variant. Keep the sims' code in
-  `game_sim.cpp` through explicit instantiation (`template class CoopGameSim<Flat>;` etc.).
+  `game_sim.cpp` through explicit instantiation (`template class CoopGameSim<FlatWorld>;` etc.).
   A runtime strategy was rejected: the world never changes mid-match, and the variant already
   picks the type once.
 - **Entities take values, not the world.** E.g. `player.step(W::moveDirection(buttons),
@@ -368,9 +368,9 @@ All tasks below are Levy's.
 |---|------|-------|
 | L42 | **`Vec3D` primitives in `shared/`** | **Mostly done by the `vendor/mathlib` switch:** `mathlib::Vec3f` exists (incl. `rotatedAroundAxis`). **Left:** only a cone-spread helper for L47, if mathlib doesn't cover it. The 3D box landed (`Cuboidf`/`OrientedCuboidf` with `intersects`, used by L43). *Original entry:* Add a 3D vector type alongside the existing `Vec2D` (`math_utils.h`), generalizing the angle/rotation math already built for the boss's spread-shot fan (`Vec2D::rotated`, `angle_between`, `dot_product` — L21) to 3D (e.g. spreading a bullet volley across a cone instead of a 2D arc). |
 | L43 | ✅ Migrate sim positions `Vec2D` → `Vec3D` (with `World`/`Flat`) | [archive](ROADMAP-ARCHIVE.md#phase-6--3d-migration-on-rails-corridor-shooter-no-deadline) |
-| L85 | **Move the sim's origin to the centre of the field** | **Decided (2026-11-18); do it right after L43, as its own step.** Today the origin is a corner: `Flat::FIELD` goes from `{0, 0, 0}` to `{FIELD_WIDTH, 0, FIELD_DEPTH}`. Move it to `{-FIELD_WIDTH/2, 0, -FIELD_DEPTH/2}`–`{FIELD_WIDTH/2, 0, FIELD_DEPTH/2}`. **Why:** PvP teams become exact mirror images (team B's spawn is team A's rotated 180° around `y`, the rotation their ships already use); Rail's figure-eight and camera centre on 0; "the middle" stops needing `/ 2` (`INITIAL_POSITION_X`, the formation's centring). **What changes:** every absolute position constant (player spawn, the formation's `MIN_INITIAL_OFFSET_Y`/`FINAL_OFFSET_Y`, the boss's start/end, the spread fan's corner points), most of them already gathered in `Flat` by L43; each renderer's one conversion function (`toScreen` in `web/frontend/src/scripts/helpers.ts`, `toScreen`/`toRaylibVec` in `client/include/utils.h`) gains the half-field offset next to its existing flip. **Also split field from screen (decided 2026-11-24):** the field is the sim's (`Flat::FIELD_BOUNDS`), the screen is each client's. `SCREEN_WIDTH`/`SCREEN_HEIGHT` leave `shared/` (native client: its own constant in `client/`; web: its TS constants). The native client reads `Flat::FIELD_BOUNDS` directly; wasm exports it (replacing the `SCREEN_*` constants in `web_sim.cpp`). `toScreen` then maps field → screen with a scale (`screen / field`), not just a flip, so the canvas resolution can change without touching gameplay. Rail needs no such mapping (the 3D camera projects); it reads `FIELD` only to place the camera and corridor. **Tests:** only `test_pvp_sim.cpp`'s spawn-position checks use absolute values; the rest compare positions to each other. **Why separate from L43:** L43 relies on "tests pass, gameplay identical". Moving the origin in the same step would make an offset bug impossible to pin on the rename, the `Flat` extraction or the new origin. Verify by playing a match in both clients. |
+| L85 | ✅ Sim origin at the field's centre, field split from screen | [archive](ROADMAP-ARCHIVE.md#phase-6--3d-migration-on-rails-corridor-shooter-no-deadline) |
 | L44 | **Player steering: 2-DOF movement plane** | Today `PlayerSimState::POSITION_Y` is fixed — the player only ever moves in X. On-rails 3D needs real X/Y steering within a bounded plane a fixed distance in front of the camera (Z stays constant for the player; only the *world* advances in Z). Needs a new `UP`/`DOWN` bit on `PlayerInput.buttons` alongside the existing left/right/fire bits. |
-| L45 | **World/enemy Z-advance ("the rail")** | **Shape decided (2026-11-22, Phase 6 above):** a wall facing the player (columns along `x`, rows along `y`), in **layers along `z`**, e.g. 10 × 4 × 2. **Left from L43:** the 2026-11-22 `FormationShape`/`MAX_ENEMIES` change (today `formationSlot` is a `Flat` function and the pool is `ENEMY_COLS * MAX_ENEMY_ROWS`). **Left to design:** Rail's difficulty table; stagger the back layers by half a column/row so they show through the gaps; rows of the back layers start shooting once the one ahead dies (falls out of the shared `z` rule); `reachedPlayer` uses the nearest alive layer (`aliveExtents().min.z`). *Original entry:* Reinterpret the existing enemy row/column formation (`enemy_sim.h`) as an (X,Y) formation plane spawned at a far Z that shrinks toward the player over time, replacing the current "step down the 2D grid" logic — keeps the existing grid/wave structure, just adds depth instead of a full rewrite. |
+| L45 | **World/enemy Z-advance ("the rail")** | **Shape decided (2026-11-22, Phase 6 above):** a wall facing the player (columns along `x`, rows along `y`), in **layers along `z`**, e.g. 10 × 4 × 2. **Left from L43:** the 2026-11-22 `FormationShape`/`MAX_ENEMIES` change (today `formationSlot` is a `FlatWorld` function and the pool is `ENEMY_COLS * MAX_ENEMY_ROWS`). **Left to design:** Rail's difficulty table; stagger the back layers by half a column/row so they show through the gaps; rows of the back layers start shooting once the one ahead dies (falls out of the shared `z` rule); `reachedPlayer` uses the nearest alive layer (`aliveExtents().min.z`). *Original entry:* Reinterpret the existing enemy row/column formation (`enemy_sim.h`) as an (X,Y) formation plane spawned at a far Z that shrinks toward the player over time, replacing the current "step down the 2D grid" logic — keeps the existing grid/wave structure, just adds depth instead of a full rewrite. |
 | L46 | **3D collision (AABB → 3D bounding box)** | **Mostly done by L43:** every hitbox is a `mathlib::Cuboidf` and the sim's one test is `mathlib::intersects`. **Hitbox size decided (2026-11-26):** the player keeps `HITBOX_SCALE = 0.92` on the full 40 (36.8 wide), up from the old 18.4 (Levy). **Left:** check the `y` extents once Rail gives entities height (bullets 4 × 4 × 12), and the capsule fallback if Rail speeds ever tunnel. *Original entry:* Generalize the hitbox constants (currently a single `SIZE` per entity, e.g. `PlayerSimState::SIZE`) to width/height/depth, and extend the AABB collision check used throughout `GameSim` to 3 axes. |
 | L47 | **Boss spread-shot fan in 3D** | The existing angle-fan bullet pattern (L21) generalizes from a 2D arc to a 3D cone using the new `Vec3D` rotation math from L42. |
 | L48 | **Third-person 3D camera + rendering (web)** | Web-side, not `client/` (see the Platform note above): a trailing third-person camera and billboards/simple 3D models rendered via the web frontend's 3D stack — most likely WebGPU. Biggest learning curve of this phase either way; the specific API changed (was raylib's `Camera3D`/mesh/lighting surface) but the goal of gaining real 3D rendering experience didn't. |

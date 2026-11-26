@@ -150,7 +150,7 @@ void Game::handleEventsOnScreen() {
 }
 
 void Game::run() {
-  InitWindow(shared::sim::SCREEN_WIDTH, shared::sim::SCREEN_HEIGHT, "SUPER GAME");
+  InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "SUPER GAME");
   ChangeDirectory(GetApplicationDirectory());
   SetExitKey(KEY_NULL);
   SetTargetFPS(TARGET_FPS);
@@ -199,7 +199,7 @@ void Game::run() {
 }
 
 void Game::startLocalSession() {
-  session_ = std::make_unique<LocalSession<shared::sim::Flat>>(
+  session_ = std::make_unique<LocalSession<shared::sim::FlatWorld>>(
       &config_->modes[config_->mode_idx], config_->player_count
   );
   screen_ = GameScreen::PLAYING;

@@ -1,4 +1,5 @@
 #include "elements/text_input.h"
+#include "constants.h"
 #include "shared/sim/constants.h"
 
 void TextInput::init(std::string *textRef, std::size_t maxLength, std::size_t minLength) {
@@ -59,7 +60,7 @@ float TextInput::draw() const {
   const auto nameLengthText = TextFormat("INPUT CHARS: %i/%i", text_->size(), max_length_);
   DrawText(
       nameLengthText,
-      (shared::sim::SCREEN_WIDTH - MeasureText(nameLengthText, 20)) / 2.0f,
+      (SCREEN_WIDTH - MeasureText(nameLengthText, 20)) / 2.0f,
       rect.y + offset,
       20,
       WHITE
@@ -69,7 +70,7 @@ float TextInput::draw() const {
   if (!err_.empty()) {
     DrawText(
         err_.c_str(),
-        (shared::sim::SCREEN_WIDTH - MeasureText(err_.c_str(), 20)) / 2.0f,
+        (SCREEN_WIDTH - MeasureText(err_.c_str(), 20)) / 2.0f,
         rect.y + offset,
         20,
         RED
