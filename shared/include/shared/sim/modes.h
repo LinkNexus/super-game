@@ -634,7 +634,7 @@ public:
   }
 };
 
-using FlatCoop = CoopGameSim<Flat>;
-using FlatPvP = PvPGameSim<Flat>;
+using FlatCoop = CoopGameSim<FlatWorld>;
+using FlatPvP = PvPGameSim<FlatWorld>;
 using GameSim = std::variant<FlatCoop, FlatPvP>;
 } // namespace shared::sim

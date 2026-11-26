@@ -56,7 +56,7 @@ static inline auto axis(Button buttons, Button negative, Button positive) {
          (buttonsHave(buttons, negative) ? 1.f : 0.f);
 }
 
-struct Flat {
+struct FlatWorld {
   struct FormationMotion {
     EnemyDirection direction{1};
 
@@ -72,9 +72,10 @@ struct Flat {
 
   static constexpr auto FIELD_WIDTH = 1000.0f;
   static constexpr auto FIELD_DEPTH = 800.0f;
-  // 1000 by 800 field
+
+  // 1000 by 800 field with the origin at the center of the cube
   static constexpr auto FIELD_BOUNDS =
-      mathlib::Cuboidf::fromMinAndSize({0, 0, 0}, FIELD_WIDTH, 0, FIELD_DEPTH);
+      mathlib::Cuboidf::fromCenterAndSize(mathlib::Vec3f::zero(), FIELD_WIDTH, 0, FIELD_DEPTH);
 
   static constexpr LinearEntrance playerEntrance(float orientation) {
     const auto playerZOffset = 60.0f;
@@ -89,11 +90,6 @@ struct Flat {
 
     return {.trajectory = mathlib::LineSegment3f(start, end), .speed = 50.0f};
   }
-
-  // The player starts at the center and is pinned at 60 units above the bottom
-  // of the screen
-  static constexpr auto INITIAL_PLAYER_POSITION =
-      mathlib::Vec3f{FIELD_BOUNDS.center().x - (PlayerSimState::SIZE.x / 2), 0, 60.0f};
 
   // The boss entrance starts from 30 units above the screen and ends at 81
   // units below the top of it.
@@ -113,7 +109,7 @@ struct Flat {
     // It also starts at the center horizontally.
     const auto depth = EnemiesPoolSimState::PITCH_Z * (activeRows - 1);
     const mathlib::Vec3f start = {
-        FIELD_BOUNDS.center().x - (width + EnemySimState::SIZE.x) / 2.0f,
+        FIELD_BOUNDS.center().x - width / 2.0f + EnemySimState::SIZE.x / 2.0f,
         0,
         FIELD_BOUNDS.max.z + 30.0f + depth
     };
@@ -167,9 +163,10 @@ struct Flat {
   }
 
   static void bossBulletsSpreadDirections(mathlib::Vec3f from, std::span<mathlib::Vec3f> out) {
-    const auto bottomLeft = mathlib::Vec3f::zero();
-    const auto bottomRight = mathlib::Vec3f::unitX() * FIELD_WIDTH;
-    const auto straightDown = -mathlib::Vec3f::unitZ();
+    constexpr auto bottomLeft = FIELD_BOUNDS.min;
+    constexpr auto bottomRight =
+        mathlib::Vec3f{FIELD_BOUNDS.max.x, FIELD_BOUNDS.min.y, FIELD_BOUNDS.min.z};
+    constexpr auto straightDown = -mathlib::Vec3f::unitZ();
 
     const auto dir1 = (bottomLeft - from).normalize();
     const auto dir2 = (bottomRight - from).normalize();

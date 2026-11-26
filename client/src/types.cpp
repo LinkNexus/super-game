@@ -1,4 +1,5 @@
 #include "types.h"
+#include "constants.h"
 #include "shared/sim/constants.h"
 
 void Particle::update(float dt) {
@@ -19,8 +20,8 @@ void Particle::update(float dt) {
 }
 
 void Star::initRandom() {
-  position.x = static_cast<float>(GetRandomValue(0, shared::sim::SCREEN_WIDTH));
-  position.y = static_cast<float>(GetRandomValue(0, shared::sim::SCREEN_HEIGHT));
+  position.x = static_cast<float>(GetRandomValue(0, SCREEN_WIDTH));
+  position.y = static_cast<float>(GetRandomValue(0, SCREEN_HEIGHT));
 
   int depth = GetRandomValue(1, 3);
   size = depth * 0.7f;
@@ -32,8 +33,8 @@ void Star::initRandom() {
 
 void Star::update(float dt) {
   position.y += speed * dt;
-  if (position.y > shared::sim::SCREEN_HEIGHT) {
-    position.x = static_cast<float>(GetRandomValue(0, shared::sim::SCREEN_WIDTH));
+  if (position.y > SCREEN_HEIGHT) {
+    position.x = static_cast<float>(GetRandomValue(0, SCREEN_WIDTH));
     position.y = 0;
   }
 }

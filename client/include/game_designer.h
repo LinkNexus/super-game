@@ -33,7 +33,7 @@ private:
 
   /// Top of the header block every selection screen shares, so they all
   /// start at the same height instead of each picking its own offset.
-  static constexpr float SELECTION_TOP_Y = shared::sim::SCREEN_HEIGHT / 2.0f - 140;
+  static constexpr float SELECTION_TOP_Y = SCREEN_HEIGHT / 2.0f - 140;
 
   static constexpr float BORDER_MIN_THICKNESS = 3.0f;
   static constexpr float BORDER_MAX_THICKNESS = 9.0f;
